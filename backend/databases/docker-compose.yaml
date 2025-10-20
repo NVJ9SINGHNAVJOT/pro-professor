@@ -1,0 +1,47 @@
+
+services:
+  ai-professor-redis:
+    image: redis/redis-stack-server:latest
+    container_name: ai-professor-redis
+    env_file:
+      - .env
+    volumes:
+      - ai-professor-redis-data:/data
+    environment:
+      REDIS_ARGS: --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+    # ports: ["6379:6379"]
+    networks:
+      - ai-professor-backend-proxy
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  ai-professor-postgres:
+    container_name: ai-professor-postgres
+    image: postgres:16-alpine
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ai-professor-postgres-db:/var/lib/postgresql/data
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: unless-stopped # Ensure the container restarts unless manually stopped
+    networks:
+      - ai-professor-backend-proxy
+    # ports: [5432:5432]
+
+volumes:
+  ai-professor-redis-data:
+    name: ai-professor-redis-data
+  ai-professor-postgres-db:
+    name: ai-professor-postgres-db
+
+networks:
+  ai-professor-backend-proxy:
+    external: true

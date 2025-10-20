@@ -1,0 +1,20 @@
+
+services:
+  ai-professor-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-professor-server
+    networks:
+      - ai-professor-backend-proxy
+      - proxy
+    ports: [4000:4000] # disable in production
+    env_file: .env
+    entrypoint: ['/app/wait-for.sh', 'ai-professor-postgres:5432', '--', '/app/start.sh']
+    command: [ 'node', 'dist/index.js']
+
+networks:
+  ai-professor-backend-proxy:
+    external: true
+  proxy:
+    external: true

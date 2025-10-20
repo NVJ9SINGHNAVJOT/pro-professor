@@ -21,8 +21,12 @@
 **/service.json
 
 # upload directories
-**/uploads
+**/upload-storage
 
 # draw.io files
 *.drawio.*
 !*.drawio
+
+# OS generated files
+.DS_Store
+Thumbs.db
