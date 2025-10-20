@@ -1,0 +1,28 @@
+# dependencies
+**/node_modules
+
+# production
+**/build
+**/dist
+
+# environment
+*.env
+.env*
+!.env.example
+
+# development
+**/tmp
+**/temp
+
+# logs
+**/logs
+
+# service configs
+**/service.json
+
+# upload directories
+**/uploads
+
+# draw.io files
+*.drawio.*
+!*.drawio
