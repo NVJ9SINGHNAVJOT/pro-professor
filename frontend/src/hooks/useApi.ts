@@ -1,8 +1,9 @@
 // useApi.tsx
 import { useRef, useState } from "react";
 import { fetchApi, type ApiError, type ApiResponse } from "@/services/fetchApi";
-import { ApiRoute } from "@/services/apiRoute";
+import type { ApiRoute } from "@/services/apiRoute";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useApi<A extends any[], R>(route: ApiRoute<A, R>) {
   const [response, setResponse] = useState<R | null>(null);
   const [error, setError] = useState<ApiError | null>(null);

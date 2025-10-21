@@ -5,7 +5,7 @@ const menuItems = ["Home", "Dashboard"];
 const MainNavbar = () => {
   return (
     <nav
-      className={`bg-neutral-950 sticky z-[100] text-white top-0 px-2 lm:px-7 flex h-[3.8rem] w-full items-center 
+      className={`bg-neutral-950 sticky z-100 text-white top-0 px-2 lm:px-7 flex h-[3.8rem] w-full items-center 
         justify-between shadow-[inset_0px_-15px_20px_rgba(41,41,41,0.5)]
         `}
     >

@@ -1,10 +1,10 @@
 import { cn } from "@/utils/cn";
 import {
-  ComponentPropsWithoutRef,
-  FC,
+  type ComponentPropsWithoutRef,
+  type FC,
   forwardRef,
-  InputHTMLAttributes,
-  TextareaHTMLAttributes,
+  type InputHTMLAttributes,
+  type TextareaHTMLAttributes,
   useEffect,
   useRef,
   useState,
@@ -288,6 +288,7 @@ CheckboxInput.displayName = "CheckboxInput";
 
 // Base properties for all form fields
 interface BaseFormFieldProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   control: any;
   name: string;
   label?: string;

@@ -1,5 +1,5 @@
 import { cn } from "@/utils/cn";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 const Page = (props: { className?: string; children: ReactNode }) => {
   return (

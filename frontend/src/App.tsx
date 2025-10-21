@@ -9,7 +9,7 @@ function App() {
       <main className="relative mx-auto w-full h-full min-w-minContent max-w-maxContent overflow-y-auto overflow-x-hidden">
         {/* ===== main nav bar ===== */}
         <MainNavbar />
-        // All pages
+        {/* All Pages */}
         <Outlet />
       </main>
     </div>

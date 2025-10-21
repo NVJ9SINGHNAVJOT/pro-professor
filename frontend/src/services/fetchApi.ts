@@ -30,7 +30,7 @@ export async function fetchApi<T>(options: FetchApiOptions): Promise<ApiResponse
       url += `?${searchParams.toString()}`;
     }
 
-    let requestOptions: RequestInit = {
+    const requestOptions: RequestInit = {
       method,
       headers: requestHeaders,
       credentials: "include",
@@ -65,6 +65,7 @@ export async function fetchApi<T>(options: FetchApiOptions): Promise<ApiResponse
     }
 
     return { error: null, response: responseData as T };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: { status: 0, message: "message" in e ? e.message : "Unknown error" }, response: null };
   }
