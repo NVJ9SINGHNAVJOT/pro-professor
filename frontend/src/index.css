@@ -6,6 +6,9 @@
   /* Transparent color */
   --color-transparent: #ffffff00;
 
+  --color-grey: #212121;
+  --color-grey-50: #181818;
+
   /* Rich Black shades */
   --color-richblack-5: #f1f2ff;
   --color-richblack-25: #dbddea;
