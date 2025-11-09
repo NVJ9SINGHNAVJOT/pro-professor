@@ -1,5 +1,7 @@
+import Page from "@/components/wrapper/Page";
+
 const Chat = () => {
-  return <div>Chat</div>;
+  return <Page className="">Chat</Page>;
 };
 
 export default Chat;

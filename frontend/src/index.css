@@ -1,9 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css"; /* Css configuration for shadcn */
 
-/* Css configuration for shadcn */
-@custom-variant dark (&:is(.dark *));
-
 /* Tailwind custom configurations */
 @theme {
   /* Transparent color */
@@ -38,8 +35,30 @@
   --color-richblue-900: #001b22;
 
   /* Width sizes */
-  --spacing-maxContent: 2000px;
+  --spacing-maxContent: 2500px;
   --spacing-minContent: 1024px;
+}
+
+@layer components {
+  .ct-button-elegante {
+    @apply relative overflow-hidden cursor-pointer px-7 py-4 rounded-[30px] 
+    transition-all duration-400 ease-in-out;
+  }
+
+  .ct-button-elegante::after {
+    content: "";
+    @apply absolute top-0 left-0 w-full h-full transition-transform duration-500 ease-in-out;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+    transform: scale(0);
+  }
+
+  .ct-button-elegante:hover::after {
+    transform: scale(2);
+  }
+
+  .ct-button-elegante.active::after {
+    transform: scale(2);
+  }
 }
 
 /* ===== standardizing elements ===== */
@@ -89,6 +108,8 @@ input[type="number"]::-webkit-outer-spin-button {
 /* custom classes naming start with ct eg: ct-logo-shine */
 
 /* Css configuration for shadcn */
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

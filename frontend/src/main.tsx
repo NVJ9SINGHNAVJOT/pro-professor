@@ -7,6 +7,9 @@ import "@/index.css";
 import Home from "@/pages/Home";
 import Error from "@/pages/Error";
 import ErrorBoundary from "@/components/error/ErrorBoundary";
+import Chat from "@/pages/Chat";
+import Settings from "@/pages/Settings";
+import Dashboard from "@/pages/Dashboard";
 
 const router = createBrowserRouter([
   {
@@ -24,6 +27,18 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <Home />,
+      },
+      {
+        path: "chat/:chat-id?",
+        element: <Chat />,
+      },
+      {
+        path: "settings",
+        element: <Settings />,
+      },
+      {
+        path: "dashboard",
+        element: <Dashboard />,
       },
       /* ===== error route ===== */
       {
