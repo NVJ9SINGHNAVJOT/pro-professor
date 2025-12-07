@@ -10,16 +10,25 @@ import { setupPostgreSQLEventTrigger } from "@/db/postgresql/triggers";
 import app from "@/app/app";
 import http from "http";
 import { connectToRedis, disconnectRedis } from "@/db/redis/connection";
+import { createWebSocketServer } from "@/ws/ws";
+import { WebSocketServer } from "ws";
 
 // Flag to track server status
 let isShuttingDown = false;
 
 // Graceful shutdown handler
-function handleExit(server: http.Server) {
+function handleExit(server: http.Server, wss: WebSocketServer) {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
   logger.info("Shutting down gracefully...");
+
+  // Close all WebSocket connections
+  wss.clients.forEach((ws) => {
+    ws.close();
+  });
+  wss.close();
+  logger.info("WebSocket server closed");
 
   // Stop accepting new connections
   server.close(async (err) => {
@@ -78,17 +87,21 @@ async function main() {
   // Setup server
   const httpServer = http.createServer(app);
 
+  // Create WebSocket server
+  const wss = createWebSocketServer(httpServer);
+
   // Start server
   httpServer.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}...`);
+    logger.info(`WebSocket server available at ws://localhost:${PORT}/ws`);
   });
 
   // NOTE: Only handle signals in production
   // Gracefully handle termination signals
   if (process.env["ENVIRONMENT"] === "production") {
     logger.info("Signals to be listened");
-    process.on("SIGINT", () => handleExit(httpServer));
-    process.on("SIGTERM", () => handleExit(httpServer));
+    process.on("SIGINT", () => handleExit(httpServer, wss));
+    process.on("SIGTERM", () => handleExit(httpServer, wss));
   }
 }
 
