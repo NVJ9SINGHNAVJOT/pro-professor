@@ -10,6 +10,7 @@ import ErrorBoundary from "@/components/error/ErrorBoundary";
 import Chat from "@/pages/Chat";
 import Settings from "@/pages/Settings";
 import Dashboard from "@/pages/Dashboard";
+import ChatMessages from "@/components/core/chat/ChatMessages";
 
 const router = createBrowserRouter([
   {
@@ -29,8 +30,14 @@ const router = createBrowserRouter([
         element: <Home />,
       },
       {
-        path: "chat/:chat-id?",
+        path: "chat",
         element: <Chat />,
+        children: [
+          {
+            path: ":chatId?",
+            element: <ChatMessages />,
+          },
+        ],
       },
       {
         path: "settings",

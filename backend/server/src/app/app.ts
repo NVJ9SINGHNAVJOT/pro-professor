@@ -1,9 +1,9 @@
 import express, { Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import serverKey from "@/middlewares/serverKey";
 import logging from "@/middlewares/logging";
 import client from "@/config/prometheus";
+import modelRoute from "@/routes/model.route";
 
 const app = express();
 
@@ -21,10 +21,8 @@ app.use(cookieParser());
 // logging details
 app.use(logging);
 
-// server only accessible with serverKey
-app.use(serverKey);
-
 // routes
+app.use("/api/v1/models", modelRoute);
 
 // metrics endpoint
 app.get("/metrics", async (_req, res) => {

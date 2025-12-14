@@ -1,5 +1,7 @@
 import { NavLink } from "react-router-dom";
 
+const name = import.meta.env.VITE_PROFESSOR_NAME;
+
 const menuItems = [
   { label: "Home", path: "/" },
   { label: "Chat", path: "/chat" },
@@ -10,24 +12,31 @@ const menuItems = [
 const MainNavbar = () => {
   return (
     <nav
-      className={`bg-neutral-950 sticky z-100 text-white top-0 px-2 flex h-[55px] w-full items-center 
-        justify-center shadow-[inset_0px_-15px_20px_rgba(41,41,41,0.5)]`}
+      className="sticky top-0 z-50 flex w-full h-[55px] items-center justify-center bg-neutral-950 px-5
+    text-white shadow-[inset_0px_-15px_20px_rgba(41,41,41,0.5)]"
     >
-      {/* Menu items */}
-      <div className="flex gap-x-16">
-        {menuItems.map((item, index) => (
+      <div className="flex gap-x-12 para-regular">
+        {menuItems.map((item) => (
           <NavLink
-            key={index}
+            key={item.label}
             to={item.path}
             className={({ isActive }) =>
-              `ct-button-elegante px-2.5! py-[3px]! ${
-                isActive ? "after:scale-[4] border-[#666666] bg-[#292929]" : ""
-              } hover:after:scale-[4] hover:border-[#666666] hover:bg-[#292929]`
+              [
+                "ct-button-elegante",
+                "hover:border-[#666666] hover:bg-[#292929]",
+                isActive && "border-[#666666] bg-[#292929] ct-active",
+              ]
+                .filter(Boolean)
+                .join(" ")
             }
           >
             {item.label}
           </NavLink>
         ))}
+      </div>
+      <div className="absolute cursor-default right-5 h-[95%] flex items-center gap-x-2 para-medium bg-black px-4 rounded-xl border border-[#444444]">
+        <div>{name}</div>
+        <img alt="Logo" src="images/title-logo.webp" className="w-11.5 aspect-auto" />
       </div>
     </nav>
   );

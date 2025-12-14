@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import { Server as HTTPServer } from "http";
 import { IncomingMessage } from "http";
 import { logger } from "@/logger/logger";
@@ -12,7 +12,7 @@ import { ExtendedWebSocket, WebSocketMessage } from "./types";
 const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
 const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_CONNECTIONS_PER_USER = 5;
-const PING_INTERVAL = 30000; // 30 seconds
+// const PING_INTERVAL = 30000; // 30 seconds
 
 function validateMessage(parsed: unknown): parsed is WebSocketMessage {
   if (typeof parsed !== "object" || parsed === null) {
@@ -193,23 +193,23 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
     });
   });
 
-  const interval = setInterval(() => {
-    wss.clients.forEach((ws: ExtendedWebSocket) => {
-      if (ws.isAlive === false) {
-        logger.warn("Terminating inactive WebSocket connection", {
-          userId: ws.userId,
-        });
-        onlineStatusManager.setUserOffline(ws);
-        ws.terminate();
-        return;
-      }
-      ws.isAlive = false;
-      ws.ping();
-    });
-  }, PING_INTERVAL);
+  // const interval = setInterval(() => {
+  //   wss.clients.forEach((ws: ExtendedWebSocket) => {
+  //     if (ws.isAlive === false) {
+  //       logger.warn("Terminating inactive WebSocket connection", {
+  //         userId: ws.userId,
+  //       });
+  //       onlineStatusManager.setUserOffline(ws);
+  //       ws.terminate();
+  //       return;
+  //     }
+  //     ws.isAlive = false;
+  //     ws.ping();
+  //   });
+  // }, PING_INTERVAL);
 
   wss.on("close", () => {
-    clearInterval(interval);
+    // clearInterval(interval);
     logger.info("WebSocket server closed");
   });
 

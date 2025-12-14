@@ -1,12 +1,12 @@
-import ChatMessages from "@/components/core/chat/ChatMessages";
 import SideBar from "@/components/core/chat/SideBar";
 import Page from "@/components/wrapper/Page";
+import { Outlet } from "react-router-dom";
 
 const Chat = () => {
   return (
     <Page className="flex">
       <SideBar />
-      <ChatMessages />
+      <Outlet />
     </Page>
   );
 };

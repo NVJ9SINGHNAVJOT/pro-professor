@@ -83,7 +83,7 @@ export const NumberInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTML
     return (
       <input
         ref={ref}
-        type="text"
+        type="number"
         inputMode="numeric"
         pattern="[0-9]*"
         className={cn(
@@ -155,7 +155,7 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
         <RadixSelect value={value} onValueChange={handleSelect} disabled={readOnly} defaultOpen={defaultOpen}>
           <SelectTrigger
             className={cn(
-              "paragraph-regular h-12 !text-neutral-700 shadow-none",
+              "paragraph-regular h-12 text-neutral-700! shadow-none",
               readOnly && "cursor-not-allowed opacity-70",
               buttonClassName,
               placeholderClassName
@@ -178,58 +178,13 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
 
 SelectInput.displayName = "SelectInput";
 
-interface PhoneInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  prefix?: string;
-  prefixClassName?: string;
-  inputWrapperClassName?: string;
-}
-
-export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
-  ({ prefix = "+91", className, prefixClassName, inputWrapperClassName, onWheel, ...props }, ref) => {
-    const handleKeyDown = createDigitOnlyKeyDown<HTMLInputElement>(props.onKeyDown);
-    const handleWheel = createBlurOnWheel<HTMLInputElement>(onWheel);
-    const handlePaste = createDigitOnlyPaste<HTMLInputElement>(props.onPaste);
-    const handleDrop = createDigitOnlyDrop<HTMLInputElement>(props.onDrop);
-
-    return (
-      <div className={cn("flex items-center border-solid border border-[#DEDFE0] rounded-lg", inputWrapperClassName)}>
-        <div
-          className={cn(
-            "inline-flex items-center px-3 h-12 bg-white paragraph-regular text-neutral-100 text-sm outline-none rounded-l-lg",
-            prefixClassName
-          )}
-        >
-          {prefix}
-        </div>
-        <div className="w-[1px] h-8 bg-[#DEDFE0]" />
-        <input
-          ref={ref}
-          type="text"
-          className={cn(
-            "w-full px-3 h-12 paragraph-regular bg-white text-neutral-700 placeholder-neutral-100 outline-none rounded-r-lg border-none",
-            props.readOnly ? readOnlyBg : "bg-white",
-            className
-          )}
-          maxLength={10}
-          onKeyDown={handleKeyDown}
-          onWheel={handleWheel}
-          onPaste={handlePaste}
-          onDrop={handleDrop}
-          {...props}
-        />
-      </div>
-    );
-  }
-);
-PhoneInput.displayName = "PhoneInput";
-
 export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ className, ...props }, ref) => {
     return (
       <textarea
         ref={ref}
         className={cn(
-          "w-full p-3 paragraph-regular bg-white border-solid border border-[#DEDFE0] rounded-lg text-neutral-700 placeholder-neutral-100 outline-none min-h-[100px]",
+          "w-full p-3 paragraph-regular bg-white border-solid border border-[#DEDFE0] rounded-lg text-neutral-700 placeholder-neutral-100 outline-none min-h-25",
           props.readOnly ? readOnlyBg : "bg-white",
           className
         )}
@@ -269,7 +224,7 @@ interface CheckboxInputProps extends ComponentPropsWithoutRef<typeof Checkbox> {
 export const CheckboxInput = forwardRef<React.ComponentRef<typeof Checkbox>, CheckboxInputProps>(
   ({ label, className, labelClassName, wrapperClassName, ...props }, ref) => {
     return (
-      <label className={cn("flex items-center space-x-[10px] cursor-pointer", wrapperClassName)}>
+      <label className={cn("flex items-center space-x-2.5 cursor-pointer", wrapperClassName)}>
         <Checkbox
           ref={ref}
           className={cn(" border-neutral-30 bg-white border-solid shadow-none size-5", className)}
@@ -307,13 +262,6 @@ interface SelectFieldProps {
   optionClassName?: string;
 }
 
-interface PhoneFieldProps {
-  type: "phone";
-  prefix?: string;
-  prefixClassName?: string;
-  inputWrapperClassName?: string;
-}
-
 interface CheckboxFieldProps {
   type: "checkbox";
   labelClassName?: string;
@@ -339,7 +287,6 @@ type FormFieldProps<T extends FieldValues> = BaseFormFieldProps<T> & {
   type: "select" | "phone" | "checkbox" | "text" | "email" | "number" | "textarea";
 } & Partial<
     Omit<SelectFieldProps, "type"> &
-      Omit<PhoneFieldProps, "type"> &
       Omit<CheckboxFieldProps, "type"> &
       Omit<TextFieldProps, "type"> &
       Omit<NumberFieldProps, "type"> &
@@ -403,20 +350,6 @@ export function FormField<T extends FieldValues>(props: FormFieldProps<T>) {
               );
             }
 
-            case "phone": {
-              const phoneProps = props as BaseFormFieldProps<T> & PhoneFieldProps;
-              return (
-                <PhoneInput
-                  {...commonProps}
-                  type="tel"
-                  prefix={phoneProps.prefix}
-                  className={inputClassName}
-                  prefixClassName={phoneProps.prefixClassName}
-                  inputWrapperClassName={phoneProps.inputWrapperClassName}
-                />
-              );
-            }
-
             case "textarea":
               return <TextArea {...commonProps} className={inputClassName} />;
 
@@ -464,7 +397,7 @@ export function FormField<T extends FieldValues>(props: FormFieldProps<T>) {
       />
 
       {showError && (
-        <div className="min-h-[18px] mt-1">
+        <div className="min-h-4.5 mt-1">
           <Controller
             control={control}
             name={name}

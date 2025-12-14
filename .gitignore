@@ -23,6 +23,8 @@
 # upload directories
 **/upload-storage
 
+**/migrations
+
 # draw.io files
 *.drawio.*
 !*.drawio

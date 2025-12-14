@@ -20,9 +20,6 @@ export async function fetchApi<T>(options: FetchApiOptions): Promise<ApiResponse
       Object.entries(headers).forEach(([key, value]) => requestHeaders.append(key, value));
     }
 
-    // Append server key for backend authorization
-    requestHeaders.append("Authorization", `Bearer ${process.env.SERVER_KEY}`);
-
     // Add query parameters to the URL
     let url = initialUrl;
     if (params) {
@@ -65,7 +62,7 @@ export async function fetchApi<T>(options: FetchApiOptions): Promise<ApiResponse
     }
 
     return { error: null, response: responseData as T };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: { status: 0, message: "message" in e ? e.message : "Unknown error" }, response: null };
   }

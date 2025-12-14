@@ -1,1 +1,1 @@
-const BASE_URL_SERVER = process.env.REACT_APP_BASE_URL_SERVER as string;
+const BASE_URL_SERVER = import.meta.env.VITE_REACT_APP_ENVIRONMENT as string;

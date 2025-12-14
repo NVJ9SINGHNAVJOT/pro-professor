@@ -1,5 +1,13 @@
+import { useParams } from "react-router-dom";
+
 const ChatMessages = () => {
-  return <section className="bg-grey flex-1">Chat Messages</section>;
+  const chatId = useParams().chatId;
+  return (
+    <section className="bg-grey flex-1">
+      {/* Top section */}
+      <div></div>
+    </section>
+  );
 };
 
 export default ChatMessages;
