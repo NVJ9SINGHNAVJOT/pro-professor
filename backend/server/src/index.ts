@@ -6,7 +6,6 @@ import { logger, loggerConfig } from "@/logger/logger";
 import { checkEnvVariables } from "@/config/envs";
 import { postgresqlDatabaseConnect, postgresqlDatabaseDisconnect } from "@/db/postgresql/connection";
 import { migratePostgreSQL } from "@/db/postgresql/migrate";
-import { setupPostgreSQLEventTrigger } from "@/db/postgresql/triggers";
 import app from "@/app/app";
 import http from "http";
 import { connectToRedis, disconnectRedis } from "@/db/redis/connection";
@@ -70,12 +69,6 @@ async function main() {
   // set the environment variable "POSTGRES_MIGRATE" to "yes".
   if (process.env["POSTGRES_MIGRATE"] === "yes") {
     await migratePostgreSQL();
-  }
-
-  // NOTE: If tables are renamed, added, or deleted,
-  // set the environment variable "POSTGRES_TRIGGER" to "yes".
-  if (process.env["POSTGRES_TRIGGER"] === "yes") {
-    await setupPostgreSQLEventTrigger();
   }
 
   // Connect to redis

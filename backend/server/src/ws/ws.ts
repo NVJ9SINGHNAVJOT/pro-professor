@@ -2,12 +2,12 @@ import { WebSocketServer } from "ws";
 import { Server as HTTPServer } from "http";
 import { IncomingMessage } from "http";
 import { logger } from "@/logger/logger";
-import { setWebSocketServer, socketEmitter } from "./emitSocketEvent";
-import { socketManager } from "./getSocketIds";
-import { onlineStatusManager } from "./onlineStatus";
-import { handleMessageEvent } from "./events/messageEvents";
-import { SERVER_EVENTS, CLIENT_EVENTS } from "./events";
-import { ExtendedWebSocket, WebSocketMessage } from "./types";
+import { setWebSocketServer, socketEmitter } from "@/ws/emitSocketEvent";
+import { socketManager } from "@/ws/getSocketIds";
+import { onlineStatusManager } from "@/ws/onlineStatus";
+import { handleMessageEvent } from "@/ws/events/messageEvents";
+import { SERVER_EVENTS, CLIENT_EVENTS } from "@/ws/events";
+import { ExtendedWebSocket, WebSocketMessage } from "@/ws/types";
 
 const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
 const MAX_MESSAGES_PER_MINUTE = 60;

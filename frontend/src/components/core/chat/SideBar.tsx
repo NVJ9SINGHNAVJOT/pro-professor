@@ -1,5 +1,6 @@
 import { useAppSelector } from "@/redux/store";
 import { EditIcon, SearchIcon } from "lucide-react";
+import { NavLink } from "react-router-dom";
 
 const menuList = [
   {
@@ -36,9 +37,11 @@ const SideBar = () => {
         <div className="flex flex-col mt-2">
           {history.map((chat) => {
             return (
-              <div key={chat.id} className="rounded-lg para-small-medium cursor-pointer items-center mx-2 px-2 py-2 hover:bg-neutral-700">
-                {chat.title}
-              </div>
+              <NavLink key={chat.id} to={`/chat/${chat.id}`}>
+                <div className="rounded-lg para-small-medium cursor-pointer items-center mx-2 px-2 py-2 hover:bg-neutral-700">
+                  {chat.title}
+                </div>
+              </NavLink>
             );
           })}
         </div>

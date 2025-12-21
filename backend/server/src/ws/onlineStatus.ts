@@ -1,5 +1,5 @@
-import { ExtendedWebSocket } from "./types";
-import { SocketManager, socketManager } from "./getSocketIds";
+import { ExtendedWebSocket } from "@/ws/types";
+import { SocketManager, socketManager } from "@/ws/getSocketIds";
 import { logger } from "@/logger/logger";
 
 /**

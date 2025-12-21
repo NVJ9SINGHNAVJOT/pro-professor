@@ -4,6 +4,7 @@ import cors from "cors";
 import logging from "@/middlewares/logging";
 import client from "@/config/prometheus";
 import modelRoute from "@/routes/model.route";
+import chatRoute from "@/routes/chat.route";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(logging);
 
 // routes
 app.use("/api/v1/models", modelRoute);
+app.use("/api/v1/chat", chatRoute);
 
 // metrics endpoint
 app.get("/metrics", async (_req, res) => {

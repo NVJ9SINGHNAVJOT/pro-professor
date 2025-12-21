@@ -1,5 +1,5 @@
 /* eslint-disable drizzle/enforce-delete-with-where */
-import { ExtendedWebSocket } from "./types";
+import { ExtendedWebSocket } from "@/ws/types";
 import { WebSocket } from "ws";
 
 export { ExtendedWebSocket };

@@ -1,4 +1,3 @@
-// useApi.tsx
 import { useRef, useState } from "react";
 import { fetchApi, type ApiError, type ApiResponse } from "@/services/fetchApi";
 import type { ApiRoute } from "@/services/apiRoute";

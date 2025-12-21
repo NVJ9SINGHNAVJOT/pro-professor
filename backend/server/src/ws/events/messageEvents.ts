@@ -1,8 +1,8 @@
-import { ExtendedWebSocket } from "../types";
-import { CLIENT_EVENTS } from "../events";
-import { socketEmitter } from "../emitSocketEvent";
+import { ExtendedWebSocket } from "@/ws/types";
+import { CLIENT_EVENTS } from "@/ws/events";
+import { socketEmitter } from "@/ws/emitSocketEvent";
 import { logger } from "@/logger/logger";
-import { MessageEventData } from "../types";
+import { MessageEventData } from "@/ws/types";
 
 /**
  * Handles message events from clients and emits "receivedmessage" event back

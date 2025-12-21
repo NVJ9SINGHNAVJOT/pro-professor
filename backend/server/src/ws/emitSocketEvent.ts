@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { ExtendedWebSocket } from "./types";
-import { ClientEvent } from "./events";
-import { SocketManager, socketManager } from "./getSocketIds";
+import { ExtendedWebSocket } from "@/ws/types";
+import { ClientEvent } from "@/ws/events";
+import { SocketManager, socketManager } from "@/ws/getSocketIds";
 import { logger } from "@/logger/logger";
 
 /**
