@@ -1,9 +1,0 @@
-
-services:
-  ai-professor-client:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ai-professor-client
-    ports: [4173:4173] # disable in production
-    env_file: .env
