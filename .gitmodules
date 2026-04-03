@@ -1,0 +1,3 @@
+[submodule "backend/ai-service"]
+	path = backend/ai-service
+	url = https://github.com/NVJ9SINGHNAVJOT/ai-service.git
