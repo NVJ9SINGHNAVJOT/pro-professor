@@ -1,25 +1,20 @@
+import { IncomingMessage, Server as HTTPServer } from "http";
 import { WebSocketServer } from "ws";
-import { Server as HTTPServer } from "http";
-import { IncomingMessage } from "http";
 import { logger } from "@/logger/logger";
-import { setWebSocketServer, socketEmitter } from "@/ws/emitSocketEvent";
-import { socketManager } from "@/ws/getSocketIds";
-import { onlineStatusManager } from "@/ws/onlineStatus";
-import { handleMessageEvent } from "@/ws/events/messageEvents";
-import { SERVER_EVENTS, CLIENT_EVENTS } from "@/ws/events";
+import { authenticateConnection, isWebSocketHandshakeAllowed } from "@/ws/auth";
+import { defaultWebSocketConfig } from "@/ws/config";
+import { socketEmitter, setWebSocketServer } from "@/ws/emitter/emitter";
+import { CLIENT_EVENTS, SERVER_EVENTS, ServerEvent } from "@/ws/events";
+import { handleTestNotificationEvent } from "@/ws/handlers/notification/notification.handler";
+import { onlineStatusManager } from "@/ws/managers/onlineStatusManager";
+import { socketManager } from "@/ws/managers/socketManager";
 import { ExtendedWebSocket, WebSocketMessage } from "@/ws/types";
+import { validateMessage } from "@/ws/validators";
 
-const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
-const MAX_MESSAGES_PER_MINUTE = 60;
-const MAX_CONNECTIONS_PER_USER = 5;
-// const PING_INTERVAL = 30000; // 30 seconds
-
-function validateMessage(parsed: unknown): parsed is WebSocketMessage {
-  if (typeof parsed !== "object" || parsed === null) {
-    return false;
-  }
-  return true;
-}
+// eslint-disable-next-line no-unused-vars
+const serverEventHandlers: Record<ServerEvent, (ws: ExtendedWebSocket, data: unknown) => void> = {
+  [SERVER_EVENTS.TEST_NOTIFICATION]: handleTestNotificationEvent,
+};
 
 function checkRateLimit(ws: ExtendedWebSocket): boolean {
   const now = Date.now();
@@ -32,7 +27,7 @@ function checkRateLimit(ws: ExtendedWebSocket): boolean {
 
   ws.messageCount = (ws.messageCount || 0) + 1;
 
-  if (ws.messageCount > MAX_MESSAGES_PER_MINUTE) {
+  if (ws.messageCount > defaultWebSocketConfig.maxMessagesPerMinute) {
     logger.warn("Rate limit exceeded", {
       userId: ws.userId,
       messageCount: ws.messageCount,
@@ -45,41 +40,23 @@ function checkRateLimit(ws: ExtendedWebSocket): boolean {
 }
 
 function checkConnectionLimit(userId: number): boolean {
-  const connections = socketManager.getSocketIds(userId);
-  return connections.length < MAX_CONNECTIONS_PER_USER;
-}
-
-/**
- * Authenticates WebSocket connection and extracts userId
- * TODO: Implement JWT token verification
- */
-function authenticateConnection(req: IncomingMessage): number | null {
-  const url = new URL(req.url || "", `http://${req.headers.host}`);
-  const userIdParam = url.searchParams.get("userId");
-
-  if (userIdParam) {
-    const userId = parseInt(userIdParam, 10);
-    if (!isNaN(userId) && userId > 0) {
-      return userId;
-    }
-  }
-
-  return null;
+  const connections = socketManager.getSocketsForUser(userId);
+  return connections.length < defaultWebSocketConfig.maxConnectionsPerUser;
 }
 
 export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
   const wss = new WebSocketServer({
     server: httpServer,
-    path: "/ws",
-    maxPayload: MAX_MESSAGE_SIZE,
-    verifyClient: (_info: { origin: string; secure: boolean; req: IncomingMessage }) => {
-      return true;
+    path: defaultWebSocketConfig.path,
+    maxPayload: defaultWebSocketConfig.maxMessageSize,
+    verifyClient: (info: { origin: string; secure: boolean; req: IncomingMessage }) => {
+      return isWebSocketHandshakeAllowed(info.req);
     },
   });
 
   setWebSocketServer(wss);
 
-  wss.on("connection", (ws: ExtendedWebSocket, req: IncomingMessage) => {
+  wss.on("connection", async (ws: ExtendedWebSocket, req: IncomingMessage) => {
     ws.isAlive = true;
     ws.connectedAt = Date.now();
     ws.messageCount = 0;
@@ -89,26 +66,34 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
       userAgent: req.headers["user-agent"],
     });
 
-    const userId = authenticateConnection(req);
-    if (userId) {
-      if (!checkConnectionLimit(userId)) {
-        logger.warn("Connection limit exceeded for user", { userId });
-        ws.close(1008, "Connection limit exceeded");
-        return;
-      }
-      ws.userId = userId;
-      onlineStatusManager.setUserOnline(userId, ws);
+    const userId = await authenticateConnection(req);
+    if (!userId) {
+      logger.warn("WebSocket connection missing authenticated user", {
+        ip: req.socket.remoteAddress,
+        userAgent: req.headers["user-agent"],
+      });
+      ws.close(1008, "Unauthorized");
+      return;
     }
+
+    if (!checkConnectionLimit(userId)) {
+      logger.warn("Connection limit exceeded for user", { userId });
+      ws.close(1008, "Connection limit exceeded");
+      return;
+    }
+
+    ws.userId = userId;
+    onlineStatusManager.setUserOnline(userId, ws);
 
     ws.on("pong", () => {
       ws.isAlive = true;
     });
 
     ws.on("message", (data: Buffer) => {
-      if (data.length > MAX_MESSAGE_SIZE) {
+      if (data.length > defaultWebSocketConfig.maxMessageSize) {
         logger.warn("Message too large", {
           size: data.length,
-          maxSize: MAX_MESSAGE_SIZE,
+          maxSize: defaultWebSocketConfig.maxMessageSize,
         });
         socketEmitter.emitSocketEvent(ws, CLIENT_EVENTS.ERROR, {
           message: "Message size exceeds limit",
@@ -125,7 +110,7 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
       }
 
       try {
-        const parsed: unknown = JSON.parse(data.toString());
+        const parsed: unknown = JSON.parse(data.toString()) as WebSocketMessage;
 
         if (!validateMessage(parsed)) {
           throw new Error("Invalid message structure");
@@ -136,21 +121,9 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
           event: parsed.event,
         });
 
-        if (!ws.userId && parsed.userId && typeof parsed.userId === "number") {
-          if (checkConnectionLimit(parsed.userId)) {
-            ws.userId = parsed.userId;
-            onlineStatusManager.setUserOnline(parsed.userId, ws);
-          } else {
-            socketEmitter.emitSocketEvent(ws, CLIENT_EVENTS.ERROR, {
-              message: "Connection limit exceeded",
-            });
-            return;
-          }
-        }
+        const handler = serverEventHandlers[parsed.event];
 
-        if (parsed.event === SERVER_EVENTS.MESSAGE) {
-          handleMessageEvent(ws, parsed.data || parsed);
-        } else if (parsed.event) {
+        if (!handler) {
           logger.warn("Unknown event type received", {
             event: parsed.event,
             userId: ws.userId,
@@ -158,9 +131,10 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
           socketEmitter.emitSocketEvent(ws, CLIENT_EVENTS.ERROR, {
             message: `Unknown event type: ${parsed.event}`,
           });
-        } else {
-          handleMessageEvent(ws, parsed);
+          return;
         }
+
+        handler(ws, parsed.data);
       } catch (error) {
         logger.error("Error parsing WebSocket message", {
           error: error instanceof Error ? error.message : error,
@@ -193,23 +167,26 @@ export function createWebSocketServer(httpServer: HTTPServer): WebSocketServer {
     });
   });
 
-  // const interval = setInterval(() => {
-  //   wss.clients.forEach((ws: ExtendedWebSocket) => {
-  //     if (ws.isAlive === false) {
-  //       logger.warn("Terminating inactive WebSocket connection", {
-  //         userId: ws.userId,
-  //       });
-  //       onlineStatusManager.setUserOffline(ws);
-  //       ws.terminate();
-  //       return;
-  //     }
-  //     ws.isAlive = false;
-  //     ws.ping();
-  //   });
-  // }, PING_INTERVAL);
+  const interval = setInterval(() => {
+    wss.clients.forEach((client) => {
+      const socket = client as ExtendedWebSocket;
+
+      if (socket.isAlive === false) {
+        logger.warn("Terminating inactive WebSocket connection", {
+          userId: socket.userId,
+        });
+        onlineStatusManager.setUserOffline(socket);
+        socket.terminate();
+        return;
+      }
+
+      socket.isAlive = false;
+      socket.ping();
+    });
+  }, defaultWebSocketConfig.pingInterval);
 
   wss.on("close", () => {
-    // clearInterval(interval);
+    clearInterval(interval);
     logger.info("WebSocket server closed");
   });
 

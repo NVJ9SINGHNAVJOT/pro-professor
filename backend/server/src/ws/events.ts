@@ -1,11 +1,10 @@
 // Server events (events that the server listens for from clients)
 export const SERVER_EVENTS = {
-  MESSAGE: "message",
+  TEST_NOTIFICATION: "test-notification",
 } as const;
 
 // Client events (events that the server emits to clients)
 export const CLIENT_EVENTS = {
-  RECEIVED_MESSAGE: "receivedmessage",
   NOTIFICATION: "notification",
   ERROR: "error",
 } as const;

@@ -1,12 +1,6 @@
-/* eslint-disable drizzle/enforce-delete-with-where */
-import { ExtendedWebSocket } from "@/ws/types";
 import { WebSocket } from "ws";
+import { ExtendedWebSocket } from "@/ws/types";
 
-export { ExtendedWebSocket };
-
-/**
- * Manages user-to-socket mappings and connection tracking
- */
 export class SocketManager {
   private userSocketMap = new Map<number, Set<ExtendedWebSocket>>();
   private socketUserMap = new Map<ExtendedWebSocket, number>();
@@ -15,6 +9,7 @@ export class SocketManager {
     if (!this.userSocketMap.has(userId)) {
       this.userSocketMap.set(userId, new Set());
     }
+
     this.userSocketMap.get(userId)!.add(ws);
     this.socketUserMap.set(ws, userId);
   }
@@ -33,10 +28,7 @@ export class SocketManager {
     }
   }
 
-  /**
-   * Returns all open socket connections for a user, automatically cleaning up closed connections
-   */
-  getSocketIds(userId: number): ExtendedWebSocket[] {
+  getSocketsForUser(userId: number): ExtendedWebSocket[] {
     const sockets = this.userSocketMap.get(userId);
     if (!sockets) {
       return [];

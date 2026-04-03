@@ -9,7 +9,7 @@ import { migratePostgreSQL } from "@/db/postgresql/migrate";
 import app from "@/app/app";
 import http from "http";
 import { connectToRedis, disconnectRedis } from "@/db/redis/connection";
-import { createWebSocketServer } from "@/ws/ws";
+import { createWebSocketServer } from "@/ws/server";
 import { WebSocketServer } from "ws";
 
 // Flag to track server status

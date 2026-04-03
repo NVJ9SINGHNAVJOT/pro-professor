@@ -20,6 +20,9 @@
 # service configs
 **/service.json
 
+# backend data
+/backend/server/data
+
 # upload directories
 **/upload-storage
 

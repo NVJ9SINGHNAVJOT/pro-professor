@@ -18,6 +18,7 @@ const developmentLogger = () => {
       new transports.Console({
         level: "silly",
         format: format.combine(
+          // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
           format.printf(({ timestamp, level, message, ...args }) => JSON.stringify(args, null, 2))
         ),
       }),

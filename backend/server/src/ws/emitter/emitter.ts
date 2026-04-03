@@ -1,16 +1,18 @@
-import { WebSocketServer, WebSocket } from "ws";
-import { ExtendedWebSocket } from "@/ws/types";
-import { ClientEvent } from "@/ws/events";
-import { SocketManager, socketManager } from "@/ws/getSocketIds";
+import { WebSocket, WebSocketServer } from "ws";
 import { logger } from "@/logger/logger";
+import { ClientEvent } from "@/ws/events";
+import { SocketManager, socketManager } from "@/ws/managers/socketManager";
+import { ClientEventPayloadMap, ExtendedWebSocket } from "@/ws/types";
+import { EmitSocketEvent, SocketEmitterDependencies, SocketEventPayload } from "@/ws/emitter/emitter.type";
 
-/**
- * Handles emitting events to WebSocket clients
- */
 export class SocketEmitter {
-  private wssInstance: WebSocketServer | null = null;
+  private wssInstance: WebSocketServer | null;
+  private socketManager: SocketManager;
 
-  constructor(private socketManager: SocketManager) {}
+  constructor({ socketManager, wssInstance = null }: SocketEmitterDependencies) {
+    this.socketManager = socketManager;
+    this.wssInstance = wssInstance;
+  }
 
   setWebSocketServer(wss: WebSocketServer): void {
     this.wssInstance = wss;
@@ -20,19 +22,30 @@ export class SocketEmitter {
     return this.wssInstance;
   }
 
-  emitSocketEvent(ws: ExtendedWebSocket | WebSocket, event: ClientEvent, data: unknown): void {
+  createSocketEvent: EmitSocketEvent = (event, data) => {
+    return {
+      event,
+      data,
+    };
+  };
+
+  emitSocketEvent<Key extends ClientEvent>(
+    ws: ExtendedWebSocket | WebSocket,
+    event: Key,
+    data: ClientEventPayloadMap[Key],
+  ): boolean {
     try {
       if (ws.readyState === WebSocket.OPEN) {
-        const message = JSON.stringify({
-          event,
-          data,
-        });
-        ws.send(message);
+        const message: SocketEventPayload<Key> = this.createSocketEvent(event, data);
+
+        ws.send(JSON.stringify(message));
+        return true;
       } else {
         logger.warn("Attempted to send message to closed socket", {
           readyState: ws.readyState,
           userId: (ws as ExtendedWebSocket).userId,
         });
+        return false;
       }
     } catch (error) {
       logger.error("Error emitting socket event", {
@@ -40,10 +53,11 @@ export class SocketEmitter {
         event,
         userId: (ws as ExtendedWebSocket).userId,
       });
+      return false;
     }
   }
 
-  emitToAll(event: ClientEvent, data: unknown): void {
+  emitToAll<Key extends ClientEvent>(event: Key, data: ClientEventPayloadMap[Key]): void {
     if (!this.wssInstance) {
       logger.warn("WebSocket server instance not set");
       return;
@@ -52,24 +66,22 @@ export class SocketEmitter {
     let sentCount = 0;
     this.wssInstance.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        this.emitSocketEvent(client, event, data);
-        sentCount++;
+        if (this.emitSocketEvent(client, event, data)) {
+          sentCount++;
+        }
       }
     });
 
     logger.debug(`Emitted ${event} to ${sentCount} clients`);
   }
 
-  /**
-   * Emits event to all active connections of a user (supports multiple devices/browsers)
-   */
-  emitToUser(userId: number, event: ClientEvent, data: unknown): void {
+  emitToUser<Key extends ClientEvent>(userId: number, event: Key, data: ClientEventPayloadMap[Key]): void {
     if (!this.wssInstance) {
       logger.warn("WebSocket server instance not set");
       return;
     }
 
-    const sockets = this.socketManager.getSocketIds(userId);
+    const sockets = this.socketManager.getSocketsForUser(userId);
 
     if (sockets.length === 0) {
       logger.debug(`No active connections for user ${userId}`);
@@ -80,15 +92,10 @@ export class SocketEmitter {
     let failureCount = 0;
 
     sockets.forEach((ws) => {
-      try {
-        this.emitSocketEvent(ws, event, data);
+      if (this.emitSocketEvent(ws, event, data)) {
         successCount++;
-      } catch (error) {
+      } else {
         failureCount++;
-        logger.error("Failed to emit to user connection", {
-          userId,
-          error: error instanceof Error ? error.message : error,
-        });
       }
     });
 
@@ -99,7 +106,7 @@ export class SocketEmitter {
     });
   }
 
-  emitToUsers(userIds: number[], event: ClientEvent, data: unknown): void {
+  emitToUsers<Key extends ClientEvent>(userIds: number[], event: Key, data: ClientEventPayloadMap[Key]): void {
     if (userIds.length === 0) {
       logger.debug("No users specified for emitToUsers");
       return;
@@ -115,16 +122,16 @@ export class SocketEmitter {
   }
 
   isUserConnected(userId: number): boolean {
-    const sockets = this.socketManager.getSocketIds(userId);
+    const sockets = this.socketManager.getSocketsForUser(userId);
     return sockets.length > 0;
   }
 
   getUserConnectionCount(userId: number): number {
-    const sockets = this.socketManager.getSocketIds(userId);
+    const sockets = this.socketManager.getSocketsForUser(userId);
     return sockets.length;
   }
 }
 
-export const socketEmitter = new SocketEmitter(socketManager);
+export const socketEmitter = new SocketEmitter({ socketManager });
 
 export const setWebSocketServer = (wss: WebSocketServer) => socketEmitter.setWebSocketServer(wss);
