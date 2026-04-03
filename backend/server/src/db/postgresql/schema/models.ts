@@ -1,9 +1,9 @@
-import { pgTable, serial, varchar, timestamp, boolean } from "drizzle-orm/pg-core";
+import { boolean, pgTable, serial, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 
 export const models = pgTable("models", {
   id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(), // llama3.1
-  provider: varchar("provider", { length: 50 }).notNull(), // ollama
+  name: varchar("name", { length: 255 }).notNull(), // llama3.1 or provider model id
+  provider: varchar("provider", { length: 50 }).notNull(), // ollama | ai-service
   role: varchar("role", { length: 50 }).notNull(), // chat | embedding
   version: varchar("version", { length: 50 }),
   isActive: boolean("is_active").notNull().default(true),
@@ -11,4 +11,6 @@ export const models = pgTable("models", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  providerNameUniqueIdx: uniqueIndex("models_provider_name_unique_idx").on(table.provider, table.name),
+}));

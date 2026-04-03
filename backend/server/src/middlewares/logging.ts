@@ -26,7 +26,7 @@ function logging(req: Request, res: Response, next: NextFunction) {
     });
     next();
   } catch (error) {
-    return internalErrRes(req, res, "logging", error);
+    return internalErrRes(req, res, error);
   }
 }
 

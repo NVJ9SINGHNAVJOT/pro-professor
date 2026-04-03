@@ -1,31 +1,26 @@
 import { extractErrorDetails } from "@/logger/error";
 import { logger } from "@/logger/logger";
-import { CustomRequest } from "@/types/custom";
 import { Request, Response } from "express";
-import { object } from "zod/v4";
-
-function getRequestId(req: Request): string {
-  return (req as CustomRequest).requestId || "Unknown";
-}
+import { getRequestId } from "@/utils/request";
 
 export function errRes(req: Request, res: Response, status: number, message: string, error?: unknown): Response {
+  const requestId = getRequestId(req);
+  const errorDetails = error ? extractErrorDetails(error) : null;
+
   logger.error(message, {
-    requestId: getRequestId(req),
+    requestId,
     status,
-    error: error ? (error === typeof object ? error : extractErrorDetails(error)) : undefined,
+    error: errorDetails,
   });
 
-  return res.status(status).json({ message });
+  res.setHeader("x-request-id", requestId);
+
+  return res.status(status).json({
+    message,
+    error: errorDetails,
+  });
 }
 
 export function internalErrRes(req: Request, res: Response, error: unknown): Response {
-  const requestId = getRequestId(req);
-
-  logger.error("Internal server error", {
-    requestId,
-    status: 500,
-    error: extractErrorDetails(error),
-  });
-
-  return res.status(500).json({ message: "Internal server error" });
+  return errRes(req, res, 500, "Internal server error", error);
 }

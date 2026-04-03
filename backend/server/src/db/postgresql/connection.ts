@@ -3,6 +3,9 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { logger } from "@/logger/logger";
 import { logError } from "@/logger/error";
+import { conversations } from "@/db/postgresql/schema/conversations";
+import { models } from "@/db/postgresql/schema/models";
+import { messages } from "@/db/postgresql/schema/messages";
 
 configDotenv();
 
@@ -35,5 +38,9 @@ export async function postgresqlDatabaseDisconnect() {
 }
 
 export const db = drizzle(pool, {
-  schema: {},
+  schema: {
+    conversations,
+    models,
+    messages,
+  },
 });

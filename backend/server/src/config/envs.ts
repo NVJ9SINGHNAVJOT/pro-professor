@@ -12,6 +12,8 @@ const environmentVariables = [
   "POSTGRES_USER",
   "POSTGRES_DB",
   "POSTGRES_PASSWORD",
+  "OLLAMA_BASE_URL",
+  "AI_SERVICE_BASE_URL",
 ];
 
 export function checkEnvVariables(): void {
