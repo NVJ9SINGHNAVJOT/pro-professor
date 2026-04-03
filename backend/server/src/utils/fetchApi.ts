@@ -2,7 +2,11 @@ import { logger } from "@/logger/logger";
 import { getRequestId } from "@/utils/request";
 import { Request } from "express";
 
-export type ApiError = { status: number; message: string };
+export type ApiError = {
+  status: number;
+  message?: string;
+  response: unknown;
+};
 
 export type ApiResponse<T> = { error: null; response: T } | { error: ApiError; response: null };
 
@@ -80,13 +84,18 @@ export async function fetchApi<T>(req: Request, options: FetchApiOptions): Promi
     });
 
     if (!response.ok) {
+      const message =
+        responseData && typeof responseData === "object" && "message" in responseData
+          ? String((responseData as { message: unknown }).message)
+          : typeof responseData === "string" && responseData.trim()
+            ? responseData
+            : undefined;
+
       return {
         error: {
           status: response.status,
-          message:
-            responseData && typeof responseData === "object" && "message" in responseData
-              ? String((responseData as { message: unknown }).message)
-              : "Unknown error",
+          message,
+          response: responseData,
         },
         response: null,
       };
@@ -98,7 +107,8 @@ export async function fetchApi<T>(req: Request, options: FetchApiOptions): Promi
     return {
       error: {
         status: 0,
-        message: "message" in e ? e.message : "Unknown Api error",
+        message: "message" in e ? e.message : undefined,
+        response: null,
       },
       response: null,
     };

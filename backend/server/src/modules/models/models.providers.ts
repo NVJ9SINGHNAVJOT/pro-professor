@@ -1,5 +1,6 @@
 import { Request } from "express";
 import { fetchApi } from "@/utils/fetchApi";
+import { createAppError } from "@/utils/error";
 import {
   AiServiceModel,
   AiServiceModelsResponse,
@@ -49,7 +50,11 @@ const getOllamaModels = async (req: Request): Promise<ProviderModel[]> => {
   });
 
   if (result.error) {
-    throw new Error(result.error.message);
+    throw createAppError("EXTERNAL_SERVICE_ERROR", result.error.message || "Failed to fetch Ollama models.", {
+      provider: "ollama",
+      status: result.error.status,
+      response: result.error.response,
+    });
   }
 
   return result.response.models.map(mapOllamaModel);
@@ -62,7 +67,11 @@ const getAiServiceModels = async (req: Request): Promise<ProviderModel[]> => {
   });
 
   if (result.error) {
-    throw new Error(result.error.message);
+    throw createAppError("EXTERNAL_SERVICE_ERROR", result.error.message || "Failed to fetch AI Service models.", {
+      provider: "ai-service",
+      status: result.error.status,
+      response: result.error.response,
+    });
   }
 
   return result.response.data.map(mapAiServiceModel).filter((model) => model.isActive);

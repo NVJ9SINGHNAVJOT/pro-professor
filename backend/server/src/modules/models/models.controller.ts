@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { modelsServices } from "@/modules/models/models.service";
-import { internalErrRes } from "@/utils/error";
+import { controllerError } from "@/utils/error";
 import { GetAllModelsQuery } from "@/modules/models/validators";
 import { successRes } from "@/utils/response";
 
@@ -13,7 +13,7 @@ const getAllModels = async (req: Request, res: Response): Promise<Response> => {
       models,
     });
   } catch (error) {
-    return internalErrRes(req, res, error);
+    return controllerError(req, res, error);
   }
 };
 

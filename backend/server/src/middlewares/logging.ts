@@ -1,5 +1,5 @@
 import { logger } from "@/logger/logger";
-import { CustomRequest } from "@/types/custom";
+import { CustomRequest } from "@/types/customRequest";
 import { internalErrRes } from "@/utils/error";
 import { NextFunction, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
