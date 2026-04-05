@@ -26,6 +26,7 @@
 # upload directories
 **/upload-storage
 
+# database migrations
 **/migrations
 
 # draw.io files
