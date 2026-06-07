@@ -1,0 +1,6 @@
+# Development profile — verbose logging for learning/debugging.
+logging:
+  level:
+    com.proprofessor.server: DEBUG
+    org.springframework.web.socket: DEBUG
+    org.hibernate.SQL: DEBUG

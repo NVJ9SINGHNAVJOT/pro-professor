@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: central-server
+
+  profiles:
+    active: ${ENVIRONMENT:development}
+
+  # ── PostgreSQL (datasource + JPA) ──────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DB:AI-Professor-Database}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # No entities yet (Phase 1). Switch to "validate" once entities exist.
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  # ── Kafka (connection only this phase) ──────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+# ── Server ─────────────────────────────────────────────────────────────────
+server:
+  port: ${PORT:4000}
+
+# ── Actuator (exposes /actuator/health with db, redis, kafka components) ─────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ── Application-specific config (bound to AppProperties) ─────────────────────
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+  ai-service:
+    base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:8000}
+    api-key: ${AI_SERVICE_API_KEY:test-key}
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
+    api-key: ${OLLAMA_API_KEY:ollama}

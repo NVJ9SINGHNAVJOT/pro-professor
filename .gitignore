@@ -1,9 +1,11 @@
 # dependencies
 **/node_modules
 
-# production
+# build output
 **/build
 **/dist
+**/target
+!**/.mvn/wrapper/maven-wrapper.jar
 
 # environment
 *.env
@@ -16,12 +18,10 @@
 
 # logs
 **/logs
+**/*.log
 
 # service configs
 **/service.json
-
-# backend data
-/backend/server/data
 
 # upload directories
 **/upload-storage
@@ -32,6 +32,14 @@
 # draw.io files
 *.drawio.*
 !*.drawio
+
+# IDE / editor
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
 
 # OS generated files
 .DS_Store
