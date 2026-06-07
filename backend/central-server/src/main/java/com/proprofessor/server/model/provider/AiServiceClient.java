@@ -12,10 +12,7 @@ import java.util.List;
 
 /**
  * Talks to the Python AI service and maps its models into {@link ProviderModel}.
- *
- * <p>Spring equivalent of the AI-service half of the Node {@code models.providers.ts}.
- * Only models the AI service reports as loadable are returned (mirrors the Node
- * {@code .filter((model) => model.isActive)}).
+ * Only models the AI service reports as loadable are returned.
  */
 @Component
 public class AiServiceClient {
@@ -54,13 +51,7 @@ public class AiServiceClient {
     }
 
     private static ProviderModel toProviderModel(AiServiceModelsResponse.AiServiceModel model) {
-        return new ProviderModel(
-                model.name(),
-                ModelProvider.AI_SERVICE,
-                ModelClassifier.resolveRole(model.name(), null),
-                null,
-                model.loadable()
-        );
+        return new ProviderModel(model.name(), ModelProvider.AI_SERVICE, "chat", null, model.loadable());
     }
 
     /** Request body for the AI service load endpoint. */

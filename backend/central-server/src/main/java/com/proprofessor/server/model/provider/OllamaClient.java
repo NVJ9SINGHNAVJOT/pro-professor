@@ -11,10 +11,7 @@ import java.util.List;
 
 /**
  * Talks to the local Ollama service and maps its models into {@link ProviderModel}.
- *
- * <p>This is the Spring equivalent of the Ollama half of the Node
- * {@code models.providers.ts}. It owns the external call and the mapping; it does
- * not persist anything or know about the web layer.
+ * Owns the external call and the mapping; does not persist or know about the web layer.
  */
 @Component
 public class OllamaClient {
@@ -43,20 +40,13 @@ public class OllamaClient {
 
     private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model) {
         OllamaTagsResponse.OllamaDetails details = model.details();
-        String family = details != null ? details.family() : null;
         String parameterSize = details != null ? details.parameterSize() : null;
 
         String version = (parameterSize != null && !parameterSize.isBlank())
                 ? parameterSize
                 : extractVersionFromName(model.name());
 
-        return new ProviderModel(
-                model.name(),
-                ModelProvider.OLLAMA,
-                ModelClassifier.resolveRole(model.name(), family),
-                version,
-                true
-        );
+        return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true);
     }
 
     /** Derives a version from a {@code name:tag} identifier, e.g. {@code llama3.1:8b} -> {@code 8b}. */

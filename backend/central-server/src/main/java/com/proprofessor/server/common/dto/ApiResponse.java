@@ -4,10 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * Standard response envelope returned by every REST endpoint.
- *
- * <p>Mirrors the {@code { success, message, data }} shape from the old Node
- * {@code utils/response.ts}, giving the frontend a single predictable contract.
- * {@code null} fields are omitted from the JSON output.
+ * Shape: {@code { success, message, data }}. {@code null} fields are omitted from the JSON output.
  *
  * @param success whether the request succeeded
  * @param message human-readable message (especially useful on errors)

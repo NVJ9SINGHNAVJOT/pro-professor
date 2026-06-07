@@ -1,9 +1,6 @@
 package com.proprofessor.server.websocket.events;
 
-/*
- * INFO: Any change to these event names must be mirrored in the frontend
- *       (frontend/src/socket/events.ts). Keep both sides in sync.
- */
+// INFO: Any change to these event names must be kept in sync with frontend/src/socket/events.ts
 
 /**
  * WebSocket event-name constants. Following the project convention:
