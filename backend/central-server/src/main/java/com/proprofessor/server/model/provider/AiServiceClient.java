@@ -1,5 +1,6 @@
 package com.proprofessor.server.model.provider;
 
+import com.proprofessor.server.common.http.HttpClientFactory;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
@@ -20,8 +21,7 @@ public class AiServiceClient {
     private final RestClient restClient;
 
     public AiServiceClient(AppProperties appProperties) {
-        String baseUrl = stripTrailingSlash(appProperties.aiService().baseUrl());
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.restClient = HttpClientFactory.forBaseUrl(appProperties.aiService().baseUrl());
     }
 
     /** Fetches loadable AI-service models. Throws on connection/HTTP errors (caller tolerates). */
@@ -56,9 +56,5 @@ public class AiServiceClient {
 
     /** Request body for the AI service load endpoint. */
     private record LoadModelBody(String name) {
-    }
-
-    private static String stripTrailingSlash(String url) {
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 }

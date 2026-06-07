@@ -1,5 +1,6 @@
 package com.proprofessor.server.model.provider;
 
+import com.proprofessor.server.common.http.HttpClientFactory;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
@@ -19,8 +20,7 @@ public class OllamaClient {
     private final RestClient restClient;
 
     public OllamaClient(AppProperties appProperties) {
-        String baseUrl = stripTrailingSlash(appProperties.ollama().baseUrl());
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.restClient = HttpClientFactory.forBaseUrl(appProperties.ollama().baseUrl());
     }
 
     /** Fetches all Ollama models. Throws on connection/HTTP errors (the caller decides how to tolerate). */
@@ -56,9 +56,5 @@ public class OllamaClient {
             return name.substring(idx + 1);
         }
         return null;
-    }
-
-    private static String stripTrailingSlash(String url) {
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 }

@@ -4,7 +4,7 @@ import com.proprofessor.server.chat.dto.ConversationDetail;
 import com.proprofessor.server.chat.dto.ConversationSummary;
 import com.proprofessor.server.chat.mapper.ChatMapper;
 import com.proprofessor.server.chat.provider.ChatCompletionClient;
-import com.proprofessor.server.chat.provider.dto.ChatCompletionRequest;
+import com.proprofessor.server.chat.provider.dto.ChatMessage;
 import com.proprofessor.server.chat.repository.ConversationRepository;
 import com.proprofessor.server.chat.repository.MessageRepository;
 import com.proprofessor.server.common.db.ConversationRow;
@@ -57,7 +57,7 @@ public class ChatService {
 
         messageRepository.insert(conversation.id(), ROLE_USER, command.content());
 
-        List<ChatCompletionRequest.Message> history = buildHistory(conversation.id());
+        List<ChatMessage> history = buildHistory(conversation.id());
 
         if (provider == ModelProvider.AI_SERVICE) {
             modelService.loadModel(modelName);
@@ -103,9 +103,9 @@ public class ChatService {
         return conversationRepository.insert(model.id(), deriveTitle(command.content()), DEFAULT_MODE);
     }
 
-    private List<ChatCompletionRequest.Message> buildHistory(long conversationId) {
+    private List<ChatMessage> buildHistory(long conversationId) {
         return messageRepository.findAllByConversationId(conversationId).stream()
-                .map(msg -> new ChatCompletionRequest.Message(msg.role(), msg.content()))
+                .map(msg -> new ChatMessage(msg.role(), msg.content()))
                 .toList();
     }
 

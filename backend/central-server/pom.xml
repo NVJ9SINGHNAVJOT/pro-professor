@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Align Jackson with what the OpenAI Java SDK requires (Spring Boot 3.3 ships 2.17). -->
+        <jackson-bom.version>2.18.2</jackson-bom.version>
     </properties>
 
     <dependencies>
@@ -33,6 +35,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
+        <!-- ── OpenAI Java SDK (chat completions against Ollama / AI service) ── -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>4.39.1</version>
         </dependency>
 
         <!-- ── Flyway (schema migrations) ────────────────────────────── -->
