@@ -4,20 +4,20 @@ import { Provider } from "react-redux";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import App from "@/App.tsx";
 import "@/index.css";
-import Home from "@/pages/Home";
-import Error from "@/pages/Error";
-import ErrorBoundary from "@/components/error/ErrorBoundary";
-import Chat from "@/pages/Chat";
-import Settings from "@/pages/Settings";
-import Dashboard from "@/pages/Dashboard";
-import ChatMessages from "@/components/core/chat/ChatMessages";
+import { ROUTES } from "@/constants/routes";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
+import HomePage from "@/pages/index";
+import ChatPage from "@/pages/chat/index";
+import SettingsPage from "@/pages/settings/index";
+import DashboardPage from "@/pages/dashboard/index";
+import ErrorPage from "@/pages/error/index";
 
 const router = createBrowserRouter([
   {
     // main app route and sub routes
     // only MainNavbar is used in outlet in App element
     // and childrens are used as routes
-    path: "/",
+    path: ROUTES.HOME,
     element: (
       <ErrorBoundary>
         <App />
@@ -27,36 +27,34 @@ const router = createBrowserRouter([
       /* ===== public route ===== */
       {
         index: true,
-        element: <Home />,
+        element: <HomePage />,
       },
       {
         path: "chat",
-        element: <Chat />,
-        children: [
-          {
-            path: ":chatId?",
-            element: <ChatMessages />,
-          },
-        ],
+        element: <ChatPage />,
+      },
+      {
+        path: "chat/:chatId",
+        element: <ChatPage />,
       },
       {
         path: "settings",
-        element: <Settings />,
+        element: <SettingsPage />,
       },
       {
         path: "dashboard",
-        element: <Dashboard />,
+        element: <DashboardPage />,
       },
       /* ===== error route ===== */
       {
         path: "error",
-        element: <Error />,
+        element: <ErrorPage />,
       },
     ],
   },
   {
     path: "*",
-    element: <Navigate to="/error" />,
+    element: <Navigate to={ROUTES.ERROR} />,
   },
 ]);
 

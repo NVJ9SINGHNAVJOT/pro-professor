@@ -1,8 +1,12 @@
 package com.proprofessor.server.model;
 
 import com.proprofessor.server.common.dto.ApiResponse;
+import com.proprofessor.server.model.dto.LoadModelRequest;
 import com.proprofessor.server.model.dto.ModelListResponse;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,5 +31,11 @@ public class ModelController {
     public ApiResponse<ModelListResponse> getAllModels() {
         ModelListResponse data = new ModelListResponse(modelService.getAllModels());
         return ApiResponse.ok("Models fetched successfully.", data);
+    }
+
+    @PostMapping("/load")
+    public ApiResponse<Void> loadModel(@Valid @RequestBody LoadModelRequest request) {
+        modelService.loadModel(request.name());
+        return ApiResponse.ok("Model load requested.", null);
     }
 }

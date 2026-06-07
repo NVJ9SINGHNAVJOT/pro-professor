@@ -1,28 +1,23 @@
 package com.proprofessor.server.model;
 
+import com.proprofessor.server.common.db.ModelRow;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
 import com.proprofessor.server.model.provider.AiServiceClient;
 import com.proprofessor.server.model.provider.OllamaClient;
+import com.proprofessor.server.model.repository.ModelRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
 
-/**
- * Aggregates models from every provider into one normalized, sorted list.
- *
- * <p>Mirrors the Node {@code models.service.ts}: each provider is queried
- * independently, a single provider failure is tolerated (its models are just
- * skipped), and only if <em>all</em> providers fail does the request error out.
- * Results are sorted by provider, then by name.
- */
 @Service
 public class ModelService {
 
@@ -34,10 +29,12 @@ public class ModelService {
 
     private final OllamaClient ollamaClient;
     private final AiServiceClient aiServiceClient;
+    private final ModelRepository modelRepository;
 
-    public ModelService(OllamaClient ollamaClient, AiServiceClient aiServiceClient) {
+    public ModelService(OllamaClient ollamaClient, AiServiceClient aiServiceClient, ModelRepository modelRepository) {
         this.ollamaClient = ollamaClient;
         this.aiServiceClient = aiServiceClient;
+        this.modelRepository = modelRepository;
     }
 
     public List<ProviderModel> getAllModels() {
@@ -54,7 +51,16 @@ public class ModelService {
         return models;
     }
 
-    /** Runs a provider fetch, returning an empty list (and logging) instead of failing the whole request. */
+    public void loadModel(String name) {
+        aiServiceClient.loadModel(name);
+    }
+
+    @Transactional
+    public ModelRow getOrCreateModel(ModelProvider provider, String name) {
+        return modelRepository.findByProviderAndName(provider.getValue(), name)
+                .orElseGet(() -> modelRepository.insert(name, provider.getValue(), "chat", null, true));
+    }
+
     private List<ProviderModel> fetchTolerant(Supplier<List<ProviderModel>> fetch, ModelProvider provider) {
         try {
             return fetch.get();

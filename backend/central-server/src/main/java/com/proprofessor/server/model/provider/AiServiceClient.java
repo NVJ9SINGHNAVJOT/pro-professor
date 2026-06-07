@@ -4,6 +4,7 @@ import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
 import com.proprofessor.server.model.provider.dto.AiServiceModelsResponse;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -42,6 +43,16 @@ public class AiServiceClient {
                 .toList();
     }
 
+    /** Asks the AI service to load a model into memory (it swaps out any other loaded model). */
+    public void loadModel(String name) {
+        restClient.post()
+                .uri("/api/v1/models/load")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new LoadModelBody(name))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     private static ProviderModel toProviderModel(AiServiceModelsResponse.AiServiceModel model) {
         return new ProviderModel(
                 model.name(),
@@ -50,6 +61,10 @@ public class AiServiceClient {
                 null,
                 model.loadable()
         );
+    }
+
+    /** Request body for the AI service load endpoint. */
+    private record LoadModelBody(String name) {
     }
 
     private static String stripTrailingSlash(String url) {

@@ -1,12 +1,13 @@
 import { NavLink } from "react-router-dom";
+import { ROUTES } from "@/constants/routes";
 
 const name = import.meta.env.VITE_PROFESSOR_NAME;
 
 const menuItems = [
-  { label: "Home", path: "/" },
-  { label: "Chat", path: "/chat" },
-  { label: "Settings", path: "/settings" },
-  { label: "Dashboard", path: "/dashboard" },
+  { label: "Home", path: ROUTES.HOME },
+  { label: "Chat", path: ROUTES.CHAT },
+  { label: "Settings", path: ROUTES.SETTINGS },
+  { label: "Dashboard", path: ROUTES.DASHBOARD },
 ] as const;
 
 const MainNavbar = () => {

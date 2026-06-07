@@ -1,34 +1,21 @@
 import { createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 
-interface ChatHistoryMessage {
-  id: string;
+export interface ChatHistoryItem {
+  id: number;
   title: string;
   model: string;
-  createdAt: string;
+  updatedAt: string;
 }
 
 interface ChatState {
   chatHistoryLoading: boolean;
-  history: ChatHistoryMessage[];
+  history: ChatHistoryItem[];
 }
 
 const initialState: ChatState = {
-  chatHistoryLoading: true,
-  history: [
-    {
-      id: "chat-001",
-      title: "Introduction to Redux",
-      model: "Gemini 2.5 Flash",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: "chat-002",
-      title: "Project Setup Help",
-      model: "Gemini 1.0 Pro",
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-    },
-  ],
+  chatHistoryLoading: false,
+  history: [],
 };
 
 const chatSlice = createSlice({
@@ -38,14 +25,18 @@ const chatSlice = createSlice({
     setChatHistoryLoading(state, action: PayloadAction<boolean>) {
       state.chatHistoryLoading = action.payload;
     },
-    addChatToHistory(state, action: PayloadAction<ChatHistoryMessage>) {
-      state.history.unshift(action.payload);
+    setHistory(state, action: PayloadAction<ChatHistoryItem[]>) {
+      state.history = action.payload;
     },
-    removeChatFromHistory(state, action: PayloadAction<string>) {
+    addConversation(state, action: PayloadAction<ChatHistoryItem>) {
+      // de-dupe, then put newest on top
+      state.history = [action.payload, ...state.history.filter((chat) => chat.id !== action.payload.id)];
+    },
+    removeConversation(state, action: PayloadAction<number>) {
       state.history = state.history.filter((chat) => chat.id !== action.payload);
     },
   },
 });
 
-export const { setChatHistoryLoading, addChatToHistory, removeChatFromHistory } = chatSlice.actions;
+export const { setChatHistoryLoading, setHistory, addConversation, removeConversation } = chatSlice.actions;
 export default chatSlice.reducer;

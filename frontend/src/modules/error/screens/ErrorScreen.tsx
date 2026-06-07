@@ -1,7 +1,8 @@
-import Page from "@/components/wrapper/Page";
+import Page from "@/components/common/Page";
+import { ROUTES } from "@/constants/routes";
 import { useNavigate } from "react-router-dom";
 
-const Error = () => {
+const ErrorScreen = () => {
   const navigate = useNavigate();
   return (
     <Page className="flex justify-center items-center">
@@ -16,7 +17,7 @@ const Error = () => {
           <button
             className="w-auto mt-16! border px-10! py-6! text-center
           hover:text-black hover:bg-white transition-all ease-in-out"
-            onClick={() => navigate("/")}
+            onClick={() => navigate(ROUTES.HOME)}
           >
             Take me there!
           </button>
@@ -26,4 +27,4 @@ const Error = () => {
   );
 };
 
-export default Error;
+export default ErrorScreen;
