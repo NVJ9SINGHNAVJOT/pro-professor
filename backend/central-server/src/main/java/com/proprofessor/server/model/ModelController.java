@@ -13,9 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST endpoints for models. Thin: it delegates to {@link ModelService} and
  * wraps the result in the standard {@link ApiResponse} envelope.
- *
- * <p>Equivalent of the Node {@code models.route.ts} + {@code models.controller.ts}
- * (the route is expressed here as annotations).
  */
 @RestController
 @RequestMapping("/api/v1/models")

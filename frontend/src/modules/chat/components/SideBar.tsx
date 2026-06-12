@@ -1,17 +1,56 @@
-import { useEffect } from "react";
-import { EditIcon, SearchIcon } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import {
+  HomeIcon,
+  LayoutDashboardIcon,
+  PanelLeftCloseIcon,
+  SearchIcon,
+  SettingsIcon,
+  SquarePenIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { setHistory } from "@/redux/slices/chatSlice";
+import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { ROUTES } from "@/constants/routes";
+import { cn } from "@/utils/cn";
 
-const SideBar = () => {
+const name = import.meta.env.VITE_PROFESSOR_NAME;
+
+const GROUPS = ["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"] as const;
+type Group = (typeof GROUPS)[number];
+
+const groupOf = (dateStr: string): Group => {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(new Date(dateStr))) / 86_400_000);
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays <= 7) return "Previous 7 Days";
+  if (diffDays <= 30) return "Previous 30 Days";
+  return "Older";
+};
+
+const bottomLinks = [
+  { label: "Home", path: ROUTES.HOME, Icon: HomeIcon },
+  { label: "Settings", path: ROUTES.SETTINGS, Icon: SettingsIcon },
+  { label: "Dashboard", path: ROUTES.DASHBOARD, Icon: LayoutDashboardIcon },
+] as const;
+
+interface SideBarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
   const history = useAppSelector((state) => state.chat.history);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const chatId = useParams().chatId;
+  const [query, setQuery] = useState("");
   const { execute: fetchConversations } = useApi(chatsRoute.getConversations);
+  const { execute: deleteConversation } = useApi(chatsRoute.deleteConversation);
 
   useEffect(() => {
     (async () => {
@@ -23,42 +62,144 @@ const SideBar = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // filter by search query, then bucket by recency
+  const grouped = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q ? history.filter((chat) => chat.title.toLowerCase().includes(q)) : history;
+    const buckets = new Map<Group, ChatHistoryItem[]>();
+    filtered.forEach((chat) => {
+      const group = groupOf(chat.updatedAt);
+      buckets.set(group, [...(buckets.get(group) ?? []), chat]);
+    });
+    return GROUPS.filter((group) => buckets.has(group)).map((group) => ({ label: group, chats: buckets.get(group)! }));
+  }, [history, query]);
+
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const res = await deleteConversation(id);
+    if (res.error) {
+      toast.error("Failed to delete chat");
+      return;
+    }
+    dispatch(removeConversation(id));
+    if (chatId === String(id)) navigate(ROUTES.CHAT);
+  };
+
   return (
-    <section className="text-white w-67.5 bg-grey-50 overflow-y-auto">
-      {/* Menu section */}
-      <div className="flex flex-col mt-4">
+    <>
+      {/* mobile backdrop */}
+      <div
+        onClick={onToggle}
+        className={cn(
+          "fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity duration-300 md:hidden",
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+      <aside
+        className={cn(
+          "z-40 h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-67.5",
+          isOpen ? "w-67.5 max-md:translate-x-0" : "w-0 max-md:-translate-x-full"
+        )}
+      >
         <div
-          onClick={() => navigate(ROUTES.CHAT)}
-          className="flex gap-x-3 rounded-lg cursor-pointer items-center mx-2 px-2 py-2 hover:bg-neutral-700"
+          className={cn(
+            "flex h-full w-67.5 flex-col transition-opacity duration-300",
+            isOpen ? "opacity-100" : "opacity-0"
+          )}
         >
-          <div className="*:size-4.5">
-            <EditIcon />
+          {/* Header: brand + collapse */}
+          <div className="flex items-center justify-between px-3 pt-3">
+            <div className="flex items-center gap-x-2">
+              <img alt="Logo" src="/images/title-logo.webp" className="w-9 aspect-auto" />
+              <span className="para-small-semibold">{name}</span>
+            </div>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label="Close sidebar"
+              className="cursor-pointer rounded-lg p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+            >
+              <PanelLeftCloseIcon className="size-5" />
+            </button>
           </div>
-          <div className="para-small-medium">New chat</div>
-        </div>
-        <div className="flex gap-x-3 rounded-lg cursor-pointer items-center mx-2 px-2 py-2 hover:bg-neutral-700">
-          <div className="*:size-4.5">
-            <SearchIcon />
+
+          {/* New chat */}
+          <div className="mt-3 px-2">
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.CHAT)}
+              className="flex w-full cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800"
+            >
+              <SquarePenIcon className="size-4.5" />
+              New chat
+            </button>
           </div>
-          <div className="para-small-medium">Search chats</div>
-        </div>
-      </div>
-      {/* Chat section */}
-      <div className="flex flex-col mt-4">
-        <div className="text-neutral-400 mx-2 px-2">Chats</div>
-        <div className="flex flex-col mt-2">
-          {history.map((chat) => {
-            return (
-              <NavLink key={chat.id} to={ROUTES.CHAT_DETAIL(chat.id)}>
-                <div className="rounded-lg para-small-medium cursor-pointer items-center mx-2 px-2 py-2 hover:bg-neutral-700 truncate">
-                  {chat.title}
-                </div>
+
+          {/* Search */}
+          <div className="mt-1 px-2">
+            <div className="flex items-center gap-x-2 rounded-lg px-2 py-1.5 focus-within:bg-neutral-800/60 hover:bg-neutral-800/60">
+              <SearchIcon className="size-4.5 shrink-0 text-neutral-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search chats"
+                className="w-full bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
+              />
+            </div>
+          </div>
+
+          {/* Chat history, grouped by recency */}
+          <div className="chat-scroll mt-4 flex-1 overflow-y-auto px-2 pb-2">
+            {grouped.length === 0 && (
+              <div className="px-2 caption-regular text-neutral-500">{query ? "No chats found" : "No chats yet"}</div>
+            )}
+            {grouped.map((group) => (
+              <div key={group.label} className="mb-4">
+                <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
+                {group.chats.map((chat) => (
+                  <NavLink
+                    key={chat.id}
+                    to={ROUTES.CHAT_DETAIL(chat.id)}
+                    className={({ isActive }) =>
+                      cn(
+                        "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 para-small-medium hover:bg-neutral-800",
+                        isActive && "bg-neutral-800"
+                      )
+                    }
+                  >
+                    <span className="truncate">{chat.title}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDelete(e, chat.id)}
+                      aria-label="Delete chat"
+                      className="shrink-0 cursor-pointer rounded p-1 text-neutral-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                    >
+                      <Trash2Icon className="size-4" />
+                    </button>
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom navigation */}
+          <div className="border-t border-neutral-800 px-2 py-2">
+            {bottomLinks.map(({ label, path, Icon }) => (
+              <NavLink
+                key={label}
+                to={path}
+                className="flex items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium text-neutral-300 hover:bg-neutral-800 hover:text-white"
+              >
+                <Icon className="size-4.5" />
+                {label}
               </NavLink>
-            );
-          })}
+            ))}
+          </div>
         </div>
-      </div>
-    </section>
+      </aside>
+    </>
   );
 };
 

@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { SendIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  BotIcon,
+  CheckIcon,
+  CopyIcon,
+  PanelLeftOpenIcon,
+  PaperclipIcon,
+  SquareIcon,
+  SquarePenIcon,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useSocketContext } from "@/context/SocketProvider";
 import { clientE } from "@/socket/events";
 import { useApi } from "@/hooks/useApi";
@@ -12,18 +23,66 @@ import ModelSelector, { type SelectedModel } from "@/modules/chat/components/Mod
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
 import type { ModelProvider } from "@/services/operations/models.route";
-import Page from "@/components/common/Page";
 
 interface UiMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-const ChatMessages = () => {
+const SUGGESTIONS = [
+  { title: "Explain a concept", prompt: "Explain quantum computing in simple terms" },
+  { title: "Plan my studies", prompt: "Create a one-week study plan for learning React" },
+  { title: "Summarize a topic", prompt: "Summarize the main causes of World War I" },
+  { title: "Practice questions", prompt: "Give me 5 practice questions on basic calculus" },
+] as const;
+
+const MAX_TEXTAREA_HEIGHT_PX = 160; // ~6 rows
+const AUTOSCROLL_THRESHOLD_PX = 80;
+
+const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="group flex gap-x-3">
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full border border-neutral-700">
+        <BotIcon className="size-4 text-neutral-300" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          {isStreaming && <span className="ct-cursor-blink">▋</span>}
+        </div>
+        {!isStreaming && content && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            aria-label="Copy message"
+            className="mt-1 cursor-pointer rounded-md p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-800 hover:text-white group-hover:opacity-100"
+          >
+            {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface ChatMessagesProps {
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}
+
+const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const chatId = useParams().chatId;
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { connect, sendChat, subscribe } = useSocketContext();
+  const { sendChat, subscribe } = useSocketContext();
   const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -36,16 +95,16 @@ const ChatMessages = () => {
   const loadedRef = useRef<number | null>(null);
   const isNewChatRef = useRef<boolean>(true);
   const selectedRef = useRef<SelectedModel | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  // user pressed Stop — ignore further chunks of the current stream
+  const stoppedRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // follow the stream only while the user is at the bottom
+  const autoScrollRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
-
-  // open the single shared connection
-  useEffect(() => {
-    connect();
-  }, [connect]);
 
   // register streaming handlers once
   useEffect(() => {
@@ -67,6 +126,7 @@ const ChatMessages = () => {
     });
 
     const unChunk = subscribe(clientE.CHAT_CHUNK, ({ delta }) => {
+      if (stoppedRef.current) return;
       setMessages((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];
@@ -95,6 +155,8 @@ const ChatMessages = () => {
 
   // load (or reset) conversation when the route param changes
   useEffect(() => {
+    autoScrollRef.current = true;
+
     if (!chatId) {
       setMessages([]);
       convIdRef.current = null;
@@ -129,19 +191,37 @@ const ChatMessages = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
-  // auto-scroll on new content
+  // auto-scroll on new content unless the user scrolled away from the bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollRef.current;
+    if (el && autoScrollRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  const handleSend = () => {
-    const content = input.trim();
+  // auto-grow the textarea with its content
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
+  }, [input]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    autoScrollRef.current = distanceFromBottom < AUTOSCROLL_THRESHOLD_PX;
+  };
+
+  const handleSend = (text?: string) => {
+    const content = (text ?? input).trim();
     if (!content || streaming) return;
     if (!selected) {
       toast.error("Select a model first");
       return;
     }
 
+    stoppedRef.current = false;
+    autoScrollRef.current = true;
     setMessages((prev) => [...prev, { role: "user", content }, { role: "assistant", content: "" }]);
     setInput("");
     setStreaming(true);
@@ -153,6 +233,25 @@ const ChatMessages = () => {
     });
   };
 
+  // client-side stop: the backend keeps streaming, we just stop rendering chunks
+  const handleStop = () => {
+    stoppedRef.current = true;
+    setStreaming(false);
+  };
+
+  const handleNewChat = () => {
+    if (chatId) {
+      navigate(ROUTES.CHAT);
+      return;
+    }
+    setMessages([]);
+    setInput("");
+    setStreaming(false);
+    convIdRef.current = null;
+    loadedRef.current = null;
+    isNewChatRef.current = true;
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -160,58 +259,124 @@ const ChatMessages = () => {
     }
   };
 
+  const showEmptyState = !chatId && messages.length === 0;
+
   return (
-    <Page className="bg-grey flex flex-col text-white">
-      {/* Header: model selector */}
-      <div className="flex items-center gap-x-3 px-4 py-3 border-b border-neutral-800">
-        <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto max-w-3xl flex flex-col gap-y-4">
-          {messages.length === 0 && (
-            <div className="text-neutral-500 text-center mt-20 para-small-medium">Pick a model and say hi 👋</div>
-          )}
-          {messages.map((message, index) => (
-            <div key={index} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-              <div
-                className={cn(
-                  "rounded-2xl px-4 py-2 max-w-[80%] whitespace-pre-wrap break-words para-small-medium",
-                  message.role === "user" ? "bg-neutral-700" : "bg-neutral-800"
-                )}
-              >
-                {message.content || (streaming ? "▋" : "")}
-              </div>
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
-
-      {/* Input */}
-      <div className="px-4 py-3 border-t border-neutral-800">
-        <div className="mx-auto max-w-3xl flex items-end gap-x-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder="Message..."
-            className="flex-1 resize-none rounded-xl bg-neutral-800 px-4 py-2.5 outline-none para-small-medium max-h-40"
-          />
+    <section className="flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
+      {/* Header bar */}
+      <header className="flex items-center gap-x-2 px-4 py-2.5">
+        {!sidebarOpen && (
           <button
             type="button"
-            aria-label="Send message"
-            onClick={handleSend}
-            disabled={streaming || !input.trim()}
-            className="rounded-xl bg-white text-black p-2.5 disabled:opacity-40"
+            onClick={onToggleSidebar}
+            aria-label="Open sidebar"
+            className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
           >
-            <SendIcon className="size-4.5" />
+            <PanelLeftOpenIcon className="size-5" />
           </button>
+        )}
+        <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
+        <button
+          type="button"
+          onClick={handleNewChat}
+          aria-label="New chat"
+          className="ml-auto cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+        >
+          <SquarePenIcon className="size-5" />
+        </button>
+      </header>
+
+      {/* Empty state or message list */}
+      {showEmptyState ? (
+        <div className="relative flex flex-1 flex-col items-center justify-center px-4">
+          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
+          </div>
+          <h1 className="relative heading-small-medium text-center">What can I help with?</h1>
+          <div className="relative mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
+            {SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion.title}
+                type="button"
+                onClick={() => handleSend(suggestion.prompt)}
+                className="cursor-pointer rounded-2xl border border-neutral-800 bg-neutral-800/40 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-neutral-600 hover:bg-neutral-800"
+              >
+                <div className="para-small-semibold text-neutral-200">{suggestion.title}</div>
+                <div className="truncate caption-small-regular text-neutral-500">{suggestion.prompt}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll flex-1 overflow-y-auto px-4 py-6">
+          <div className="mx-auto flex max-w-3xl flex-col gap-y-6">
+            {messages.map((message, index) =>
+              message.role === "user" ? (
+                <div key={index} className="flex justify-end">
+                  <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
+                    {message.content}
+                  </div>
+                </div>
+              ) : (
+                <AssistantMessage
+                  key={index}
+                  content={message.content}
+                  isStreaming={streaming && index === messages.length - 1}
+                />
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="px-4 pb-3 pt-2">
+        <div className="mx-auto max-w-3xl">
+          <div className="flex items-end gap-x-1.5 rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
+            <button
+              type="button"
+              disabled
+              aria-label="Attach file (coming soon)"
+              className="cursor-not-allowed rounded-full p-2 text-neutral-500 opacity-50"
+            >
+              <PaperclipIcon className="size-4.5" />
+            </button>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="Message..."
+              className={cn("flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium", "placeholder:text-neutral-500")}
+            />
+            {streaming ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                aria-label="Stop generating"
+                className="cursor-pointer rounded-full bg-white p-2.5 text-black transition-transform hover:scale-105"
+              >
+                <SquareIcon className="size-4 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={!input.trim()}
+                aria-label="Send message"
+                className="cursor-pointer rounded-full bg-linear-to-br from-white to-neutral-400 p-2.5 text-black transition-all not-disabled:hover:scale-105 disabled:cursor-default disabled:opacity-40"
+              >
+                <ArrowUpIcon className="size-4.5" />
+              </button>
+            )}
+          </div>
+          <div className="mt-2 text-center caption-small-regular text-neutral-600">
+            Enter to send · Shift+Enter for new line
+          </div>
         </div>
       </div>
-    </Page>
+    </section>
   );
 };
 

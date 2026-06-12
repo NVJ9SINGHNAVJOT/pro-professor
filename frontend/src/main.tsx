@@ -14,9 +14,6 @@ import ErrorPage from "@/pages/error/index";
 
 const router = createBrowserRouter([
   {
-    // main app route and sub routes
-    // only MainNavbar is used in outlet in App element
-    // and childrens are used as routes
     path: ROUTES.HOME,
     element: (
       <ErrorBoundary>
@@ -24,7 +21,7 @@ const router = createBrowserRouter([
       </ErrorBoundary>
     ),
     children: [
-      /* ===== public route ===== */
+
       {
         index: true,
         element: <HomePage />,
@@ -45,7 +42,7 @@ const router = createBrowserRouter([
         path: "dashboard",
         element: <DashboardPage />,
       },
-      /* ===== error route ===== */
+
       {
         path: "error",
         element: <ErrorPage />,

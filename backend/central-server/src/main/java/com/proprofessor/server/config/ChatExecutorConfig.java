@@ -5,8 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
- * Thread pool for chat streaming work. The WebSocket receive thread must not block
- * on the slow upstream model call, so each {@code chat.send} is processed here.
+ * Thread pool for chat streaming work. The HTTP request thread must not block on
+ * the slow upstream model call, so each SSE chat send is processed here.
  */
 @Configuration
 public class ChatExecutorConfig {

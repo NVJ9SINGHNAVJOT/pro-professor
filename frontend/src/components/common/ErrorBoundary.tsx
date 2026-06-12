@@ -21,7 +21,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // CAUTION: Console in development, for production use api's for data collection
-    if (process.env.environment !== "production") {
+    if (!import.meta.env.PROD) {
       console.error("Error caught by boundary:", error, errorInfo);
     }
     // TODO: Service api to be made and called for data collection

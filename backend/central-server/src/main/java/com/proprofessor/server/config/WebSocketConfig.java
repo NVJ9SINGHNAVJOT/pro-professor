@@ -11,9 +11,8 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 /**
  * Registers raw WebSocket handlers.
  *
- * <p>The chat handler is exposed at {@code /ws} (matching the old Node server path).
- * Allowed origins are reused from {@link AppProperties} so REST and WebSocket share
- * the same CORS-origin policy.
+ * <p>The chat handler is exposed at {@code /ws}. Allowed origins are reused from
+ * {@link AppProperties} so REST and WebSocket share the same CORS-origin policy.
  */
 @Configuration
 @EnableWebSocket

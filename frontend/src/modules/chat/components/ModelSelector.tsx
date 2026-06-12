@@ -42,7 +42,10 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
 
   return (
     <Select value={current} onValueChange={handleChange} disabled={disabled}>
-      <SelectTrigger className="text-white border-neutral-700 bg-neutral-800">
+      <SelectTrigger
+        size="sm"
+        className="gap-1.5 border-transparent bg-transparent text-neutral-200 shadow-none transition-colors para-small-medium hover:border-neutral-700 hover:bg-neutral-800 data-placeholder:text-neutral-400 [&_svg:not([class*='text-'])]:text-neutral-400"
+      >
         <SelectValue placeholder="Select a model" />
       </SelectTrigger>
       <SelectContent className="bg-neutral-900 text-white border-neutral-700">
