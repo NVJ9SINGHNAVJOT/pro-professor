@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  HomeIcon,
-  LayoutDashboardIcon,
   PanelLeftCloseIcon,
   SearchIcon,
-  SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -32,11 +29,7 @@ const groupOf = (dateStr: string): Group => {
   return "Older";
 };
 
-const bottomLinks = [
-  { label: "Home", path: ROUTES.HOME, Icon: HomeIcon },
-  { label: "Settings", path: ROUTES.SETTINGS, Icon: SettingsIcon },
-  { label: "Dashboard", path: ROUTES.DASHBOARD, Icon: LayoutDashboardIcon },
-] as const;
+
 
 interface SideBarProps {
   isOpen: boolean;
@@ -184,19 +177,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
             ))}
           </div>
 
-          {/* Bottom navigation */}
-          <div className="border-t border-neutral-800 px-2 py-2">
-            {bottomLinks.map(({ label, path, Icon }) => (
-              <NavLink
-                key={label}
-                to={path}
-                className="flex items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium text-neutral-300 hover:bg-neutral-800 hover:text-white"
-              >
-                <Icon className="size-4.5" />
-                {label}
-              </NavLink>
-            ))}
-          </div>
+
         </div>
       </aside>
     </>

@@ -8,7 +8,7 @@ const ChatScreen = () => {
   const toggleSidebar = () => setSidebarOpen((open) => !open);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-grey">
+    <div className="flex h-full w-full overflow-hidden bg-grey">
       <SideBar isOpen={sidebarOpen} onToggle={toggleSidebar} />
       <ChatMessages sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} />
     </div>

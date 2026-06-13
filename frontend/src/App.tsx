@@ -10,17 +10,15 @@ function App() {
 
   return (
     <SocketProvider>
-      <div className="h-screen w-screen bg-black">
+      <div className="flex h-screen w-screen flex-col bg-black">
+        <MainNavbar />
 
         <main
           className={cn(
-            "relative mx-auto w-full h-full",
+            "relative mx-auto w-full flex-1 min-h-0",
             isChatRoute ? "overflow-hidden" : "min-w-minContent max-w-maxContent overflow-x-auto overflow-y-auto"
           )}
         >
-
-          {!isChatRoute && <MainNavbar />}
-
           <Outlet />
         </main>
       </div>
@@ -29,3 +27,4 @@ function App() {
 }
 
 export default App;
+
