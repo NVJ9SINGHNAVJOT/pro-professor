@@ -329,9 +329,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
               </button>
             )}
           </div>
-          <div className="mt-2 text-center caption-small-regular text-neutral-600">
-            Enter to send · Shift+Enter for new line
-          </div>
         </div>
       </div>
     </section>

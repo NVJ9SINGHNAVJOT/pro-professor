@@ -104,6 +104,16 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: ct-float 14s ease-in-out infinite;
 }
 
+/* Subtle continuous floating for the treble clef */
+@utility animate-music-float {
+  animation: ct-music-float 4s ease-in-out infinite;
+}
+
+/* Continuous breathing glow for the badge */
+@utility animate-glow {
+  animation: ct-glow 3s ease-in-out infinite;
+}
+
 @layer components {
   @keyframes ct-blink {
     0%,
@@ -112,6 +122,28 @@ input[type="number"]::-webkit-outer-spin-button {
     }
     50% {
       opacity: 0;
+    }
+  }
+
+  @keyframes ct-music-float {
+    0%,
+    100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-3px) rotate(3deg);
+    }
+  }
+
+  @keyframes ct-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+      border-color: #262626; /* neutral-800 */
+    }
+    50% {
+      box-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+      border-color: #525252; /* neutral-600 */
     }
   }
 

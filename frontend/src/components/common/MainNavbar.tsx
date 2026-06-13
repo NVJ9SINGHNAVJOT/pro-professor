@@ -35,9 +35,15 @@ const MainNavbar = () => {
           </NavLink>
         ))}
       </div>
-      <div className="absolute cursor-default right-5 h-[95%] flex items-center gap-x-2 para-medium bg-black px-4 rounded-xl border border-[#444444]">
-        <div>{name}</div>
-        <img alt="Logo" src="images/title-logo.webp" className="w-11.5 aspect-auto" />
+      <div className="group absolute right-5 flex h-[75%] cursor-default items-center gap-x-3 rounded-full animate-glow bg-neutral-900/60 px-4 py-1.5 backdrop-blur-md transition-all duration-300 hover:bg-neutral-800 border border-neutral-800">
+        <div className="bg-gradient-to-br from-white to-neutral-400 bg-clip-text text-transparent para-medium-semibold tracking-wide">
+          {name}
+        </div>
+        <img 
+          alt="Logo" 
+          src="/images/title-logo.webp" 
+          className="w-10 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)] transition-transform duration-500 group-hover:scale-110" 
+        />
       </div>
     </nav>
   );
