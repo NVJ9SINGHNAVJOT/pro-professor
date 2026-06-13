@@ -1,0 +1,51 @@
+/* Tailwind custom configurations */
+
+@theme {
+  /* Font Families */
+  --font-family-para: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-family-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-family-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-family-caption: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Transparent color */
+  --color-transparent: #ffffff00;
+
+  --color-grey: #212121;
+  --color-grey-50: #181818;
+
+  /* Chat UI tokens */
+  --color-chat-sidebar: #181818;
+  --color-chat-input: #303030;
+
+  /* Rich Black shades */
+  --color-richblack-5: #f1f2ff;
+  --color-richblack-25: #dbddea;
+  --color-richblack-50: #c5c7d4;
+  --color-richblack-100: #afb2bf;
+  --color-richblack-200: #999daa;
+  --color-richblack-300: #838894;
+  --color-richblack-400: #6e727f;
+  --color-richblack-500: #585d69;
+  --color-richblack-600: #424854;
+  --color-richblack-700: #2c333f;
+  --color-richblack-800: #161d29;
+  --color-richblack-900: #000814;
+
+  /* Rich Blue shades */
+  --color-richblue-5: #ecf5ff;
+  --color-richblue-25: #c6d6e1;
+  --color-richblue-50: #a0b7c3;
+  --color-richblue-100: #7a98a6;
+  --color-richblue-200: #537988;
+  --color-richblue-300: #2d5a6a;
+  --color-richblue-400: #073b4c;
+  --color-richblue-500: #063544;
+  --color-richblue-600: #042e3b;
+  --color-richblue-700: #032833;
+  --color-richblue-800: #01212a;
+  --color-richblue-900: #001b22;
+
+  /* Width sizes */
+  --spacing-maxContent: 2500px;
+  --spacing-minContent: 1024px;
+}
