@@ -24,8 +24,6 @@ import type { ModelProvider } from "@/services/operations/models.route";
 import type { SelectedModel, UiMessage } from "@/modules/chat/types";
 import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
 
-
-
 const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
   const [copied, setCopied] = useState(false);
 

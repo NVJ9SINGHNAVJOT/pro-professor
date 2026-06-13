@@ -17,11 +17,6 @@ import { GROUPS } from "@/modules/chat/constants";
 import type { Group } from "@/modules/chat/types";
 import { groupOf } from "@/modules/chat/utils";
 
-
-
-
-
-
 interface SideBarProps {
   isOpen: boolean;
   onToggle: () => void;
