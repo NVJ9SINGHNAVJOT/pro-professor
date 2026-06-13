@@ -30,6 +30,9 @@
 **/migrations
 **/migration
 
+# docs
+docs/
+
 # draw.io files
 *.drawio.*
 !*.drawio
