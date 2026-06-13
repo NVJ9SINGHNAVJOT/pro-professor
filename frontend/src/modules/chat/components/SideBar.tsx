@@ -17,7 +17,6 @@ import { GROUPS } from "@/modules/chat/constants";
 import type { Group } from "@/modules/chat/types";
 import { groupOf } from "@/modules/chat/utils";
 
-const name = import.meta.env.VITE_PROFESSOR_NAME;
 
 
 
@@ -94,12 +93,8 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
             isOpen ? "opacity-100" : "opacity-0"
           )}
         >
-          {/* Header: brand + collapse */}
-          <div className="flex items-center justify-between px-3 pt-3">
-            <div className="flex items-center gap-x-2">
-              <img alt="Logo" src="/images/title-logo.webp" className="w-9 aspect-auto" />
-              <span className="para-small-semibold">{name}</span>
-            </div>
+          {/* Header: collapse */}
+          <div className="flex items-center justify-end px-3 pt-3">
             <button
               type="button"
               onClick={onToggle}

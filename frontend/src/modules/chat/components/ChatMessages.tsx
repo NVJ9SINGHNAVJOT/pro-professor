@@ -9,7 +9,6 @@ import {
   PanelLeftOpenIcon,
   PaperclipIcon,
   SquareIcon,
-  SquarePenIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -217,19 +216,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setStreaming(false);
   };
 
-  const handleNewChat = () => {
-    if (chatId) {
-      navigate(ROUTES.CHAT);
-      return;
-    }
-    setMessages([]);
-    setInput("");
-    setStreaming(false);
-    convIdRef.current = null;
-    loadedRef.current = null;
-    isNewChatRef.current = true;
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -254,14 +240,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           </button>
         )}
         <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-        <button
-          type="button"
-          onClick={handleNewChat}
-          aria-label="New chat"
-          className="ml-auto cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-        >
-          <SquarePenIcon className="size-5" />
-        </button>
       </header>
 
       {/* Empty state or message list */}
@@ -315,7 +293,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
               type="button"
               disabled
               aria-label="Attach file (coming soon)"
-              className="cursor-not-allowed rounded-full p-2 text-neutral-500 opacity-50"
+              className="cursor-not-allowed rounded-full p-2.5 text-neutral-500 opacity-50"
             >
               <PaperclipIcon className="size-4.5" />
             </button>
