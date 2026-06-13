@@ -4,11 +4,17 @@ import com.proprofessor.server.common.http.HttpClientFactory;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
+import com.proprofessor.server.model.provider.dto.OllamaShowResponse;
 import com.proprofessor.server.model.provider.dto.OllamaTagsResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Talks to the local Ollama service and maps its models into {@link ProviderModel}.
@@ -16,6 +22,8 @@ import java.util.List;
  */
 @Component
 public class OllamaClient {
+
+    private static final Logger log = LoggerFactory.getLogger(OllamaClient.class);
 
     private final RestClient restClient;
 
@@ -34,11 +42,53 @@ public class OllamaClient {
             return List.of();
         }
         return response.models().stream()
-                .map(OllamaClient::toProviderModel)
+                .map(m -> toProviderModel(m, fetchCapabilities(m.name())))
                 .toList();
     }
 
-    private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model) {
+    /**
+     * Calls {@code POST /api/show} for a single model to retrieve its capabilities.
+     * Returns the raw capability strings (e.g. {@code ["completion", "vision"]}).
+     * Falls back to an empty list on any error so one bad model doesn't block the entire list.
+     */
+    private List<String> fetchCapabilities(String modelName) {
+        try {
+            OllamaShowResponse show = restClient.post()
+                    .uri("/api/show")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("model", modelName))
+                    .retrieve()
+                    .body(OllamaShowResponse.class);
+
+            if (show != null && show.capabilities() != null) {
+                return show.capabilities();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch capabilities for Ollama model '{}': {}", modelName, e.getMessage());
+        }
+        return List.of();
+    }
+
+    /**
+     * Maps Ollama capability strings to our normalised input modality names.
+     * <ul>
+     *   <li>{@code "completion"} → {@code "text"} (always added as default)</li>
+     *   <li>{@code "vision"} → {@code "image"}</li>
+     * </ul>
+     * Capabilities like {@code "tools"} and {@code "thinking"} are not input modalities and are ignored.
+     */
+    private static List<String> mapCapabilitiesToModalities(List<String> capabilities) {
+        List<String> modalities = new ArrayList<>();
+        modalities.add("text"); // every Ollama model accepts text input
+        for (String cap : capabilities) {
+            if ("vision".equals(cap) && !modalities.contains("image")) {
+                modalities.add("image");
+            }
+        }
+        return List.copyOf(modalities);
+    }
+
+    private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model, List<String> capabilities) {
         OllamaTagsResponse.OllamaDetails details = model.details();
         String parameterSize = details != null ? details.parameterSize() : null;
 
@@ -46,7 +96,8 @@ public class OllamaClient {
                 ? parameterSize
                 : extractVersionFromName(model.name());
 
-        return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true);
+        List<String> modalities = mapCapabilitiesToModalities(capabilities);
+        return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true, modalities);
     }
 
     /** Derives a version from a {@code name:tag} identifier, e.g. {@code llama3.1:8b} -> {@code 8b}. */
@@ -58,3 +109,4 @@ public class OllamaClient {
         return null;
     }
 }
+

@@ -1,5 +1,7 @@
 package com.proprofessor.server.model.provider.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -12,7 +14,8 @@ public record AiServiceModelsResponse(
 
     public record AiServiceModel(
             String name,
-            boolean loadable
+            boolean loadable,
+            @JsonProperty("input_modalities") List<String> inputModalities
     ) {
     }
 }

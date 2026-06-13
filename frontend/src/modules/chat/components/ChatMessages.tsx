@@ -116,7 +116,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           content: m.content,
         }))
       );
-      setSelected({ provider: detail.provider as ModelProvider, model: detail.model });
+      setSelected({ provider: detail.provider as ModelProvider, model: detail.model, inputModalities: ["text"] });
       convIdRef.current = id;
       loadedRef.current = id;
     })();

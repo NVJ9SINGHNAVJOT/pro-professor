@@ -14,6 +14,7 @@ export type ProviderModel = {
   role: string;
   version: string | null;
   isActive: boolean;
+  inputModalities: string[];
 };
 
 export type GetAllModelsResponse = {

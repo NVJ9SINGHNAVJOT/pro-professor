@@ -8,6 +8,7 @@ export interface UiMessage {
 export interface SelectedModel {
   provider: ModelProvider;
   model: string;
+  inputModalities: string[];
 }
 
 export type Group = "Today" | "Yesterday" | "Previous 7 Days" | "Previous 30 Days" | "Older";

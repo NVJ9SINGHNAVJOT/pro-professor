@@ -13,6 +13,14 @@ interface ModelSelectorProps {
 const SEPARATOR = "::";
 const encode = (provider: string, name: string) => `${provider}${SEPARATOR}${name}`;
 
+/** Maps a modality string to an icon + accessible label. */
+const MODALITY_META: Record<string, { icon: string; label: string }> = {
+  text:  { icon: "📝", label: "Text" },
+  image: { icon: "🖼️", label: "Image" },
+  audio: { icon: "🎤", label: "Audio" },
+  video: { icon: "🎬", label: "Video" },
+};
+
 const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
   const [models, setModels] = useState<ProviderModel[]>([]);
   const { execute: fetchModels } = useApi(modelsRoute.getAllModels);
@@ -33,7 +41,9 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     const idx = encoded.indexOf(SEPARATOR);
     const provider = encoded.slice(0, idx) as ModelProvider;
     const model = encoded.slice(idx + SEPARATOR.length);
-    onChange({ provider, model });
+    const match = models.find((m) => m.provider === provider && m.name === model);
+    const inputModalities = match?.inputModalities ?? ["text"];
+    onChange({ provider, model, inputModalities });
   };
 
   return (
@@ -47,7 +57,19 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       <SelectContent side="top" align="end" className="bg-neutral-900 text-white border-neutral-700">
         {models.map((m) => (
           <SelectItem key={encode(m.provider, m.name)} value={encode(m.provider, m.name)}>
-            {`${m.name} (${m.provider})`}
+            <span className="flex items-center gap-2">
+              <span>{m.name}</span>
+              <span className="flex items-center gap-0.5 text-xs opacity-70" aria-label="Supported input types">
+                {(m.inputModalities ?? ["text"]).map((mod) => {
+                  const meta = MODALITY_META[mod];
+                  return meta ? (
+                    <span key={mod} title={meta.label} role="img" aria-label={meta.label}>
+                      {meta.icon}
+                    </span>
+                  ) : null;
+                })}
+              </span>
+            </span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -56,3 +78,4 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
 };
 
 export default ModelSelector;
+
