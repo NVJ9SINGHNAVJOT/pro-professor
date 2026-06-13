@@ -1,4 +1,4 @@
-import type { Group } from "../types";
+import type { Group } from "@/modules/chat/types";
 
 export const groupOf = (dateStr: string): Group => {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

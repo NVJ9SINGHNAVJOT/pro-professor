@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useApi } from "@/hooks/useApi";
 import { modelsRoute, type ModelProvider, type ProviderModel } from "@/services/operations/models.route";
-
-export interface SelectedModel {
-  provider: ModelProvider;
-  model: string;
-}
+import type { SelectedModel } from "@/modules/chat/types";
 
 interface ModelSelectorProps {
   value: SelectedModel | null;

@@ -18,25 +18,14 @@ import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { useAppDispatch } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
-import ModelSelector, { type SelectedModel } from "@/modules/chat/components/ModelSelector";
+import ModelSelector from "@/modules/chat/components/ModelSelector";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
 import type { ModelProvider } from "@/services/operations/models.route";
+import type { SelectedModel, UiMessage } from "@/modules/chat/types";
+import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
 
-interface UiMessage {
-  role: "user" | "assistant";
-  content: string;
-}
 
-const SUGGESTIONS = [
-  { title: "Explain a concept", prompt: "Explain quantum computing in simple terms" },
-  { title: "Plan my studies", prompt: "Create a one-week study plan for learning React" },
-  { title: "Summarize a topic", prompt: "Summarize the main causes of World War I" },
-  { title: "Practice questions", prompt: "Give me 5 practice questions on basic calculus" },
-] as const;
-
-const MAX_TEXTAREA_HEIGHT_PX = 160; // ~6 rows
-const AUTOSCROLL_THRESHOLD_PX = 80;
 
 const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
   const [copied, setCopied] = useState(false);

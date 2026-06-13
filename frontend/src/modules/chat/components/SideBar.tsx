@@ -13,21 +13,13 @@ import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
+import { GROUPS } from "@/modules/chat/constants";
+import type { Group } from "@/modules/chat/types";
+import { groupOf } from "@/modules/chat/utils";
 
 const name = import.meta.env.VITE_PROFESSOR_NAME;
 
-const GROUPS = ["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"] as const;
-type Group = (typeof GROUPS)[number];
 
-const groupOf = (dateStr: string): Group => {
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(new Date(dateStr))) / 86_400_000);
-  if (diffDays <= 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays <= 7) return "Previous 7 Days";
-  if (diffDays <= 30) return "Previous 30 Days";
-  return "Older";
-};
 
 
 
