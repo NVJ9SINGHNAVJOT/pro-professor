@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  PanelLeftCloseIcon,
-  SearchIcon,
-  SquarePenIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -84,24 +79,12 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
       >
         <div
           className={cn(
-            "flex h-full w-67.5 flex-col transition-opacity duration-300",
+            "flex h-full w-67.5 flex-col gap-y-2 pt-2 transition-opacity duration-300",
             isOpen ? "opacity-100" : "opacity-0"
           )}
         >
-          {/* Header: collapse */}
-          <div className="flex items-center justify-end px-3 pt-3">
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-label="Close sidebar"
-              className="cursor-pointer rounded-lg p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white"
-            >
-              <PanelLeftCloseIcon className="size-5" />
-            </button>
-          </div>
-
           {/* New chat */}
-          <div className="mt-3 px-2">
+          <div className="px-2">
             <button
               type="button"
               onClick={() => navigate(ROUTES.CHAT)}
@@ -113,7 +96,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           </div>
 
           {/* Search */}
-          <div className="mt-1 px-2">
+          <div className="px-2">
             <div className="flex items-center gap-x-2 rounded-lg px-2 py-1.5 focus-within:bg-neutral-800/60 hover:bg-neutral-800/60">
               <SearchIcon className="size-4.5 shrink-0 text-neutral-400" />
               <input
@@ -126,7 +109,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           </div>
 
           {/* Chat history, grouped by recency */}
-          <div className="chat-scroll mt-4 flex-1 overflow-y-auto px-2 pb-2">
+          <div className="chat-scroll flex-1 overflow-y-auto px-2 pb-2">
             {grouped.length === 0 && (
               <div className="px-2 caption-regular text-neutral-500">{query ? "No chats found" : "No chats yet"}</div>
             )}
@@ -158,8 +141,6 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
               </div>
             ))}
           </div>
-
-
         </div>
       </aside>
     </>

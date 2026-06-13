@@ -6,6 +6,7 @@ import {
   BotIcon,
   CheckIcon,
   CopyIcon,
+  PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
   SquareIcon,
@@ -226,17 +227,15 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
       {/* Header bar */}
-      <header className="flex items-center gap-x-2 px-4 py-2.5">
-        {!sidebarOpen && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            aria-label="Open sidebar"
-            className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-          >
-            <PanelLeftOpenIcon className="size-5" />
-          </button>
-        )}
+      <header className="flex items-center justify-between px-4 py-2.5 min-h-[52px]">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
+          className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+        >
+          {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
+        </button>
         <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
       </header>
 
