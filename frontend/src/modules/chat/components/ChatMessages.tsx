@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowUpIcon,
-  BotIcon,
   CheckIcon,
   CopyIcon,
   PanelLeftCloseIcon,
@@ -35,11 +34,8 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
   };
 
   return (
-    <div className="group flex gap-x-3">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full border border-neutral-700">
-        <BotIcon className="size-4 text-neutral-300" />
-      </div>
-      <div className="min-w-0 flex-1">
+    <div className="group flex">
+      <div className="flex-1 min-w-0">
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           {isStreaming && <span className="ct-cursor-blink">▋</span>}
@@ -225,9 +221,16 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const showEmptyState = !chatId && messages.length === 0;
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
-      {/* Header bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 min-h-[52px]">
+    <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
+      {/* Background glow (only for empty state, covers full section) */}
+      {showEmptyState && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
+        </div>
+      )}
+
+      {/* Floating toggle button */}
+      <div className="absolute left-4 top-2.5 z-20">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -236,15 +239,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         >
           {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
-        <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-      </header>
+      </div>
 
       {/* Empty state or message list */}
       {showEmptyState ? (
-        <div className="relative flex flex-1 flex-col items-center justify-center px-4">
-          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
-          </div>
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4">
           <h1 className="relative heading-small-medium text-center">What can I help with?</h1>
           <div className="relative mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
             {SUGGESTIONS.map((suggestion) => (
@@ -261,8 +260,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto flex max-w-3xl flex-col gap-y-6">
+        <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll relative z-10 flex-1 overflow-y-auto px-4 py-6">
+          <div className="mx-auto flex max-w-5xl flex-col gap-y-6">
             {messages.map((message, index) =>
               message.role === "user" ? (
                 <div key={index} className="flex justify-end">
@@ -283,8 +282,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       )}
 
       {/* Input area */}
-      <div className="px-4 pb-3 pt-2">
-        <div className="mx-auto max-w-3xl">
+      <div className="relative z-10 px-4 pb-3 pt-2">
+        <div className="mx-auto max-w-5xl">
           <div className="flex items-end gap-x-1.5 rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
             <button
               type="button"
@@ -301,8 +300,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
               onKeyDown={handleKeyDown}
               rows={1}
               placeholder="Message..."
-              className={cn("flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium", "placeholder:text-neutral-500")}
+              className={cn(
+                "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
+                "placeholder:text-neutral-500"
+              )}
             />
+            <div className="mb-0.5 shrink-0">
+              <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
+            </div>
             {streaming ? (
               <button
                 type="button"

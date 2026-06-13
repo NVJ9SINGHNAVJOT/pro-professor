@@ -44,7 +44,7 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       >
         <SelectValue placeholder="Select a model" />
       </SelectTrigger>
-      <SelectContent align="end" className="bg-neutral-900 text-white border-neutral-700">
+      <SelectContent side="top" align="end" className="bg-neutral-900 text-white border-neutral-700">
         {models.map((m) => (
           <SelectItem key={encode(m.provider, m.name)} value={encode(m.provider, m.name)}>
             {`${m.name} (${m.provider})`}
