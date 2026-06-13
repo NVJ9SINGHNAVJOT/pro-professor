@@ -2,11 +2,11 @@ package com.proprofessor.server.chat;
 
 import com.proprofessor.server.chat.ChatService.ChatStreamListener;
 import com.proprofessor.server.chat.dto.ChatSendRequest;
+import com.proprofessor.server.chat.dto.ChatStreamEvent;
 import com.proprofessor.server.chat.dto.ConversationDetail;
 import com.proprofessor.server.chat.dto.ConversationListResponse;
 import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.common.exception.AppException;
-import com.proprofessor.server.websocket.events.OutgoingEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -44,10 +44,9 @@ public class ChatController {
     }
 
     /**
-     * Streams the assistant reply as SSE. Each {@code data:} frame carries the same
-     * JSON event envelope the WebSocket used ({@code chat.start} / {@code chat.chunk} /
-     * {@code chat.done} / {@code chat.error}, discriminated by {@code type}), so the
-     * frontend dispatch stays unchanged.
+     * Streams the assistant reply as SSE. Each {@code data:} frame carries a
+     * JSON event envelope ({@code chat.start} / {@code chat.chunk} /
+     * {@code chat.done} / {@code chat.error}, discriminated by {@code type}).
      */
     @PostMapping(value = "/send", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter send(@RequestBody ChatSendRequest request) {
@@ -65,7 +64,7 @@ public class ChatController {
                 log.error("Chat streaming failed: {}", ex.getMessage());
                 String message = ex instanceof AppException ? ex.getMessage() : "Failed to generate reply";
                 try {
-                    emitEvent(emitter, OutgoingEvent.ChatError.of(message));
+                    emitEvent(emitter, ChatStreamEvent.ChatError.of(message));
                 } catch (ClientDisconnectedException ignored) {
                     // nothing to tell a client that's gone
                 }
@@ -91,7 +90,7 @@ public class ChatController {
         return ApiResponse.ok("Conversation deleted.", null);
     }
 
-    private static void emitEvent(SseEmitter emitter, OutgoingEvent event) {
+    private static void emitEvent(SseEmitter emitter, ChatStreamEvent event) {
         try {
             emitter.send(SseEmitter.event().data(event, MediaType.APPLICATION_JSON));
         } catch (IOException | IllegalStateException ex) {
@@ -121,17 +120,17 @@ public class ChatController {
         @Override
         public void onStart(long conversationId, String title) {
             this.conversationId = conversationId;
-            emitEvent(emitter, OutgoingEvent.ChatStart.of(conversationId, title));
+            emitEvent(emitter, ChatStreamEvent.ChatStart.of(conversationId, title));
         }
 
         @Override
         public void onToken(String delta) {
-            emitEvent(emitter, OutgoingEvent.ChatChunk.of(conversationId, delta));
+            emitEvent(emitter, ChatStreamEvent.ChatChunk.of(conversationId, delta));
         }
 
         @Override
         public void onComplete(long messageId) {
-            emitEvent(emitter, OutgoingEvent.ChatDone.of(conversationId, messageId));
+            emitEvent(emitter, ChatStreamEvent.ChatDone.of(conversationId, messageId));
         }
     }
 

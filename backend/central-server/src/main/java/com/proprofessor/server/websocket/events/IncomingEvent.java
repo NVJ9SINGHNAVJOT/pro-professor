@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = IncomingEvent.PingEvent.class, name = ChatEvents.PING)
+        @JsonSubTypes.Type(value = IncomingEvent.PingEvent.class, name = WsEvents.PING)
 })
 public sealed interface IncomingEvent permits IncomingEvent.PingEvent {
 

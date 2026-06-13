@@ -1,49 +1,22 @@
-import { clientE } from "@/socket/events";
-import type { ModelProvider } from "@/services/operations/models.route";
+import { wsEvents } from "@/socket/events";
 
-/* INFO: These payloads must match the backend WS event records. */
+/* INFO: These payloads must match the backend WS event records
+ *       (OutgoingEvent.NotificationInfo). */
 
-// ===== client -> server =====
-export interface ChatSendPayload {
-  conversationId: number | null;
-  provider?: ModelProvider;
-  model?: string;
-  content: string;
-}
+// ===== server → client payloads =====
 
-// ===== server -> client payloads =====
-export interface ChatStartPayload {
-  conversationId: number;
-  title: string;
-}
-
-export interface ChatChunkPayload {
-  conversationId: number;
-  delta: string;
-}
-
-export interface ChatDonePayload {
-  conversationId: number;
-  messageId: number;
-}
-
-export interface ChatErrorPayload {
-  message: string;
+/** Type-safe notification payload matching backend NotificationInfo record. */
+export interface NotificationInfoPayload {
+  name: string;
+  description: string;
 }
 
 // Map each server event type to its payload, so subscribe() can infer the payload type.
 export interface ServerEventMap {
-  [clientE.CHAT_START]: ChatStartPayload;
-  [clientE.CHAT_CHUNK]: ChatChunkPayload;
-  [clientE.CHAT_DONE]: ChatDonePayload;
-  [clientE.CHAT_ERROR]: ChatErrorPayload;
+  [wsEvents.NOTIFICATION_INFO]: NotificationInfoPayload;
 }
 
 export type ServerEventType = keyof ServerEventMap;
 
 // Discriminated union of everything the server can send (each frame has a `type`).
-export type ServerEvent =
-  | ({ type: typeof clientE.CHAT_START } & ChatStartPayload)
-  | ({ type: typeof clientE.CHAT_CHUNK } & ChatChunkPayload)
-  | ({ type: typeof clientE.CHAT_DONE } & ChatDonePayload)
-  | ({ type: typeof clientE.CHAT_ERROR } & ChatErrorPayload);
+export type ServerEvent = { type: typeof wsEvents.NOTIFICATION_INFO } & NotificationInfoPayload;

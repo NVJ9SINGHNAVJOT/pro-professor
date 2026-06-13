@@ -8,9 +8,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { toast } from "sonner";
 import { WS_URL_SERVER } from "@/services/apis";
-import { serverE } from "@/socket/events";
-import type { ChatSendPayload, ServerEvent, ServerEventMap, ServerEventType } from "@/types/socket/chatEvents";
+import { wsEvents } from "@/socket/events";
+import type { ServerEvent, ServerEventMap, ServerEventType } from "@/types/socket/chatEvents";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (payload: any) => void;
@@ -22,7 +23,6 @@ const HEARTBEAT_INTERVAL_MS = 30000;
 interface SocketContextValue {
   connect: () => void;
   disconnect: () => void;
-  sendChat: (payload: ChatSendPayload) => void;
   subscribe: <T extends ServerEventType>(type: T, handler: (payload: ServerEventMap[T]) => void) => () => void;
   /** Read .current for the live WebSocket readyState (WebSocket.CLOSED when no socket). */
   readyStateRef: RefObject<number>;
@@ -41,10 +41,8 @@ export const useSocketContext = (): SocketContextValue => {
 
 export default function SocketProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<WebSocket | null>(null);
-  // type -> set of handlers
+  // type → set of handlers
   const subscribersRef = useRef<Map<string, Set<Handler>>>(new Map());
-  // messages queued while the socket is still connecting
-  const pendingRef = useRef<string[]>([]);
   const readyStateRef = useRef<number>(WebSocket.CLOSED);
   // reconnect machinery
   const reconnectAttemptsRef = useRef(0);
@@ -55,6 +53,12 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
   const connectRef = useRef<() => void>(() => {});
 
   const dispatch = useCallback((event: ServerEvent) => {
+    // Built-in notification handling: show toast for notification.info
+    if (event.type === wsEvents.NOTIFICATION_INFO) {
+      toast.info(event.name, { description: event.description });
+    }
+
+    // Also forward to any custom subscribers
     const handlers = subscribersRef.current.get(event.type);
     handlers?.forEach((handler) => handler(event));
   }, []);
@@ -84,9 +88,7 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
     ws.onopen = () => {
       readyStateRef.current = ws.readyState;
       reconnectAttemptsRef.current = 0;
-      pendingRef.current.forEach((msg) => ws.send(msg));
-      pendingRef.current = [];
-      // keep the connection alive through proxies / load balancers (backend ignores unknown event types)
+      // keep the connection alive through proxies / load balancers
       stopHeartbeat();
       heartbeatTimerRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
@@ -107,7 +109,7 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
       readyStateRef.current = WebSocket.CLOSED;
       stopHeartbeat();
       if (intentionalCloseRef.current) return;
-      // exponential backoff: 1s -> 2s -> 4s -> ... capped at 30s
+      // exponential backoff: 1s → 2s → 4s → ... capped at 30s
       const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** reconnectAttemptsRef.current, RECONNECT_MAX_DELAY_MS);
       reconnectAttemptsRef.current += 1;
       console.info(`[socket] connection lost — reconnecting in ${delay / 1000}s`);
@@ -135,21 +137,6 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
     return () => disconnect();
   }, [connect, disconnect]);
 
-  const sendChat = useCallback(
-    (payload: ChatSendPayload) => {
-      const message = JSON.stringify({ type: serverE.CHAT_SEND, ...payload });
-      const ws = socketRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(message);
-      } else {
-        // not open yet — queue it and make sure we're connecting
-        pendingRef.current.push(message);
-        connect();
-      }
-    },
-    [connect]
-  );
-
   const subscribe = useCallback(
     <T extends ServerEventType>(type: T, handler: (payload: ServerEventMap[T]) => void): (() => void) => {
       const handlers = subscribersRef.current.get(type) ?? new Set<Handler>();
@@ -162,10 +149,10 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Stable value: streamed tokens never touch React state here, so consumers don't re-render.
+  // Stable value: no React state here, so consumers don't re-render.
   const value = useMemo<SocketContextValue>(
-    () => ({ connect, disconnect, sendChat, subscribe, readyStateRef }),
-    [connect, disconnect, sendChat, subscribe]
+    () => ({ connect, disconnect, subscribe, readyStateRef }),
+    [connect, disconnect, subscribe]
   );
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

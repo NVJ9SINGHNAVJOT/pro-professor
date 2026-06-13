@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useSocketContext } from "@/context/SocketProvider";
-import { clientE } from "@/socket/events";
+import { streamChat } from "@/services/chatStream";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { useAppDispatch } from "@/redux/store";
@@ -82,7 +81,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const chatId = useParams().chatId;
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { sendChat, subscribe } = useSocketContext();
   const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -90,68 +88,19 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [streaming, setStreaming] = useState(false);
   const [selected, setSelected] = useState<SelectedModel | null>(null);
 
-  // refs so the once-registered socket handlers see current values
+  // refs
   const convIdRef = useRef<number | null>(null);
   const loadedRef = useRef<number | null>(null);
   const isNewChatRef = useRef<boolean>(true);
   const selectedRef = useRef<SelectedModel | null>(null);
-  // user pressed Stop — ignore further chunks of the current stream
-  const stoppedRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // follow the stream only while the user is at the bottom
   const autoScrollRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
-
-  // register streaming handlers once
-  useEffect(() => {
-    const unStart = subscribe(clientE.CHAT_START, ({ conversationId, title }) => {
-      convIdRef.current = conversationId;
-      loadedRef.current = conversationId;
-      if (isNewChatRef.current) {
-        isNewChatRef.current = false;
-        dispatch(
-          addConversation({
-            id: conversationId,
-            title,
-            model: selectedRef.current?.model ?? "",
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        navigate(ROUTES.CHAT_DETAIL(conversationId), { replace: true });
-      }
-    });
-
-    const unChunk = subscribe(clientE.CHAT_CHUNK, ({ delta }) => {
-      if (stoppedRef.current) return;
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last && last.role === "assistant") {
-          next[next.length - 1] = { ...last, content: last.content + delta };
-        }
-        return next;
-      });
-    });
-
-    const unDone = subscribe(clientE.CHAT_DONE, () => setStreaming(false));
-
-    const unError = subscribe(clientE.CHAT_ERROR, ({ message }) => {
-      setStreaming(false);
-      toast.error(message);
-    });
-
-    return () => {
-      unStart();
-      unChunk();
-      unDone();
-      unError();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // load (or reset) conversation when the route param changes
   useEffect(() => {
@@ -220,22 +169,62 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       return;
     }
 
-    stoppedRef.current = false;
     autoScrollRef.current = true;
     setMessages((prev) => [...prev, { role: "user", content }, { role: "assistant", content: "" }]);
     setInput("");
     setStreaming(true);
-    sendChat({
-      conversationId: convIdRef.current,
-      provider: selected.provider,
-      model: selected.model,
-      content,
-    });
+
+    const controller = streamChat(
+      {
+        conversationId: convIdRef.current,
+        provider: selected.provider,
+        model: selected.model,
+        content,
+      },
+      {
+        onStart: ({ conversationId, title }) => {
+          convIdRef.current = conversationId;
+          loadedRef.current = conversationId;
+          if (isNewChatRef.current) {
+            isNewChatRef.current = false;
+            dispatch(
+              addConversation({
+                id: conversationId,
+                title,
+                model: selectedRef.current?.model ?? "",
+                updatedAt: new Date().toISOString(),
+              })
+            );
+            navigate(ROUTES.CHAT_DETAIL(conversationId), { replace: true });
+          }
+        },
+        onChunk: ({ delta }) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = { ...last, content: last.content + delta };
+            }
+            return next;
+          });
+        },
+        onDone: () => {
+          setStreaming(false);
+        },
+        onError: (message) => {
+          setStreaming(false);
+          toast.error(message);
+        },
+      }
+    );
+
+    abortRef.current = controller;
   };
 
-  // client-side stop: the backend keeps streaming, we just stop rendering chunks
+  // Real stop: aborts the fetch, backend catches disconnect and stops generation
   const handleStop = () => {
-    stoppedRef.current = true;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setStreaming(false);
   };
 
