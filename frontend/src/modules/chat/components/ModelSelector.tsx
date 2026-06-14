@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
+import Tooltip from "@/components/common/Tooltip";
 import { FileText, ImageIcon, Mic, Video } from "lucide-react";
 import {
   Select,
@@ -9,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApi } from "@/hooks/useApi";
-import { modelsRoute, type ModelProvider, type ProviderModel } from "@/services/operations/models.route";
+import { useAppSelector } from "@/redux/store";
+import { type ModelProvider, type ProviderModel } from "@/services/operations/models.route";
 import type { SelectedModel } from "@/modules/chat/types";
 
 interface ModelSelectorProps {
@@ -37,18 +38,7 @@ const PROVIDER_META: Record<ModelProvider, { label: string; className: string }>
 const PROVIDER_ORDER: ModelProvider[] = ["ai-service", "ollama"];
 
 const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
-  const [models, setModels] = useState<ProviderModel[]>([]);
-  const { execute: fetchModels } = useApi(modelsRoute.getAllModels);
-
-  useEffect(() => {
-    (async () => {
-      const res = await fetchModels();
-      if (!res.error) {
-        setModels(res.response.data.models);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
 
@@ -61,7 +51,6 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     onChange({ provider, model, inputModalities });
   };
 
-  // Group models by provider, ordered (known providers first, then any others).
   const groups = useMemo(() => {
     const byProvider = new Map<ModelProvider, ProviderModel[]>();
     for (const m of models) {
@@ -109,6 +98,58 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       </SelectItem>
     );
   };
+
+  // Viewing history: show static disabled display
+  if (disabled && value) {
+    const providerMeta = PROVIDER_META[value.provider];
+    const matchedModel = loaded ? models.find((m) => m.provider === value.provider && m.name === value.model) : null;
+    const isAvailable = Boolean(matchedModel);
+    const modalities = matchedModel?.inputModalities ?? [];
+
+    const display = (
+      <div className="flex items-center gap-1.5 rounded-md px-2 py-1 para-small-medium cursor-not-allowed select-none text-neutral-400">
+        {providerMeta && (
+          <span
+            className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${
+              isAvailable ? providerMeta.className : "bg-neutral-800 text-neutral-400"
+            }`}
+          >
+            {providerMeta.label}
+          </span>
+        )}
+        <span className={isAvailable ? "text-neutral-300" : "text-neutral-400"}>{value.model}</span>
+        {isAvailable && modalities.map((mod) => {
+          const meta = MODALITY_META[mod];
+          if (!meta) return null;
+          const Icon = meta.icon;
+          return (
+            <span
+              key={mod}
+              title={meta.label}
+              className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${meta.className}`}
+            >
+              <Icon size={10} />
+              {meta.label}
+            </span>
+          );
+        })}
+      </div>
+    );
+
+    if (!isAvailable) {
+      return <Tooltip content="Model not available" side="top">{display}</Tooltip>;
+    }
+    return display;
+  }
+
+  // New chat: no models loaded yet or none available
+  if (!disabled && loaded && models.length === 0) {
+    return (
+      <div className="flex items-center rounded-md px-2 py-1 para-small-medium text-neutral-500 cursor-not-allowed select-none">
+        No models available
+      </div>
+    );
+  }
 
   return (
     <Select value={current} onValueChange={handleChange} disabled={disabled}>

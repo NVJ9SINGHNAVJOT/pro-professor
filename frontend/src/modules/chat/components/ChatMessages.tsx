@@ -17,7 +17,7 @@ import { streamChat } from "@/services/chatStream";
 import { synthesizeSpeech, transcribeAudio } from "@/services/audio";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
-import { useAppDispatch } from "@/redux/store";
+import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
@@ -68,11 +68,17 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
+  const { models, loaded: modelsLoaded } = useAppSelector((state) => state.models);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [selected, setSelected] = useState<SelectedModel | null>(null);
+
+  const inputDisabled = modelsLoaded && (
+    models.length === 0 ||
+    (Boolean(chatId) && selected !== null && !models.some((m) => m.provider === selected.provider && m.name === selected.model))
+  );
 
   // voice chat state
   const [voiceMode, setVoiceMode] = useState<VoiceMode | "idle">("idle");
@@ -99,6 +105,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
 
     if (!chatId) {
       setMessages([]);
+      setSelected(null);
       convIdRef.current = null;
       loadedRef.current = null;
       isNewChatRef.current = true;
@@ -392,10 +399,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={1}
-                placeholder="Message..."
+                disabled={inputDisabled}
+                placeholder={inputDisabled ? "Model not available" : "Message..."}
                 className={cn(
                   "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
-                  "placeholder:text-neutral-500"
+                  inputDisabled ? "cursor-not-allowed placeholder:text-neutral-600" : "placeholder:text-neutral-500"
                 )}
               />
               <div className="mb-0.5 shrink-0">
@@ -423,8 +431,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 <button
                   type="button"
                   onClick={enterVoiceMode}
+                  disabled={inputDisabled}
                   aria-label="Start voice chat"
-                  className="cursor-pointer rounded-full p-2.5 text-neutral-300 transition-all hover:bg-neutral-700 hover:text-white"
+                  className={cn(
+                    "rounded-full p-2.5 transition-all",
+                    inputDisabled
+                      ? "cursor-not-allowed text-neutral-600"
+                      : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                  )}
                 >
                   <MicIcon className="size-4.5" />
                 </button>
