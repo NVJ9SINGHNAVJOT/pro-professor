@@ -23,6 +23,12 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
+  # ── Multipart (voice clips uploaded to /api/v1/audio/transcriptions) ─────────
+  servlet:
+    multipart:
+      max-file-size: ${MAX_AUDIO_UPLOAD_SIZE:25MB}
+      max-request-size: ${MAX_AUDIO_UPLOAD_SIZE:25MB}
+
 # ── Server ─────────────────────────────────────────────────────────────────
 server:
   port: ${PORT:4000}

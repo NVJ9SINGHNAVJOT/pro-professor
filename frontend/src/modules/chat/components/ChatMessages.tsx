@@ -5,6 +5,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  MicIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
@@ -13,11 +14,13 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { streamChat } from "@/services/chatStream";
+import { synthesizeSpeech, transcribeAudio } from "@/services/audio";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { useAppDispatch } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
+import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
 import type { ModelProvider } from "@/services/operations/models.route";
@@ -34,7 +37,7 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
   };
 
   return (
-    <div className="group flex">
+    <div className="flex">
       <div className="flex-1 min-w-0">
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
@@ -45,7 +48,7 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
             type="button"
             onClick={handleCopy}
             aria-label="Copy message"
-            className="mt-1 cursor-pointer rounded-md p-1.5 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-800 hover:text-white group-hover:opacity-100"
+            className="mt-4 cursor-pointer rounded-md text-neutral-400 transition-opacity hover:bg-neutral-800 hover:text-white"
           >
             {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
           </button>
@@ -71,6 +74,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [streaming, setStreaming] = useState(false);
   const [selected, setSelected] = useState<SelectedModel | null>(null);
 
+  // voice chat state
+  const [voiceMode, setVoiceMode] = useState<VoiceMode | "idle">("idle");
+  const [playbackAudio, setPlaybackAudio] = useState<HTMLAudioElement | null>(null);
+
   // refs
   const convIdRef = useRef<number | null>(null);
   const loadedRef = useRef<number | null>(null);
@@ -80,6 +87,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -137,6 +145,13 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
   }, [input]);
 
+  // stop any in-flight playback when the component unmounts
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+    };
+  }, []);
+
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -144,7 +159,32 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     autoScrollRef.current = distanceFromBottom < AUTOSCROLL_THRESHOLD_PX;
   };
 
-  const handleSend = (text?: string) => {
+  // Synthesize the assistant reply and play it back (used in voice mode).
+  const playReply = async (text: string) => {
+    try {
+      const blob = await synthesizeSpeech(text);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
+        setPlaybackAudio(null);
+        setVoiceMode("idle");
+      };
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      setPlaybackAudio(audio);
+      setVoiceMode("speaking");
+      await audio.play();
+    } catch {
+      setPlaybackAudio(null);
+      setVoiceMode("idle");
+      toast.error("Couldn't play the spoken reply");
+    }
+  };
+
+  const handleSend = (text?: string, opts?: { speak?: boolean }) => {
     const content = (text ?? input).trim();
     if (!content || streaming) return;
     if (!selected) {
@@ -157,6 +197,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setInput("");
     setStreaming(true);
 
+    let fullReply = "";
     const controller = streamChat(
       {
         conversationId: convIdRef.current,
@@ -182,6 +223,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           }
         },
         onChunk: ({ delta }) => {
+          fullReply += delta;
           setMessages((prev) => {
             const next = [...prev];
             const last = next[next.length - 1];
@@ -193,9 +235,12 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         },
         onDone: () => {
           setStreaming(false);
+          if (opts?.speak && fullReply.trim()) void playReply(fullReply);
+          else if (opts?.speak) setVoiceMode("idle");
         },
         onError: (message) => {
           setStreaming(false);
+          if (opts?.speak) setVoiceMode("idle");
           toast.error(message);
         },
       }
@@ -209,6 +254,53 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);
+  };
+
+  const handleStopPlayback = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audioRef.current = null;
+    }
+    setPlaybackAudio(null);
+    setVoiceMode("idle");
+  };
+
+  // Voice utterance: transcribe → send as a normal chat message → speak the reply
+  const handleUtterance = async (blob: Blob) => {
+    if (!selected) {
+      toast.error("Select a model first");
+      setVoiceMode("idle");
+      return;
+    }
+    try {
+      setVoiceMode("thinking");
+      const text = await transcribeAudio(blob);
+      if (!text.trim()) {
+        toast.error("Didn't catch that — please try again");
+        setVoiceMode("idle");
+        return;
+      }
+      handleSend(text, { speak: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Transcription failed");
+      setVoiceMode("idle");
+    }
+  };
+
+  const enterVoiceMode = () => {
+    if (!selected) {
+      toast.error("Select a model first");
+      return;
+    }
+    setVoiceMode("recording");
+  };
+
+  // Cancel/exit voice mode entirely (aborts streaming + playback).
+  const exitVoiceMode = () => {
+    handleStop();
+    handleStopPlayback();
+    setVoiceMode("idle");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -284,51 +376,69 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       {/* Input area */}
       <div className="relative z-10 px-4 pb-3 pt-2">
         <div className="mx-auto max-w-5xl">
-          <div className="flex items-end gap-x-1.5 rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
-            <button
-              type="button"
-              disabled
-              aria-label="Attach file (coming soon)"
-              className="cursor-not-allowed rounded-full p-2.5 text-neutral-500 opacity-50"
-            >
-              <PaperclipIcon className="size-4.5" />
-            </button>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              placeholder="Message..."
-              className={cn(
-                "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
-                "placeholder:text-neutral-500"
+          {voiceMode === "idle" ? (
+            <div className="flex items-end gap-x-1.5 rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
+              <button
+                type="button"
+                disabled
+                aria-label="Attach file (coming soon)"
+                className="cursor-not-allowed rounded-full p-2.5 text-neutral-500 opacity-50"
+              >
+                <PaperclipIcon className="size-4.5" />
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                placeholder="Message..."
+                className={cn(
+                  "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
+                  "placeholder:text-neutral-500"
+                )}
+              />
+              <div className="mb-0.5 shrink-0">
+                <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
+              </div>
+              {streaming ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  aria-label="Stop generating"
+                  className="cursor-pointer rounded-full bg-white p-2.5 text-black transition-transform hover:scale-105"
+                >
+                  <SquareIcon className="size-4 fill-current" />
+                </button>
+              ) : input.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => handleSend()}
+                  aria-label="Send message"
+                  className="cursor-pointer rounded-full bg-linear-to-br from-white to-neutral-400 p-2.5 text-black transition-all hover:scale-105"
+                >
+                  <ArrowUpIcon className="size-4.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={enterVoiceMode}
+                  aria-label="Start voice chat"
+                  className="cursor-pointer rounded-full p-2.5 text-neutral-300 transition-all hover:bg-neutral-700 hover:text-white"
+                >
+                  <MicIcon className="size-4.5" />
+                </button>
               )}
-            />
-            <div className="mb-0.5 shrink-0">
-              <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
             </div>
-            {streaming ? (
-              <button
-                type="button"
-                onClick={handleStop}
-                aria-label="Stop generating"
-                className="cursor-pointer rounded-full bg-white p-2.5 text-black transition-transform hover:scale-105"
-              >
-                <SquareIcon className="size-4 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleSend()}
-                disabled={!input.trim()}
-                aria-label="Send message"
-                className="cursor-pointer rounded-full bg-linear-to-br from-white to-neutral-400 p-2.5 text-black transition-all not-disabled:hover:scale-105 disabled:cursor-default disabled:opacity-40"
-              >
-                <ArrowUpIcon className="size-4.5" />
-              </button>
-            )}
-          </div>
+          ) : (
+            <VoiceBar
+              mode={voiceMode}
+              playbackAudio={playbackAudio}
+              onRecorded={handleUtterance}
+              onStopSpeaking={handleStopPlayback}
+              onCancel={exitVoiceMode}
+            />
+          )}
         </div>
       </div>
     </section>

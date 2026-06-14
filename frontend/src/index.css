@@ -114,6 +114,11 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: ct-glow 3s ease-in-out infinite;
 }
 
+/* Continuous falling musical notes in the nav rail (duration/delay set inline) */
+@utility animate-music-drop {
+  animation: ct-music-drop linear infinite;
+}
+
 @layer components {
   @keyframes ct-blink {
     0%,
@@ -133,6 +138,72 @@ input[type="number"]::-webkit-outer-spin-button {
     50% {
       transform: translateY(-3px) rotate(3deg);
     }
+  }
+
+  @keyframes ct-music-drop {
+    0% {
+      transform: translateY(-30px) rotate(0deg);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.9;
+    }
+    85% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translateY(110vh) rotate(20deg);
+      opacity: 0;
+    }
+  }
+
+  /* Falling musical notes in the nav rail — per-note position/timing via nth-child */
+  .ct-note {
+    position: absolute;
+    top: 0;
+    animation: ct-music-drop linear infinite;
+  }
+  .ct-note:nth-child(1) {
+    left: 22%;
+    font-size: 0.95rem;
+    animation-duration: 10s;
+    animation-delay: 0s;
+  }
+  .ct-note:nth-child(2) {
+    left: 55%;
+    font-size: 1.15rem;
+    animation-duration: 13s;
+    animation-delay: -4s;
+  }
+  .ct-note:nth-child(3) {
+    left: 32%;
+    font-size: 1.05rem;
+    animation-duration: 11s;
+    animation-delay: -8s;
+  }
+  .ct-note:nth-child(4) {
+    left: 62%;
+    font-size: 0.85rem;
+    animation-duration: 14s;
+    animation-delay: -2s;
+  }
+  .ct-note:nth-child(5) {
+    left: 18%;
+    font-size: 0.8rem;
+    animation-duration: 12s;
+    animation-delay: -7s;
+  }
+  .ct-note:nth-child(6) {
+    left: 48%;
+    font-size: 0.9rem;
+    animation-duration: 11.5s;
+    animation-delay: -10s;
+  }
+  .ct-note:nth-child(7) {
+    left: 40%;
+    font-size: 0.85rem;
+    animation-duration: 12.5s;
+    animation-delay: -5s;
   }
 
   @keyframes ct-glow {

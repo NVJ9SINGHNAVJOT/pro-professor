@@ -2,3 +2,7 @@
 	path = backend/ai-service
 	url = https://github.com/NVJ9SINGHNAVJOT/ai-service.git
 	ignore = all
+[submodule "backend/storage-service"]
+	path = backend/storage-service
+	url = https://github.com/NVJ9SINGHNAVJOT/storage-service.git
+	ignore = all
