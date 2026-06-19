@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
+
 import java.io.IOException;
 
 /**
@@ -56,7 +58,8 @@ public class ChatController {
         chatStreamExecutor.execute(() -> {
             try {
                 ChatSendCommand command = new ChatSendCommand(
-                        request.conversationId(), request.provider(), request.model(), request.content());
+                        request.conversationId(), request.provider(), request.model(), request.content(),
+                        request.attachmentIds() == null ? List.of() : request.attachmentIds());
                 chatService.streamReply(command, new SseStreamListener(emitter));
             } catch (ClientDisconnectedException ex) {
                 log.info("Client disconnected mid-stream; generation aborted");

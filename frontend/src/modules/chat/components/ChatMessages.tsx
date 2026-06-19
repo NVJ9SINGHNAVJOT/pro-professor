@@ -5,16 +5,19 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  FileIcon,
   MicIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { streamChat } from "@/services/chatStream";
 import { synthesizeSpeech, transcribeAudio } from "@/services/audio";
+import { mediaFileUrl, uploadMedia, type MediaAttachment } from "@/services/media";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -58,6 +61,37 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
   );
 };
 
+/** Renders a message's attachments — images inline, other files as a download chip. */
+const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] }) => {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="mb-1.5 flex flex-wrap justify-end gap-2">
+      {attachments.map((a) =>
+        a.mimeType.startsWith("image/") ? (
+          <a key={a.id} href={mediaFileUrl(a.id)} target="_blank" rel="noreferrer">
+            <img
+              src={mediaFileUrl(a.id)}
+              alt={a.originalFilename}
+              className="max-h-48 max-w-64 rounded-2xl object-cover"
+            />
+          </a>
+        ) : (
+          <a
+            key={a.id}
+            href={mediaFileUrl(a.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-2xl bg-neutral-700 px-3 py-2 para-small-medium text-neutral-100 hover:bg-neutral-600"
+          >
+            <FileIcon className="size-4 shrink-0" />
+            <span className="max-w-48 truncate">{a.originalFilename}</span>
+          </a>
+        )
+      )}
+    </div>
+  );
+};
+
 interface ChatMessagesProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
@@ -74,6 +108,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [selected, setSelected] = useState<SelectedModel | null>(null);
+
+  // pending attachments uploaded for the next message
+  const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const inputDisabled = modelsLoaded && (
     models.length === 0 ||
@@ -106,6 +145,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     if (!chatId) {
       setMessages([]);
       setSelected(null);
+      setAttachments([]);
       convIdRef.current = null;
       loadedRef.current = null;
       isNewChatRef.current = true;
@@ -129,6 +169,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         detail.messages.map((m) => ({
           role: m.role === "assistant" ? "assistant" : "user",
           content: m.content,
+          attachments: m.attachments,
         }))
       );
       setSelected({ provider: detail.provider as ModelProvider, model: detail.model, inputModalities: ["text"] });
@@ -191,17 +232,43 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
   };
 
+  const handleAttachClick = () => fileInputRef.current?.click();
+
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // allow re-selecting the same file
+    if (files.length === 0) return;
+
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(files.map((file) => uploadMedia(file)));
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAttachment = (id: number) => setAttachments((prev) => prev.filter((a) => a.id !== id));
+
   const handleSend = (text?: string, opts?: { speak?: boolean }) => {
     const content = (text ?? input).trim();
-    if (!content || streaming) return;
+    const pending = attachments;
+    if ((!content && pending.length === 0) || streaming) return;
     if (!selected) {
       toast.error("Select a model first");
       return;
     }
 
     autoScrollRef.current = true;
-    setMessages((prev) => [...prev, { role: "user", content }, { role: "assistant", content: "" }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content, attachments: pending },
+      { role: "assistant", content: "" },
+    ]);
     setInput("");
+    setAttachments([]);
     setStreaming(true);
 
     let fullReply = "";
@@ -211,6 +278,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         provider: selected.provider,
         model: selected.model,
         content,
+        attachmentIds: pending.map((a) => a.id),
       },
       {
         onStart: ({ conversationId, title }) => {
@@ -363,10 +431,13 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           <div className="mx-auto flex max-w-5xl flex-col gap-y-6">
             {messages.map((message, index) =>
               message.role === "user" ? (
-                <div key={index} className="flex justify-end">
-                  <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
-                    {message.content}
-                  </div>
+                <div key={index} className="flex flex-col items-end">
+                  {message.attachments && <MessageAttachments attachments={message.attachments} />}
+                  {message.content && (
+                    <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
+                      {message.content}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <AssistantMessage
@@ -384,12 +455,54 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       <div className="relative z-10 px-4 pb-3 pt-2">
         <div className="mx-auto max-w-5xl">
           {voiceMode === "idle" ? (
-            <div className="flex items-end gap-x-1.5 rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
+            <div className="rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
+                  {attachments.map((a) => (
+                    <div
+                      key={a.id}
+                      className="group relative flex items-center gap-2 rounded-xl bg-neutral-700 py-1.5 pl-2 pr-1.5 caption-small-regular text-neutral-200"
+                    >
+                      {a.mimeType.startsWith("image/") ? (
+                        <img src={mediaFileUrl(a.id)} alt={a.originalFilename} className="size-9 rounded-lg object-cover" />
+                      ) : (
+                        <FileIcon className="size-4 shrink-0" />
+                      )}
+                      <span className="max-w-32 truncate">{a.originalFilename}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(a.id)}
+                        aria-label={`Remove ${a.originalFilename}`}
+                        className="cursor-pointer rounded-full p-0.5 text-neutral-400 hover:bg-neutral-600 hover:text-white"
+                      >
+                        <XIcon className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-end gap-x-1.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                aria-label="Upload file"
+                tabIndex={-1}
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
               <button
                 type="button"
-                disabled
-                aria-label="Attach file (coming soon)"
-                className="cursor-not-allowed rounded-full p-2.5 text-neutral-500 opacity-50"
+                onClick={handleAttachClick}
+                disabled={inputDisabled || uploading}
+                aria-label="Attach file"
+                className={cn(
+                  "rounded-full p-2.5 transition-colors",
+                  inputDisabled || uploading
+                    ? "cursor-not-allowed text-neutral-600"
+                    : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                )}
               >
                 <PaperclipIcon className="size-4.5" />
               </button>
@@ -418,7 +531,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 >
                   <SquareIcon className="size-4 fill-current" />
                 </button>
-              ) : input.trim() ? (
+              ) : input.trim() || attachments.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => handleSend()}
@@ -443,6 +556,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                   <MicIcon className="size-4.5" />
                 </button>
               )}
+              </div>
             </div>
           ) : (
             <VoiceBar

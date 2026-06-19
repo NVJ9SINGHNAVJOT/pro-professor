@@ -8,16 +8,19 @@ import com.proprofessor.server.chat.provider.dto.ChatMessage;
 import com.proprofessor.server.chat.repository.ConversationRepository;
 import com.proprofessor.server.chat.repository.MessageRepository;
 import com.proprofessor.server.common.db.ConversationRow;
+import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.db.MessageRow;
 import com.proprofessor.server.common.db.ModelRow;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
+import com.proprofessor.server.media.MediaRepository;
 import com.proprofessor.server.model.ModelService;
 import com.proprofessor.server.model.dto.ModelProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class ChatService {
@@ -29,6 +32,7 @@ public class ChatService {
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
+    private final MediaRepository mediaRepository;
     private final ModelService modelService;
     private final ChatCompletionClient chatCompletionClient;
     private final ChatMapper chatMapper;
@@ -36,12 +40,14 @@ public class ChatService {
     public ChatService(
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
+            MediaRepository mediaRepository,
             ModelService modelService,
             ChatCompletionClient chatCompletionClient,
             ChatMapper chatMapper
     ) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
+        this.mediaRepository = mediaRepository;
         this.modelService = modelService;
         this.chatCompletionClient = chatCompletionClient;
         this.chatMapper = chatMapper;
@@ -55,7 +61,8 @@ public class ChatService {
 
         listener.onStart(conversation.id(), conversation.title());
 
-        messageRepository.insert(conversation.id(), ROLE_USER, command.content());
+        MessageRow userMessage = messageRepository.insert(conversation.id(), ROLE_USER, command.content());
+        linkAttachments(userMessage.id(), command.attachmentIds());
 
         List<ChatMessage> history = buildHistory(conversation.id());
 
@@ -79,7 +86,9 @@ public class ChatService {
         ConversationRow conversation = conversationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + id));
         List<MessageRow> messages = messageRepository.findAllByConversationId(id);
-        return chatMapper.toDetail(conversation, messages);
+        Map<Long, List<MediaRow>> attachments = mediaRepository.findByMessageIds(
+                messages.stream().map(MessageRow::id).toList());
+        return chatMapper.toDetail(conversation, messages, attachments);
     }
 
     public void deleteConversation(Long id) {
@@ -101,6 +110,15 @@ public class ChatService {
         }
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
         return conversationRepository.insert(model.id(), deriveTitle(command.content()), DEFAULT_MODE);
+    }
+
+    /** Links already-uploaded media to the just-inserted user message, ignoring unknown ids. */
+    private void linkAttachments(long messageId, List<Long> attachmentIds) {
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return;
+        }
+        mediaRepository.findByIds(attachmentIds)
+                .forEach(media -> mediaRepository.linkToMessage(messageId, media.id()));
     }
 
     private List<ChatMessage> buildHistory(long conversationId) {

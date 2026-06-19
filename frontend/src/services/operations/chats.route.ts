@@ -1,5 +1,6 @@
 import { createRoute } from "@/services/apiRoute";
 import { BASE_URL_SERVER } from "@/services/apis";
+import type { MediaAttachment } from "@/services/media";
 
 const chatsEndPoints = {
   GET_ALL: `${BASE_URL_SERVER}/chats`,
@@ -20,6 +21,7 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   createdAt: string;
+  attachments: MediaAttachment[];
 }
 
 export interface ConversationDetail {

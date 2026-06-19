@@ -53,3 +53,5 @@ app:
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
     api-key: ${OLLAMA_API_KEY:ollama}
+  storage-service:
+    base-url: ${STORAGE_SERVICE_BASE_URL:http://127.0.0.1:9000}

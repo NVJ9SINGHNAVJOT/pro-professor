@@ -12,15 +12,17 @@ import java.util.List;
  * validated and strongly typed. Inject this record wherever config is needed
  * instead of reading environment variables directly.
  *
- * @param cors      CORS-related settings (allowed frontend origins)
- * @param aiService connection details for the Python AI service
- * @param ollama    connection details for the local Ollama service
+ * @param cors           CORS-related settings (allowed frontend origins)
+ * @param aiService      connection details for the Python AI service
+ * @param ollama         connection details for the local Ollama service
+ * @param storageService connection details for the Go storage service
  */
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
         Cors cors,
         AiService aiService,
-        Ollama ollama
+        Ollama ollama,
+        StorageService storageService
 ) {
 
     /**
@@ -48,6 +50,14 @@ public record AppProperties(
     public record Ollama(
             String baseUrl,
             String apiKey
+    ) {
+    }
+
+    /**
+     * @param baseUrl base URL of the Go storage service (uploads + media downloads)
+     */
+    public record StorageService(
+            String baseUrl
     ) {
     }
 }

@@ -170,7 +170,7 @@
                         <database>
                             <name>org.jooq.meta.postgres.PostgresDatabase</name>
                             <inputSchema>public</inputSchema>
-                            <includes>conversations|messages|models</includes>
+                            <includes>conversations|messages|models|media|message_attachments</includes>
                         </database>
                         <generate>
                             <records>true</records>

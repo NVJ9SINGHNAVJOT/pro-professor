@@ -8,6 +8,7 @@ export interface ChatSendPayload {
   provider?: ModelProvider;
   model?: string;
   content: string;
+  attachmentIds?: number[];
 }
 
 export interface ChatStreamCallbacks {
