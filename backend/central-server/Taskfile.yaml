@@ -18,3 +18,13 @@ tasks:
     desc: Run pending Flyway migrations against the database
     cmds:
       - ./mvnw flyway:migrate -Dflyway.url=jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -Dflyway.user=${POSTGRES_USER} -Dflyway.password=${POSTGRES_PASSWORD}
+
+  build:
+    desc: Compile and package the Java server into a JAR (skips tests)
+    cmds:
+      - ./mvnw package -DskipTests
+
+  start:
+    desc: Run the packaged JAR produced by the build task
+    cmds:
+      - java -jar target/central-server-0.0.1-SNAPSHOT.jar
