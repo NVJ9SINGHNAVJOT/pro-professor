@@ -1,5 +1,6 @@
-import { BASE_URL_SERVER } from "@/services/apis";
-import type { ModelProvider } from "@/services/operations/models.route";
+import { BASE_URL_SERVER } from "@/services/client/config";
+import { rawFetch } from "@/services/client/rawFetch";
+import type { ModelProvider } from "@/services/operations/models/models.route";
 
 /* ── Payload & callback types ─────────────────────────────────────────────── */
 
@@ -63,19 +64,17 @@ export function streamChat(payload: ChatSendPayload, callbacks: ChatStreamCallba
 
   (async () => {
     try {
-      const res = await fetch(`${BASE_URL_SERVER}/chats/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        callbacks.onError(body?.message ?? `Server error (${res.status})`);
-        return;
-      }
+      // rawFetch throws on a non-OK response; the catch below routes it to onError.
+      const res = await rawFetch(
+        `${BASE_URL_SERVER}/chats/send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        },
+        "Server error",
+      );
 
       const reader = res.body?.getReader();
       if (!reader) {

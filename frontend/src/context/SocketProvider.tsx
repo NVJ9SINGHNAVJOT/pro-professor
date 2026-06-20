@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { toast } from "sonner";
-import { WS_URL_SERVER } from "@/services/apis";
+import { WS_URL_SERVER } from "@/services/client/config";
 import { wsEvents } from "@/socket/events";
 import type { ServerEvent, ServerEventMap, ServerEventType } from "@/types/socket/chatEvents";
 

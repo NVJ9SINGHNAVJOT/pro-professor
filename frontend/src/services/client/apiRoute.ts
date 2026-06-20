@@ -1,4 +1,4 @@
-import type { FetchApiOptions } from "@/services/fetchApi";
+import type { FetchApiOptions } from "@/services/client/fetchApi";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ApiRoute<Args extends any[], Res> = {

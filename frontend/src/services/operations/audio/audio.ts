@@ -1,4 +1,5 @@
-import { BASE_URL_SERVER } from "@/services/apis";
+import { BASE_URL_SERVER } from "@/services/client/config";
+import { rawFetch } from "@/services/client/rawFetch";
 
 /**
  * Voice endpoints. These bypass the generic {@link fetchApi} helper because the
@@ -24,33 +25,23 @@ export async function transcribeAudio(blob: Blob, signal?: AbortSignal): Promise
   const form = new FormData();
   form.append("file", blob, `recording.${extensionForBlob(blob)}`);
 
-  const res = await fetch(audioEndpoints.TRANSCRIBE, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-    signal,
-  });
+  const res = await rawFetch(audioEndpoints.TRANSCRIBE, { method: "POST", body: form, signal }, "Transcription failed");
 
   const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(json?.message ?? `Transcription failed (${res.status})`);
-  }
   return json?.data?.text ?? "";
 }
 
 /** Synthesize speech for the given text and return a playable audio Blob. */
 export async function synthesizeSpeech(input: string, voice?: string, signal?: AbortSignal): Promise<Blob> {
-  const res = await fetch(audioEndpoints.SPEECH, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input, voice }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.message ?? `Speech synthesis failed (${res.status})`);
-  }
+  const res = await rawFetch(
+    audioEndpoints.SPEECH,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input, voice }),
+      signal,
+    },
+    "Speech synthesis failed",
+  );
   return res.blob();
 }

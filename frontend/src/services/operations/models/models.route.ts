@@ -1,5 +1,5 @@
-import { createRoute } from "@/services/apiRoute";
-import { BASE_URL_SERVER } from "@/services/apis";
+import { createRoute } from "@/services/client/apiRoute";
+import { BASE_URL_SERVER } from "@/services/client/config";
 
 const modelsEndPoints = {
   GET_ALL_MODELS: `${BASE_URL_SERVER}/models/all`,

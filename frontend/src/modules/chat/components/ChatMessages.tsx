@@ -16,18 +16,18 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat } from "@/services/chatStream";
-import { synthesizeSpeech, transcribeAudio } from "@/services/audio";
-import { mediaFileUrl, uploadMedia, type MediaAttachment } from "@/services/media";
+import { streamChat } from "@/services/operations/chats/chats.stream";
+import { synthesizeSpeech, transcribeAudio } from "@/services/operations/audio/audio";
+import { mediaFileUrl, uploadMedia, type MediaAttachment } from "@/services/operations/media/media";
 import { useApi } from "@/hooks/useApi";
-import { chatsRoute } from "@/services/operations/chats.route";
+import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
-import type { ModelProvider } from "@/services/operations/models.route";
+import type { ModelProvider } from "@/services/operations/models/models.route";
 import type { SelectedModel, UiMessage } from "@/modules/chat/types";
 import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
 

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
 import { useApi } from "@/hooks/useApi";
-import { chatsRoute } from "@/services/operations/chats.route";
+import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/utils/cn";
 import { GROUPS } from "@/modules/chat/constants";

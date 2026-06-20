@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
-import type { ProviderModel } from "@/services/operations/models.route";
+import type { ProviderModel } from "@/services/operations/models/models.route";
 
 interface ModelsState {
   models: ProviderModel[];

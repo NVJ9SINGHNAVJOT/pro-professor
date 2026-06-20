@@ -1,7 +1,8 @@
-import { BASE_URL_SERVER } from "@/services/apis";
+import { BASE_URL_SERVER } from "@/services/client/config";
+import { rawFetch } from "@/services/client/rawFetch";
 
 /**
- * Media endpoints. Like {@link "@/services/audio"}, these bypass the generic
+ * Media endpoints. Like {@link "@/services/operations/audio/audio"}, these bypass the generic
  * {@link fetchApi} helper because uploads post raw multipart files. They hit the
  * central-server pass-through, never the storage-service directly.
  */
@@ -22,16 +23,8 @@ export async function uploadMedia(file: File, signal?: AbortSignal): Promise<Med
   const form = new FormData();
   form.append("file", file, file.name);
 
-  const res = await fetch(`${BASE_URL_SERVER}/media/upload`, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-    signal,
-  });
+  const res = await rawFetch(`${BASE_URL_SERVER}/media/upload`, { method: "POST", body: form, signal }, "Upload failed");
 
   const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(json?.message ?? `Upload failed (${res.status})`);
-  }
   return json.data as MediaAttachment;
 }

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { fetchApi, type ApiError, type ApiResponse } from "@/services/fetchApi";
-import type { ApiRoute } from "@/services/apiRoute";
+import { fetchApi, type ApiError, type ApiResponse } from "@/services/client/fetchApi";
+import type { ApiRoute } from "@/services/client/apiRoute";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useApi<A extends any[], R>(route: ApiRoute<A, R>) {

@@ -1,5 +1,5 @@
-import type { ModelProvider } from "@/services/operations/models.route";
-import type { MediaAttachment } from "@/services/media";
+import type { ModelProvider } from "@/services/operations/models/models.route";
+import type { MediaAttachment } from "@/services/operations/media/media";
 
 export interface UiMessage {
   role: "user" | "assistant" | "error";

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppSelector } from "@/redux/store";
-import { type ModelProvider, type ProviderModel } from "@/services/operations/models.route";
+import { type ModelProvider, type ProviderModel } from "@/services/operations/models/models.route";
 import type { SelectedModel } from "@/modules/chat/types";
 
 interface ModelSelectorProps {

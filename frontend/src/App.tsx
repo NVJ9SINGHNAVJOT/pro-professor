@@ -4,7 +4,7 @@ import RightNav from "@/components/common/RightNav";
 import { Toaster } from "@/components/ui/sonner";
 import SocketProvider from "@/context/SocketProvider";
 import { useApi } from "@/hooks/useApi";
-import { modelsRoute } from "@/services/operations/models.route";
+import { modelsRoute } from "@/services/operations/models/models.route";
 import { useAppDispatch } from "@/redux/store";
 import { setModels } from "@/redux/slices/modelsSlice";
 
