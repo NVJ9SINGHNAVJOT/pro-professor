@@ -124,6 +124,20 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
+            <!-- CVE scan: runs during `mvn verify` / `task audit` -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>10.0.3</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Registers target/generated-sources/jooq as a source root so IDEs resolve jOOQ imports -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

@@ -1,5 +1,0 @@
-# Production profile — quieter logging.
-logging:
-  level:
-    com.proprofessor.server: INFO
-    org.springframework: WARN

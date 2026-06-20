@@ -48,7 +48,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never
 
 # ── Application-specific config (bound to AppProperties) ─────────────────────
 app:

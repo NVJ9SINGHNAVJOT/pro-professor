@@ -28,3 +28,8 @@ tasks:
     desc: Run the packaged JAR produced by the build task
     cmds:
       - java -jar target/central-server-0.0.1-SNAPSHOT.jar
+
+  audit:
+    desc: Scan dependencies for known CVEs using OWASP Dependency Check
+    cmds:
+      - ./mvnw verify
