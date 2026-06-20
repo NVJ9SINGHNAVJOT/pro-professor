@@ -12,21 +12,35 @@ import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.db.MessageRow;
 import com.proprofessor.server.common.db.ModelRow;
 import com.proprofessor.server.common.exception.AppException;
+import com.proprofessor.server.common.exception.ClientDisconnectedException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
 import com.proprofessor.server.media.MediaRepository;
 import com.proprofessor.server.model.ModelService;
 import com.proprofessor.server.model.dto.ModelProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
     private static final String ROLE_USER = "user";
     private static final String ROLE_ASSISTANT = "assistant";
+    private static final String ROLE_SYSTEM = "system";
+    private static final String ROLE_ERROR = "error";
+    /** Roles that are replayed to the model; {@code error} rows are persisted for the UI only. */
+    private static final Set<String> MODEL_ROLES = Set.of(ROLE_USER, ROLE_ASSISTANT, ROLE_SYSTEM);
+    /** Clean, user-facing failure text saved to history. Full detail goes to the logs. */
+    private static final String GENERATION_ERROR_MESSAGE =
+            "The model failed to respond. Please try again or pick another model.";
     private static final String DEFAULT_MODE = "simple";
     private static final int TITLE_MAX_LENGTH = 60;
 
@@ -64,16 +78,33 @@ public class ChatService {
         MessageRow userMessage = messageRepository.insert(conversation.id(), ROLE_USER, command.content());
         linkAttachments(userMessage.id(), command.attachmentIds());
 
-        List<ChatMessage> history = buildHistory(conversation.id());
+        List<ChatMessage> history = messageRepository.findHistory(conversation.id(), MODEL_ROLES);
 
-        if (provider == ModelProvider.AI_SERVICE) {
-            modelService.loadModel(modelName);
+        try {
+            if (provider == ModelProvider.AI_SERVICE) {
+                modelService.loadModel(modelName);
+            }
+            String reply = chatCompletionClient.streamChat(provider, modelName, history, listener::onToken);
+            MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
+            listener.onComplete(assistantMessage.id());
+        } catch (ClientDisconnectedException disconnect) {
+            // User hit Stop — not a generation failure. Let the controller handle it.
+            throw disconnect;
+        } catch (Exception ex) {
+            log.error("Chat generation failed for conversation {} (provider={}, model={}): {}",
+                    conversation.id(), provider.getValue(), modelName, describeFailure(ex), ex);
+            MessageRow errorMessage =
+                    messageRepository.insert(conversation.id(), ROLE_ERROR, GENERATION_ERROR_MESSAGE);
+            listener.onError(errorMessage.id(), GENERATION_ERROR_MESSAGE);
         }
+    }
 
-        String reply = chatCompletionClient.streamChat(provider, modelName, history, listener::onToken);
-
-        MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
-        listener.onComplete(assistantMessage.id());
+    /** Full failure detail for the logs — includes the upstream HTTP body when present. */
+    private static String describeFailure(Throwable ex) {
+        if (ex instanceof RestClientResponseException http) {
+            return http.getStatusCode() + " " + http.getResponseBodyAsString();
+        }
+        return ex.getMessage();
     }
 
     public List<ConversationSummary> listConversations() {
@@ -121,12 +152,6 @@ public class ChatService {
                 .forEach(media -> mediaRepository.linkToMessage(messageId, media.id()));
     }
 
-    private List<ChatMessage> buildHistory(long conversationId) {
-        return messageRepository.findAllByConversationId(conversationId).stream()
-                .map(msg -> new ChatMessage(msg.role(), msg.content()))
-                .toList();
-    }
-
     private static String deriveTitle(String content) {
         String trimmed = content.strip();
         return trimmed.length() <= TITLE_MAX_LENGTH ? trimmed : trimmed.substring(0, TITLE_MAX_LENGTH);
@@ -138,5 +163,8 @@ public class ChatService {
         void onToken(String delta);
 
         void onComplete(long messageId);
+
+        /** Generation failed after the conversation existed; an error message was persisted. */
+        void onError(long messageId, String message);
     }
 }

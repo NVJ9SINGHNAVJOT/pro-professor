@@ -7,8 +7,11 @@ import com.proprofessor.server.chat.dto.ConversationDetail;
 import com.proprofessor.server.chat.dto.ConversationListResponse;
 import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.common.exception.AppException;
+import com.proprofessor.server.common.exception.ClientDisconnectedException;
+import com.proprofessor.server.common.web.RequestIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -60,14 +63,18 @@ public class ChatController {
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
                         request.attachmentIds() == null ? List.of() : request.attachmentIds());
+                log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={}",
+                        command.conversationId(), command.provider(), command.model(),
+                        command.content() == null ? 0 : command.content().length(),
+                        command.attachmentIds().size());
                 chatService.streamReply(command, new SseStreamListener(emitter));
             } catch (ClientDisconnectedException ex) {
                 log.info("Client disconnected mid-stream; generation aborted");
             } catch (Exception ex) {
-                log.error("Chat streaming failed: {}", ex.getMessage());
+                log.error("Chat streaming failed: {}", ex.getMessage(), ex);
                 String message = ex instanceof AppException ? ex.getMessage() : "Failed to generate reply";
                 try {
-                    emitEvent(emitter, ChatStreamEvent.ChatError.of(message));
+                    emitEvent(emitter, ChatStreamEvent.ChatError.of(MDC.get(RequestIdFilter.MDC_KEY), message));
                 } catch (ClientDisconnectedException ignored) {
                     // nothing to tell a client that's gone
                 }
@@ -135,12 +142,11 @@ public class ChatController {
         public void onComplete(long messageId) {
             emitEvent(emitter, ChatStreamEvent.ChatDone.of(conversationId, messageId));
         }
-    }
 
-    /** Raised when an SSE write fails because the client disconnected (e.g. user hit Stop). */
-    private static final class ClientDisconnectedException extends RuntimeException {
-        private ClientDisconnectedException(Throwable cause) {
-            super(cause);
+        @Override
+        public void onError(long messageId, String message) {
+            emitEvent(emitter, ChatStreamEvent.ChatError.of(
+                    conversationId, messageId, MDC.get(RequestIdFilter.MDC_KEY), message));
         }
     }
 }

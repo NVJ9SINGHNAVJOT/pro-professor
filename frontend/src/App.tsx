@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import RightNav from "@/components/common/RightNav";
+import { Toaster } from "@/components/ui/sonner";
 import SocketProvider from "@/context/SocketProvider";
 import { useApi } from "@/hooks/useApi";
 import { modelsRoute } from "@/services/operations/models.route";
@@ -29,6 +30,7 @@ function App() {
 
         <RightNav />
       </div>
+      <Toaster />
     </SocketProvider>
   );
 }

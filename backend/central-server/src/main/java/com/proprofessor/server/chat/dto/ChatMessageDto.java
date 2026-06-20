@@ -9,7 +9,7 @@ import java.util.List;
  * A single message as exposed to the frontend.
  *
  * @param id          message id
- * @param role        {@code user} / {@code assistant} / {@code system}
+ * @param role        {@code user} / {@code assistant} / {@code system} / {@code error}
  * @param content     message text
  * @param createdAt   when it was created
  * @param attachments media attached to this message (empty when none)

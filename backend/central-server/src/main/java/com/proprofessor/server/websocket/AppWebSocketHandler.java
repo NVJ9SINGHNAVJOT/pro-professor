@@ -1,11 +1,13 @@
 package com.proprofessor.server.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.proprofessor.server.common.web.RequestIdFilter;
 import com.proprofessor.server.websocket.events.IncomingEvent;
 import com.proprofessor.server.websocket.events.IncomingEvent.PingEvent;
 import com.proprofessor.server.websocket.events.OutgoingEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -43,31 +45,46 @@ public class AppWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(@NonNull WebSocketSession session) {
-        sessions.put(session.getId(),
-                new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES));
-        log.info("WebSocket connected: {}", session.getId());
+        MDC.put(RequestIdFilter.MDC_KEY, session.getId());
+        try {
+            sessions.put(session.getId(),
+                    new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES));
+            log.info("WebSocket connected: {}", session.getId());
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
     }
 
     @Override
     protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) {
-        IncomingEvent event;
+        MDC.put(RequestIdFilter.MDC_KEY, session.getId());
         try {
-            event = objectMapper.readValue(message.getPayload(), IncomingEvent.class);
-        } catch (Exception ex) {
-            // unknown event types are ignored gracefully — no error reply
-            log.debug("Unhandled WS message from {}: {}", session.getId(), ex.getMessage());
-            return;
-        }
+            IncomingEvent event;
+            try {
+                event = objectMapper.readValue(message.getPayload(), IncomingEvent.class);
+            } catch (Exception ex) {
+                // unknown event types are ignored gracefully — no error reply
+                log.debug("Unhandled WS message from {}: {}", session.getId(), ex.getMessage());
+                return;
+            }
 
-        switch (event) {
-            case PingEvent ignored -> log.trace("Heartbeat from {}", session.getId());
+            switch (event) {
+                case PingEvent ignored -> log.trace("Heartbeat from {}", session.getId());
+            }
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
         }
     }
 
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
-        sessions.remove(session.getId());
-        log.info("WebSocket closed: {} ({})", session.getId(), status);
+        MDC.put(RequestIdFilter.MDC_KEY, session.getId());
+        try {
+            sessions.remove(session.getId());
+            log.info("WebSocket closed: {} ({})", session.getId(), status);
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
     }
 
     /**

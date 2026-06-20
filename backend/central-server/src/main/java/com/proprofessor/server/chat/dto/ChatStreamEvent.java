@@ -34,10 +34,23 @@ public sealed interface ChatStreamEvent
         }
     }
 
-    /** {@code chat.error} — something went wrong. */
-    record ChatError(String type, String message) implements ChatStreamEvent {
-        public static ChatError of(String message) {
-            return new ChatError(ChatStreamEvents.CHAT_ERROR, message);
+    /**
+     * {@code chat.error} — something went wrong. {@code conversationId}/{@code messageId} are present
+     * when the failure happened after the conversation existed and a persisted error message was saved;
+     * they are {@code null} for pre-conversation failures. {@code requestId} ties the error to the
+     * server logs.
+     */
+    record ChatError(String type, Long conversationId, Long messageId, String requestId, String message)
+            implements ChatStreamEvent {
+
+        /** Failure before a conversation/message exists — nothing persisted. */
+        public static ChatError of(String requestId, String message) {
+            return new ChatError(ChatStreamEvents.CHAT_ERROR, null, null, requestId, message);
+        }
+
+        /** Failure after the conversation exists, with a persisted error message. */
+        public static ChatError of(long conversationId, long messageId, String requestId, String message) {
+            return new ChatError(ChatStreamEvents.CHAT_ERROR, conversationId, messageId, requestId, message);
         }
     }
 }

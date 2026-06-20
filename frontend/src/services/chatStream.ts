@@ -15,7 +15,7 @@ export interface ChatStreamCallbacks {
   onStart: (data: { conversationId: number; title: string }) => void;
   onChunk: (data: { delta: string }) => void;
   onDone: (data: { conversationId: number; messageId: number }) => void;
-  onError: (message: string) => void;
+  onError: (message: string, meta?: { conversationId?: number; messageId?: number; requestId?: string }) => void;
 }
 
 /* ── SSE frame types (mirror backend ChatStreamEvent) ─────────────────────── */
@@ -41,6 +41,9 @@ interface ChatDoneFrame {
 interface ChatErrorFrame {
   type: "chat.error";
   message: string;
+  conversationId?: number;
+  messageId?: number;
+  requestId?: string;
 }
 
 type ChatStreamFrame = ChatStartFrame | ChatChunkFrame | ChatDoneFrame | ChatErrorFrame;
@@ -147,7 +150,11 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
       cb.onDone({ conversationId: event.conversationId, messageId: event.messageId });
       break;
     case "chat.error":
-      cb.onError(event.message);
+      cb.onError(event.message, {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        requestId: event.requestId,
+      });
       break;
   }
 }

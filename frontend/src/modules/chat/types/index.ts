@@ -2,7 +2,7 @@ import type { ModelProvider } from "@/services/operations/models.route";
 import type { MediaAttachment } from "@/services/media";
 
 export interface UiMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "error";
   content: string;
   attachments?: MediaAttachment[];
 }

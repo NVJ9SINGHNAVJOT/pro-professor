@@ -18,7 +18,7 @@ export interface ConversationSummary {
 
 export interface ChatMessage {
   id: number;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "error";
   content: string;
   createdAt: string;
   attachments: MediaAttachment[];

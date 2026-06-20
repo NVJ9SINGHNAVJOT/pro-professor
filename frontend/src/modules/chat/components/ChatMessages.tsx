@@ -11,6 +11,7 @@ import {
   PanelLeftOpenIcon,
   PaperclipIcon,
   SquareIcon,
+  TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -60,6 +61,14 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
     </div>
   );
 };
+
+/** Renders a failed assistant turn — saved to history so the error is visible on reload. */
+const ErrorMessage = ({ content }: { content: string }) => (
+  <div className="flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-200">
+    <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
+    <p className="para-small-medium wrap-break-word">{content}</p>
+  </div>
+);
 
 /** Renders a message's attachments — images inline, other files as a download chip. */
 const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] }) => {
@@ -167,7 +176,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       const detail = res.response.data;
       setMessages(
         detail.messages.map((m) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
+          role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
           content: m.content,
           attachments: m.attachments,
         }))
@@ -313,9 +322,21 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           if (opts?.speak && fullReply.trim()) void playReply(fullReply);
           else if (opts?.speak) setVoiceMode("idle");
         },
-        onError: (message) => {
+        onError: (message, meta) => {
           setStreaming(false);
           if (opts?.speak) setVoiceMode("idle");
+          const display = meta?.requestId ? `${message} (ref: ${meta.requestId})` : message;
+          // Replace the empty assistant placeholder with the error; keep any partial reply above it.
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant" && last.content === "") {
+              next[next.length - 1] = { role: "error", content: display };
+            } else {
+              next.push({ role: "error", content: display });
+            }
+            return next;
+          });
           toast.error(message);
         },
       }
@@ -429,24 +450,30 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       ) : (
         <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll relative z-10 flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto flex max-w-5xl flex-col gap-y-6">
-            {messages.map((message, index) =>
-              message.role === "user" ? (
-                <div key={index} className="flex flex-col items-end">
-                  {message.attachments && <MessageAttachments attachments={message.attachments} />}
-                  {message.content && (
-                    <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
-                      {message.content}
-                    </div>
-                  )}
-                </div>
-              ) : (
+            {messages.map((message, index) => {
+              if (message.role === "user") {
+                return (
+                  <div key={index} className="flex flex-col items-end">
+                    {message.attachments && <MessageAttachments attachments={message.attachments} />}
+                    {message.content && (
+                      <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
+                        {message.content}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              if (message.role === "error") {
+                return <ErrorMessage key={index} content={message.content} />;
+              }
+              return (
                 <AssistantMessage
                   key={index}
                   content={message.content}
                   isStreaming={streaming && index === messages.length - 1}
                 />
-              )
-            )}
+              );
+            })}
           </div>
         </div>
       )}

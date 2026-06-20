@@ -33,6 +33,13 @@ spring:
 server:
   port: ${PORT:4000}
 
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Inject the per-request correlation id (set in RequestIdFilter's MDC) into every
+# log line, right after the level. "-" renders when no id is present.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+
 # ── Actuator (exposes /actuator/health with db, redis, kafka components) ─────
 management:
   endpoints:
