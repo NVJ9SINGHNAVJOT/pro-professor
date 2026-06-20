@@ -30,7 +30,23 @@ function App() {
 
         <RightNav />
       </div>
-      <Toaster />
+      <Toaster
+        theme="dark"
+        toastOptions={{
+          classNames: {
+            title: "para-small-semibold",
+            description: "para-small-regular",
+          },
+        }}
+        style={
+          {
+            "--normal-bg": "oklch(0.205 0 0)",
+            "--normal-text": "oklch(0.985 0 0)",
+            "--normal-border": "oklch(1 0 0 / 10%)",
+            "--border-radius": "var(--radius)",
+          } as React.CSSProperties
+        }
+      />
     </SocketProvider>
   );
 }
