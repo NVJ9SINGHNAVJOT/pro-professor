@@ -52,7 +52,9 @@ public class AiServiceClient {
 
     private static ProviderModel toProviderModel(AiServiceModelsResponse.AiServiceModel model) {
         List<String> modalities = model.inputModalities() != null ? model.inputModalities() : List.of("text");
-        return new ProviderModel(model.name(), ModelProvider.AI_SERVICE, "chat", null, model.loadable(), modalities);
+        // The AI service does not yet advertise thinking capability; treat as unsupported for now.
+        return new ProviderModel(model.name(), ModelProvider.AI_SERVICE, "chat", null, model.loadable(),
+                modalities, model.maxContextTokens(), false);
     }
 
     /** Request body for the AI service load endpoint. */

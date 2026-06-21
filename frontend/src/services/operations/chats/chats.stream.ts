@@ -1,6 +1,7 @@
 import { BASE_URL_SERVER } from "@/services/client/config";
 import { rawFetch } from "@/services/client/rawFetch";
 import type { ModelProvider } from "@/services/operations/models/models.route";
+import type { ChatMetricsData } from "@/modules/chat/types";
 
 /* ── Payload & callback types ─────────────────────────────────────────────── */
 
@@ -10,11 +11,18 @@ export interface ChatSendPayload {
   model?: string;
   content: string;
   attachmentIds?: number[];
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  repetitionPenalty?: number;
+  verbose?: boolean;
 }
 
 export interface ChatStreamCallbacks {
   onStart: (data: { conversationId: number; title: string }) => void;
   onChunk: (data: { delta: string }) => void;
+  onThinking: (data: { delta: string }) => void;
+  onMetrics: (data: ChatMetricsData) => void;
   onDone: (data: { conversationId: number; messageId: number }) => void;
   onError: (message: string, meta?: { conversationId?: number; messageId?: number; requestId?: string }) => void;
 }
@@ -33,6 +41,22 @@ interface ChatChunkFrame {
   delta: string;
 }
 
+interface ChatThinkingFrame {
+  type: "chat.thinking";
+  conversationId: number;
+  delta: string;
+}
+
+interface ChatMetricsFrame {
+  type: "chat.metrics";
+  conversationId: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  evalRate: number | null;
+  totalDurationS: number | null;
+}
+
 interface ChatDoneFrame {
   type: "chat.done";
   conversationId: number;
@@ -47,7 +71,13 @@ interface ChatErrorFrame {
   requestId?: string;
 }
 
-type ChatStreamFrame = ChatStartFrame | ChatChunkFrame | ChatDoneFrame | ChatErrorFrame;
+type ChatStreamFrame =
+  | ChatStartFrame
+  | ChatChunkFrame
+  | ChatThinkingFrame
+  | ChatMetricsFrame
+  | ChatDoneFrame
+  | ChatErrorFrame;
 
 /* ── Stream parser ────────────────────────────────────────────────────────── */
 
@@ -144,6 +174,18 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
       break;
     case "chat.chunk":
       cb.onChunk({ delta: event.delta });
+      break;
+    case "chat.thinking":
+      cb.onThinking({ delta: event.delta });
+      break;
+    case "chat.metrics":
+      cb.onMetrics({
+        promptTokens: event.promptTokens,
+        completionTokens: event.completionTokens,
+        totalTokens: event.totalTokens,
+        evalRate: event.evalRate,
+        totalDurationS: event.totalDurationS,
+      });
       break;
     case "chat.done":
       cb.onDone({

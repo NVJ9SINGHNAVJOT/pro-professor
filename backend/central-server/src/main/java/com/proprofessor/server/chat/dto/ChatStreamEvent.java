@@ -8,8 +8,8 @@ import com.proprofessor.server.chat.ChatStreamEvents;
  * contract, and the frontend can dispatch by {@code type}.
  */
 public sealed interface ChatStreamEvent
-        permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatChunk,
-        ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
+        permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatThinking,
+        ChatStreamEvent.ChatMetrics, ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
 
     String type();
 
@@ -20,10 +20,39 @@ public sealed interface ChatStreamEvent
         }
     }
 
-    /** {@code chat.chunk} — one streamed token. */
+    /** {@code chat.chunk} — one streamed answer token. */
     record ChatChunk(String type, long conversationId, String delta) implements ChatStreamEvent {
         public static ChatChunk of(long conversationId, String delta) {
             return new ChatChunk(ChatStreamEvents.CHAT_CHUNK, conversationId, delta);
+        }
+    }
+
+    /** {@code chat.thinking} — one streamed reasoning token (live-only, not persisted). */
+    record ChatThinking(String type, long conversationId, String delta) implements ChatStreamEvent {
+        public static ChatThinking of(long conversationId, String delta) {
+            return new ChatThinking(ChatStreamEvents.CHAT_THINKING, conversationId, delta);
+        }
+    }
+
+    /**
+     * {@code chat.metrics} — token/timing data, emitted just before {@code chat.done} when the
+     * request asked for verbose output. Timing fields are {@code null} for providers that don't
+     * report them (e.g. Ollama supplies token counts only).
+     */
+    record ChatMetrics(
+            String type,
+            long conversationId,
+            Long promptTokens,
+            Long completionTokens,
+            Long totalTokens,
+            Double evalRate,
+            Double totalDurationS
+    ) implements ChatStreamEvent {
+        public static ChatMetrics of(
+                long conversationId, Long promptTokens, Long completionTokens, Long totalTokens,
+                Double evalRate, Double totalDurationS) {
+            return new ChatMetrics(ChatStreamEvents.CHAT_METRICS, conversationId,
+                    promptTokens, completionTokens, totalTokens, evalRate, totalDurationS);
         }
     }
 

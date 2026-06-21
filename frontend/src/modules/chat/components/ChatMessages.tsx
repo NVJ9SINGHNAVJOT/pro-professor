@@ -4,6 +4,8 @@ import { toast } from "@/components/common/toast";
 import {
   ArrowUpIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CopyIcon,
   FileIcon,
   MicIcon,
@@ -24,15 +26,66 @@ import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
+import ChatSettings from "@/modules/chat/components/ChatSettings";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import { blobToWav } from "@/modules/chat/wav";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/services/operations/models/models.route";
-import type { SelectedModel, UiMessage } from "@/modules/chat/types";
+import {
+  DEFAULT_INFERENCE_PARAMS,
+  type ChatMetricsData,
+  type InferenceParams,
+  type SelectedModel,
+  type UiMessage,
+} from "@/modules/chat/types";
 import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
 
-const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
+/** Collapsible panel showing a model's streamed reasoning. */
+const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreaming: boolean }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mb-2 rounded-xl border border-neutral-800 bg-neutral-900/60">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left caption-small-regular text-neutral-400 hover:text-neutral-200"
+      >
+        {open ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
+        Thinking{isStreaming && "…"}
+      </button>
+      {open && (
+        <div className="whitespace-pre-wrap wrap-break-word px-3 pb-2.5 caption-small-regular text-neutral-400">
+          {thinking}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** One-line token/timing summary shown under a reply when verbose was enabled. */
+const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
+  const parts: string[] = [];
+  if (metrics.promptTokens != null) parts.push(`${metrics.promptTokens} in`);
+  if (metrics.completionTokens != null) parts.push(`${metrics.completionTokens} out`);
+  if (metrics.totalTokens != null) parts.push(`${metrics.totalTokens} total`);
+  if (metrics.evalRate != null) parts.push(`${metrics.evalRate.toFixed(1)} tok/s`);
+  if (metrics.totalDurationS != null) parts.push(`${metrics.totalDurationS.toFixed(2)}s`);
+  if (parts.length === 0) return null;
+  return <div className="mt-2 caption-small-regular text-neutral-500">{parts.join(" · ")}</div>;
+};
+
+const AssistantMessage = ({
+  content,
+  thinking,
+  metrics,
+  isStreaming,
+}: {
+  content: string;
+  thinking?: string;
+  metrics?: ChatMetricsData;
+  isStreaming: boolean;
+}) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -44,10 +97,12 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
   return (
     <div className="flex">
       <div className="flex-1 min-w-0">
+        {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           {isStreaming && <span className="ct-cursor-blink">▋</span>}
         </div>
+        {metrics && <MetricsLine metrics={metrics} />}
         {!isStreaming && content && (
           <button
             type="button"
@@ -121,6 +176,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [streaming, setStreaming] = useState(false);
   const [selected, setSelected] = useState<SelectedModel | null>(null);
 
+  // per-request inference settings (not persisted; reset on reload)
+  const [params, setParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
+  const [verbose, setVerbose] = useState(false);
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+
   // pending attachments uploaded for the next message
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -157,6 +217,12 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   // the models list did (cold reload).
   const findModalities = (provider: ModelProvider, model: string): string[] =>
     models.find((m) => m.provider === provider && m.name === model)?.inputModalities ?? ["text"];
+
+  const findMaxContextTokens = (provider: ModelProvider, model: string): number | null =>
+    models.find((m) => m.provider === provider && m.name === model)?.maxContextTokens ?? null;
+
+  const findSupportsThinking = (provider: ModelProvider, model: string): boolean =>
+    models.find((m) => m.provider === provider && m.name === model)?.supportsThinking ?? false;
 
   // load (or reset) conversation when the route param changes
   useEffect(() => {
@@ -196,6 +262,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         provider: detail.provider as ModelProvider,
         model: detail.model,
         inputModalities: findModalities(detail.provider as ModelProvider, detail.model),
+        maxContextTokens: findMaxContextTokens(detail.provider as ModelProvider, detail.model),
+        supportsThinking: findSupportsThinking(detail.provider as ModelProvider, detail.model),
       });
       convIdRef.current = id;
       loadedRef.current = id;
@@ -308,6 +376,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         model: selected.model,
         content,
         attachmentIds: pending.map((a) => a.id),
+        maxTokens: params.maxTokens,
+        temperature: params.temperature,
+        topP: params.topP,
+        repetitionPenalty: params.repetitionPenalty,
+        verbose,
       },
       {
         onStart: ({ conversationId, title }) => {
@@ -336,6 +409,28 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 ...last,
                 content: last.content + delta,
               };
+            }
+            return next;
+          });
+        },
+        onThinking: ({ delta }) => {
+          // The toggle is opt-in: drop reasoning when the user hasn't asked to see it.
+          if (!thinkingEnabled) return;
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = { ...last, thinking: (last.thinking ?? "") + delta };
+            }
+            return next;
+          });
+        },
+        onMetrics: (data) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = { ...last, metrics: data };
             }
             return next;
           });
@@ -461,6 +556,20 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
         <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
+        <div className="ml-auto">
+          <ChatSettings
+            params={params}
+            onParamsChange={setParams}
+            verbose={verbose}
+            onVerboseChange={setVerbose}
+            thinkingEnabled={thinkingEnabled}
+            onThinkingChange={setThinkingEnabled}
+            supportsThinking={selected?.supportsThinking ?? false}
+            maxContextTokens={selected?.maxContextTokens ?? null}
+            modelSelected={selected !== null}
+            disabled={inputDisabled}
+          />
+        </div>
       </div>
 
       {/* Empty state or message list */}
@@ -508,6 +617,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 <AssistantMessage
                   key={index}
                   content={message.content}
+                  thinking={message.thinking}
+                  metrics={message.metrics}
                   isStreaming={streaming && index === messages.length - 1}
                 />
               );

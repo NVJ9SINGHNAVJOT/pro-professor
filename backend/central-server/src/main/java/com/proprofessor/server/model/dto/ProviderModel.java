@@ -11,6 +11,8 @@ import java.util.List;
  * @param version          version/parameter size if known, otherwise {@code null}
  * @param isActive         whether the model is currently usable
  * @param inputModalities  supported input types (e.g. {@code ["text"]}, {@code ["text", "image"]})
+ * @param maxContextTokens model context window in tokens if known, otherwise {@code null}
+ * @param supportsThinking whether the model emits reasoning/thinking the UI can display
  */
 public record ProviderModel(
         String name,
@@ -18,6 +20,8 @@ public record ProviderModel(
         String role,
         String version,
         boolean isActive,
-        List<String> inputModalities
+        List<String> inputModalities,
+        Integer maxContextTokens,
+        boolean supportsThinking
 ) {
 }

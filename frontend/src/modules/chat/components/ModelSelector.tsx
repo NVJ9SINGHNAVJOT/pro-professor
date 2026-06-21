@@ -51,7 +51,9 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     const model = encoded.slice(idx + SEPARATOR.length);
     const match = models.find((m) => m.provider === provider && m.name === model);
     const inputModalities = match?.inputModalities ?? ["text"];
-    onChange({ provider, model, inputModalities });
+    const maxContextTokens = match?.maxContextTokens ?? null;
+    const supportsThinking = match?.supportsThinking ?? false;
+    onChange({ provider, model, inputModalities, maxContextTokens, supportsThinking });
   };
 
   const groups = useMemo(() => {

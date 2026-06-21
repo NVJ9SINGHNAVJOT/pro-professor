@@ -12,12 +12,22 @@ import java.util.List;
  * @param model          required when {@code conversationId} is null
  * @param content        the user's message text
  * @param attachmentIds  media ids (from {@code POST /api/v1/media/upload}) to attach, or {@code null}
+ * @param maxTokens          max new tokens to generate, or {@code null} for the provider default
+ * @param temperature        sampling temperature, or {@code null} for the provider default
+ * @param topP               nucleus sampling top-p, or {@code null} for the provider default
+ * @param repetitionPenalty  repetition penalty, or {@code null} for the provider default
+ * @param verbose            when {@code true}, stream token/timing metrics back to the client
  */
 public record ChatSendRequest(
         Long conversationId,
         ModelProvider provider,
         String model,
         String content,
-        List<Long> attachmentIds
+        List<Long> attachmentIds,
+        Integer maxTokens,
+        Double temperature,
+        Double topP,
+        Double repetitionPenalty,
+        Boolean verbose
 ) {
 }

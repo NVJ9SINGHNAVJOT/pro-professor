@@ -60,9 +60,12 @@ public class ChatController {
 
         chatStreamExecutor.execute(() -> {
             try {
+                InferenceOptions options = new InferenceOptions(
+                        request.maxTokens(), request.temperature(), request.topP(),
+                        request.repetitionPenalty(), Boolean.TRUE.equals(request.verbose()));
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
-                        request.attachmentIds() == null ? List.of() : request.attachmentIds());
+                        request.attachmentIds() == null ? List.of() : request.attachmentIds(), options);
                 log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={}",
                         command.conversationId(), command.provider(), command.model(),
                         command.content() == null ? 0 : command.content().length(),
@@ -136,6 +139,18 @@ public class ChatController {
         @Override
         public void onToken(String delta) {
             emitEvent(emitter, ChatStreamEvent.ChatChunk.of(conversationId, delta));
+        }
+
+        @Override
+        public void onThinking(String delta) {
+            emitEvent(emitter, ChatStreamEvent.ChatThinking.of(conversationId, delta));
+        }
+
+        @Override
+        public void onMetrics(Long promptTokens, Long completionTokens, Long totalTokens,
+                              Double evalRate, Double totalDurationS) {
+            emitEvent(emitter, ChatStreamEvent.ChatMetrics.of(
+                    conversationId, promptTokens, completionTokens, totalTokens, evalRate, totalDurationS));
         }
 
         @Override

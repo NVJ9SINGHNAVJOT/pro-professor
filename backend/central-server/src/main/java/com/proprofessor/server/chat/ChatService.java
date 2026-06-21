@@ -95,7 +95,12 @@ public class ChatService {
             if (provider == ModelProvider.AI_SERVICE) {
                 modelService.loadModel(modelName);
             }
-            String reply = chatCompletionClient.streamChat(provider, modelName, history, listener::onToken);
+            String reply = chatCompletionClient.streamChat(
+                    provider, modelName, history, command.options(),
+                    listener::onToken, listener::onThinking,
+                    metrics -> listener.onMetrics(
+                            metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),
+                            metrics.evalRate(), metrics.totalDurationS()));
             MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
             listener.onComplete(assistantMessage.id());
         } catch (ClientDisconnectedException disconnect) {
@@ -222,6 +227,13 @@ public class ChatService {
         void onStart(long conversationId, String title);
 
         void onToken(String delta);
+
+        /** One reasoning token (live-only; not persisted). */
+        void onThinking(String delta);
+
+        /** Final token/timing metrics, emitted before completion when verbose was requested. */
+        void onMetrics(Long promptTokens, Long completionTokens, Long totalTokens,
+                       Double evalRate, Double totalDurationS);
 
         void onComplete(long messageId);
 

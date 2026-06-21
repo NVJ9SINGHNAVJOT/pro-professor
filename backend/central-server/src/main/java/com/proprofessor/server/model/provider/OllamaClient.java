@@ -42,31 +42,46 @@ public class OllamaClient {
             return List.of();
         }
         return response.models().stream()
-                .map(m -> toProviderModel(m, fetchCapabilities(m.name())))
+                .map(m -> toProviderModel(m, fetchShow(m.name())))
                 .toList();
     }
 
     /**
-     * Calls {@code POST /api/show} for a single model to retrieve its capabilities.
-     * Returns the raw capability strings (e.g. {@code ["completion", "vision"]}).
-     * Falls back to an empty list on any error so one bad model doesn't block the entire list.
+     * Calls {@code POST /api/show} for a single model to retrieve its capabilities
+     * and {@code model_info} (used for the context window). Returns {@code null} on
+     * any error so one bad model doesn't block the entire list.
      */
-    private List<String> fetchCapabilities(String modelName) {
+    private OllamaShowResponse fetchShow(String modelName) {
         try {
-            OllamaShowResponse show = restClient.post()
+            return restClient.post()
                     .uri("/api/show")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("model", modelName))
                     .retrieve()
                     .body(OllamaShowResponse.class);
-
-            if (show != null && show.capabilities() != null) {
-                return show.capabilities();
-            }
         } catch (Exception e) {
-            log.warn("Failed to fetch capabilities for Ollama model '{}': {}", modelName, e.getMessage());
+            log.warn("Failed to fetch /api/show for Ollama model '{}': {}", modelName, e.getMessage());
+            return null;
         }
-        return List.of();
+    }
+
+    /**
+     * Reads the model's context window from {@code model_info}. The relevant key is
+     * {@code <arch>.context_length} where {@code <arch>} comes from
+     * {@code general.architecture}; other keys can also end in {@code context_length}
+     * (e.g. {@code <arch>.rope.scaling.original_context_length}), so we resolve the
+     * architecture explicitly instead of matching by suffix.
+     */
+    private static Integer extractContextLength(Map<String, Object> modelInfo) {
+        if (modelInfo == null) {
+            return null;
+        }
+        Object arch = modelInfo.get("general.architecture");
+        if (!(arch instanceof String archName) || archName.isBlank()) {
+            return null;
+        }
+        Object value = modelInfo.get(archName + ".context_length");
+        return value instanceof Number number ? number.intValue() : null;
     }
 
     /**
@@ -88,7 +103,7 @@ public class OllamaClient {
         return List.copyOf(modalities);
     }
 
-    private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model, List<String> capabilities) {
+    private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model, OllamaShowResponse show) {
         OllamaTagsResponse.OllamaDetails details = model.details();
         String parameterSize = details != null ? details.parameterSize() : null;
 
@@ -96,8 +111,12 @@ public class OllamaClient {
                 ? parameterSize
                 : extractVersionFromName(model.name());
 
+        List<String> capabilities = show != null && show.capabilities() != null ? show.capabilities() : List.of();
         List<String> modalities = mapCapabilitiesToModalities(capabilities);
-        return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true, modalities);
+        Integer maxContextTokens = extractContextLength(show != null ? show.modelInfo() : null);
+        boolean supportsThinking = capabilities.contains("thinking");
+        return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true,
+                modalities, maxContextTokens, supportsThinking);
     }
 
     /** Derives a version from a {@code name:tag} identifier, e.g. {@code llama3.1:8b} -> {@code 8b}. */

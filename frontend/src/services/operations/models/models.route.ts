@@ -15,6 +15,8 @@ export type ProviderModel = {
   version: string | null;
   isActive: boolean;
   inputModalities: string[];
+  maxContextTokens: number | null;
+  supportsThinking: boolean;
 };
 
 export type GetAllModelsResponse = {

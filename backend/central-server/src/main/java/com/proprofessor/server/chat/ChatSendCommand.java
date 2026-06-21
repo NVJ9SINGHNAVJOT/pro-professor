@@ -13,12 +13,14 @@ import java.util.List;
  * @param model          required when {@code conversationId} is null
  * @param content        the user's message text
  * @param attachmentIds  media ids to attach to the user message (never {@code null}; may be empty)
+ * @param options        per-request inference settings (never {@code null}; see {@link InferenceOptions})
  */
 public record ChatSendCommand(
         Long conversationId,
         ModelProvider provider,
         String model,
         String content,
-        List<Long> attachmentIds
+        List<Long> attachmentIds,
+        InferenceOptions options
 ) {
 }

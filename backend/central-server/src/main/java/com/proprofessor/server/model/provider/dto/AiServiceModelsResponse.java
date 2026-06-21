@@ -15,7 +15,8 @@ public record AiServiceModelsResponse(
     public record AiServiceModel(
             String name,
             boolean loadable,
-            @JsonProperty("input_modalities") List<String> inputModalities
+            @JsonProperty("input_modalities") List<String> inputModalities,
+            @JsonProperty("max_context_tokens") Integer maxContextTokens
     ) {
     }
 }
