@@ -549,7 +549,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                   ))}
                 </div>
               )}
-              <div className="flex items-end gap-x-1.5">
+              <div className="flex items-center gap-x-1.5">
                 <input
                   ref={fileInputRef}
                   type="file"

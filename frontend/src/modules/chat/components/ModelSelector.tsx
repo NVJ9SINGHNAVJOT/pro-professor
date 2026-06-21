@@ -169,7 +169,7 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       >
         <SelectValue placeholder="Select a model" />
       </SelectTrigger>
-      <SelectContent side="top" align="end" className="bg-neutral-900 text-white border-neutral-700">
+      <SelectContent position="popper" side="top" align="end" className="bg-neutral-900 text-white border-neutral-700">
         {groups.map(({ provider, items }) => (
           <SelectGroup key={provider}>
             <SelectLabel className="text-neutral-400">{PROVIDER_META[provider]?.label ?? provider}</SelectLabel>

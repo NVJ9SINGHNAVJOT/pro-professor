@@ -19,8 +19,13 @@ function ToastCard({ item }: { item: ToastItem }) {
   const { Icon, className } = icons[item.type];
 
   return (
-    <div className="pointer-events-auto flex w-[22rem] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-white shadow-lg animate-in fade-in slide-in-from-bottom-2">
-      <Icon className={cn("mt-px size-4 shrink-0", className)} />
+    <div
+      className={cn(
+        "pointer-events-auto flex w-[22rem] max-w-[calc(100vw-2rem)] gap-3 rounded-xl border border-neutral-700 bg-neutral-900 p-4 text-white shadow-lg animate-in fade-in slide-in-from-bottom-2",
+        item.description ? "items-start" : "items-center",
+      )}
+    >
+      <Icon className={cn("size-4 shrink-0", item.description && "mt-px", className)} />
       <div className="min-w-0 flex-1">
         <p className="para-small-semibold wrap-break-word">{item.title}</p>
         {item.description && (
