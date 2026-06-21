@@ -25,22 +25,14 @@ async function transcribe(blob: Blob, signal?: AbortSignal): Promise<string> {
   const form = new FormData();
   form.append("file", blob, `recording.${extensionForBlob(blob)}`);
 
-  const res = await rawFetch(
-    audioEndpoints.TRANSCRIBE,
-    { method: "POST", body: form, signal },
-    "Transcription failed",
-  );
+  const res = await rawFetch(audioEndpoints.TRANSCRIBE, { method: "POST", body: form, signal }, "Transcription failed");
 
   const json = await res.json().catch(() => null);
   return json?.data?.text ?? "";
 }
 
 /** Synthesize speech for the given text and return a playable audio Blob. */
-async function synthesize(
-  input: string,
-  voice?: string,
-  signal?: AbortSignal,
-): Promise<Blob> {
+async function synthesize(input: string, voice?: string, signal?: AbortSignal): Promise<Blob> {
   const res = await rawFetch(
     audioEndpoints.SPEECH,
     {

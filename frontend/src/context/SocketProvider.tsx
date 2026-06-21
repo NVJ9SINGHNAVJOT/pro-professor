@@ -148,13 +148,13 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
         handlers.delete(handler as Handler);
       };
     },
-    []
+    [],
   );
 
   // Stable value: no React state here, so consumers don't re-render.
   const value = useMemo<SocketContextValue>(
     () => ({ connect, disconnect, subscribe, readyStateRef }),
-    [connect, disconnect, subscribe]
+    [connect, disconnect, subscribe],
   );
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

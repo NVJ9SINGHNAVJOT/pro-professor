@@ -18,10 +18,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
-import {
-  mediaApi,
-  type MediaAttachment,
-} from "@/services/operations/media/media.api";
+import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -33,19 +30,9 @@ import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/services/operations/models/models.route";
 import type { SelectedModel, UiMessage } from "@/modules/chat/types";
-import {
-  AUTOSCROLL_THRESHOLD_PX,
-  MAX_TEXTAREA_HEIGHT_PX,
-  SUGGESTIONS,
-} from "@/modules/chat/constants";
+import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
 
-const AssistantMessage = ({
-  content,
-  isStreaming,
-}: {
-  content: string;
-  isStreaming: boolean;
-}) => {
+const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -68,11 +55,7 @@ const AssistantMessage = ({
             aria-label="Copy message"
             className="mt-4 cursor-pointer rounded-md text-neutral-400 transition-opacity hover:bg-neutral-800 hover:text-white"
           >
-            {copied ? (
-              <CheckIcon className="size-4" />
-            ) : (
-              <CopyIcon className="size-4" />
-            )}
+            {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
           </button>
         )}
       </div>
@@ -89,22 +72,13 @@ const ErrorMessage = ({ content }: { content: string }) => (
 );
 
 /** Renders a message's attachments — images inline, audio as a player, other files as a chip. */
-const MessageAttachments = ({
-  attachments,
-}: {
-  attachments: MediaAttachment[];
-}) => {
+const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] }) => {
   if (attachments.length === 0) return null;
   return (
     <div className="mb-1.5 flex flex-wrap justify-end gap-2">
       {attachments.map((a) =>
         a.mimeType.startsWith("image/") ? (
-          <a
-            key={a.id}
-            href={mediaApi.fileUrl(a.id)}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a key={a.id} href={mediaApi.fileUrl(a.id)} target="_blank" rel="noreferrer">
             <img
               src={mediaApi.fileUrl(a.id)}
               alt={a.originalFilename}
@@ -112,12 +86,7 @@ const MessageAttachments = ({
             />
           </a>
         ) : a.mimeType.startsWith("audio/") ? (
-          <audio
-            key={a.id}
-            src={mediaApi.fileUrl(a.id)}
-            controls
-            className="h-10 max-w-64"
-          />
+          <audio key={a.id} src={mediaApi.fileUrl(a.id)} controls className="h-10 max-w-64" />
         ) : (
           <a
             key={a.id}
@@ -145,9 +114,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
-  const { models, loaded: modelsLoaded } = useAppSelector(
-    (state) => state.models,
-  );
+  const { models, loaded: modelsLoaded } = useAppSelector((state) => state.models);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
@@ -164,15 +131,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     (models.length === 0 ||
       (Boolean(chatId) &&
         selected !== null &&
-        !models.some(
-          (m) => m.provider === selected.provider && m.name === selected.model,
-        )));
+        !models.some((m) => m.provider === selected.provider && m.name === selected.model)));
 
   // voice chat state
   const [voiceMode, setVoiceMode] = useState<VoiceMode | "idle">("idle");
-  const [playbackAudio, setPlaybackAudio] = useState<HTMLAudioElement | null>(
-    null,
-  );
+  const [playbackAudio, setPlaybackAudio] = useState<HTMLAudioElement | null>(null);
 
   // refs
   const convIdRef = useRef<number | null>(null);
@@ -193,8 +156,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   // Read at decision time so it's correct even if the conversation loaded before
   // the models list did (cold reload).
   const findModalities = (provider: ModelProvider, model: string): string[] =>
-    models.find((m) => m.provider === provider && m.name === model)
-      ?.inputModalities ?? ["text"];
+    models.find((m) => m.provider === provider && m.name === model)?.inputModalities ?? ["text"];
 
   // load (or reset) conversation when the route param changes
   useEffect(() => {
@@ -225,12 +187,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       const detail = res.response.data;
       setMessages(
         detail.messages.map((m) => ({
-          role:
-            m.role === "assistant"
-              ? "assistant"
-              : m.role === "error"
-                ? "error"
-                : "user",
+          role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
           content: m.content,
           attachments: m.attachments,
         })),
@@ -238,10 +195,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       setSelected({
         provider: detail.provider as ModelProvider,
         model: detail.model,
-        inputModalities: findModalities(
-          detail.provider as ModelProvider,
-          detail.model,
-        ),
+        inputModalities: findModalities(detail.provider as ModelProvider, detail.model),
       });
       convIdRef.current = id;
       loadedRef.current = id;
@@ -304,18 +258,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleFilesSelected = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // allow re-selecting the same file
     if (files.length === 0) return;
 
     setUploading(true);
     try {
-      const uploaded = await Promise.all(
-        files.map((file) => mediaApi.upload(file)),
-      );
+      const uploaded = await Promise.all(files.map((file) => mediaApi.upload(file)));
       setAttachments((prev) => [...prev, ...uploaded]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -324,13 +274,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
   };
 
-  const removeAttachment = (id: number) =>
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  const removeAttachment = (id: number) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
-  const handleSend = (
-    text?: string,
-    opts?: { speak?: boolean; attachments?: MediaAttachment[] },
-  ) => {
+  const handleSend = (text?: string, opts?: { speak?: boolean; attachments?: MediaAttachment[] }) => {
     const content = (text ?? input).trim();
     // The voice/audio path passes its uploaded clip explicitly; otherwise use the
     // attachments pending in the input bar.
@@ -402,9 +348,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         onError: (message, meta) => {
           setStreaming(false);
           if (opts?.speak) setVoiceMode("idle");
-          const display = meta?.requestId
-            ? `${message} (ref: ${meta.requestId})`
-            : message;
+          const display = meta?.requestId ? `${message} (ref: ${meta.requestId})` : message;
           // Replace the empty assistant placeholder with the error; keep any partial reply above it.
           setMessages((prev) => {
             const next = [...prev];
@@ -452,10 +396,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
     try {
       setVoiceMode("thinking");
-      const acceptsAudio = findModalities(
-        selected.provider,
-        selected.model,
-      ).includes("audio");
+      const acceptsAudio = findModalities(selected.provider, selected.model).includes("audio");
       if (acceptsAudio) {
         const wav = await blobToWav(blob);
         const file = new File([wav], "utterance.wav", { type: "audio/wav" });
@@ -504,10 +445,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
       {/* Background glow (only for empty state, covers full section) */}
       {showEmptyState && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden"
-        >
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
         </div>
       )}
@@ -520,20 +458,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           aria-label="Toggle sidebar"
           className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
         >
-          {sidebarOpen ? (
-            <PanelLeftCloseIcon className="size-5" />
-          ) : (
-            <PanelLeftOpenIcon className="size-5" />
-          )}
+          {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
       </div>
 
       {/* Empty state or message list */}
       {showEmptyState ? (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4">
-          <h1 className="relative heading-small-medium text-center">
-            What can I help with?
-          </h1>
+          <h1 className="relative heading-small-medium text-center">What can I help with?</h1>
           <div className="relative mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
             {SUGGESTIONS.map((suggestion) => (
               <button
@@ -542,12 +474,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 onClick={() => handleSend(suggestion.prompt)}
                 className="cursor-pointer rounded-2xl border border-neutral-800 bg-neutral-800/40 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-neutral-600 hover:bg-neutral-800"
               >
-                <div className="para-small-semibold text-neutral-200">
-                  {suggestion.title}
-                </div>
-                <div className="truncate caption-small-regular text-neutral-500">
-                  {suggestion.prompt}
-                </div>
+                <div className="para-small-semibold text-neutral-200">{suggestion.title}</div>
+                <div className="truncate caption-small-regular text-neutral-500">{suggestion.prompt}</div>
               </button>
             ))}
           </div>
@@ -563,9 +491,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
               if (message.role === "user") {
                 return (
                   <div key={index} className="flex flex-col items-end">
-                    {message.attachments && (
-                      <MessageAttachments attachments={message.attachments} />
-                    )}
+                    {message.attachments && <MessageAttachments attachments={message.attachments} />}
                     {message.content && (
                       <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
                         {message.content}
@@ -610,9 +536,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                       ) : (
                         <FileIcon className="size-4 shrink-0" />
                       )}
-                      <span className="max-w-32 truncate">
-                        {a.originalFilename}
-                      </span>
+                      <span className="max-w-32 truncate">{a.originalFilename}</span>
                       <button
                         type="button"
                         onClick={() => removeAttachment(a.id)}
@@ -657,22 +581,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                   onKeyDown={handleKeyDown}
                   rows={1}
                   disabled={inputDisabled}
-                  placeholder={
-                    inputDisabled ? "Model not available" : "Message..."
-                  }
+                  placeholder={inputDisabled ? "Model not available" : "Message..."}
                   className={cn(
                     "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
-                    inputDisabled
-                      ? "cursor-not-allowed placeholder:text-neutral-600"
-                      : "placeholder:text-neutral-500",
+                    inputDisabled ? "cursor-not-allowed placeholder:text-neutral-600" : "placeholder:text-neutral-500",
                   )}
                 />
                 <div className="mb-0.5 shrink-0">
-                  <ModelSelector
-                    value={selected}
-                    onChange={setSelected}
-                    disabled={Boolean(chatId)}
-                  />
+                  <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
                 </div>
                 {streaming ? (
                   <button

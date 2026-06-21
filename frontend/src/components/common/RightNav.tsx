@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
-import {
-  LayoutDashboardIcon,
-  HomeIcon,
-  MessageSquareIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, SettingsIcon } from "lucide-react";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -39,15 +34,9 @@ const RightNav = () => {
           className="w-9 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
         />
         {/* Falling musical notes */}
-        <div
-          aria-hidden
-          className="relative mt-3 w-full flex-1 overflow-hidden"
-        >
+        <div aria-hidden className="relative mt-3 w-full flex-1 overflow-hidden">
           {notes.map((note, index) => (
-            <span
-              key={index}
-              className="ct-note text-neutral-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.35)]"
-            >
+            <span key={index} className="ct-note text-neutral-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.35)]">
               {note}
             </span>
           ))}

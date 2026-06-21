@@ -19,10 +19,7 @@ function fileUrl(id: number): string {
 }
 
 /** Upload a single file and return its stored reference. */
-async function upload(
-  file: File,
-  signal?: AbortSignal,
-): Promise<MediaAttachment> {
+async function upload(file: File, signal?: AbortSignal): Promise<MediaAttachment> {
   const form = new FormData();
   form.append("file", file, file.name);
 

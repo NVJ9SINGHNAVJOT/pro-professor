@@ -16,10 +16,7 @@ export interface ChatStreamCallbacks {
   onStart: (data: { conversationId: number; title: string }) => void;
   onChunk: (data: { delta: string }) => void;
   onDone: (data: { conversationId: number; messageId: number }) => void;
-  onError: (
-    message: string,
-    meta?: { conversationId?: number; messageId?: number; requestId?: string },
-  ) => void;
+  onError: (message: string, meta?: { conversationId?: number; messageId?: number; requestId?: string }) => void;
 }
 
 /* ── SSE frame types (mirror backend ChatStreamEvent) ─────────────────────── */
@@ -50,11 +47,7 @@ interface ChatErrorFrame {
   requestId?: string;
 }
 
-type ChatStreamFrame =
-  | ChatStartFrame
-  | ChatChunkFrame
-  | ChatDoneFrame
-  | ChatErrorFrame;
+type ChatStreamFrame = ChatStartFrame | ChatChunkFrame | ChatDoneFrame | ChatErrorFrame;
 
 /* ── Stream parser ────────────────────────────────────────────────────────── */
 
@@ -66,10 +59,7 @@ type ChatStreamFrame =
  *          Aborting closes the connection; the backend catches the disconnect
  *          and stops generation.
  */
-function send(
-  payload: ChatSendPayload,
-  callbacks: ChatStreamCallbacks,
-): AbortController {
+function send(payload: ChatSendPayload, callbacks: ChatStreamCallbacks): AbortController {
   const controller = new AbortController();
 
   (async () => {

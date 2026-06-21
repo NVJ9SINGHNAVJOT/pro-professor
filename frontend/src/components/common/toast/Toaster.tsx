@@ -1,19 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  CircleCheckIcon,
-  InfoIcon,
-  OctagonXIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { CircleCheckIcon, InfoIcon, OctagonXIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  dismiss,
-  getToasts,
-  subscribe,
-  type ToastItem,
-  type ToastType,
-} from "./store";
+import { dismiss, getToasts, subscribe, type ToastItem, type ToastType } from "./store";
 
 const icons: Record<ToastType, { Icon: typeof InfoIcon; className: string }> = {
   success: { Icon: CircleCheckIcon, className: "text-emerald-400" },
@@ -36,9 +24,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       <div className="min-w-0 flex-1">
         <p className="para-small-semibold wrap-break-word">{item.title}</p>
         {item.description && (
-          <p className="para-small-regular mt-0.5 text-neutral-400 wrap-break-word">
-            {item.description}
-          </p>
+          <p className="para-small-regular mt-0.5 text-neutral-400 wrap-break-word">{item.description}</p>
         )}
       </div>
       <button

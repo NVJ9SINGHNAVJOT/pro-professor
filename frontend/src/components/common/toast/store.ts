@@ -56,12 +56,9 @@ export function subscribe(listener: (items: ToastItem[]) => void) {
 }
 
 export const toast = {
-  success: (title: string, options?: ToastOptions) =>
-    add("success", title, options),
-  error: (title: string, options?: ToastOptions) =>
-    add("error", title, options),
+  success: (title: string, options?: ToastOptions) => add("success", title, options),
+  error: (title: string, options?: ToastOptions) => add("error", title, options),
   info: (title: string, options?: ToastOptions) => add("info", title, options),
-  warning: (title: string, options?: ToastOptions) =>
-    add("warning", title, options),
+  warning: (title: string, options?: ToastOptions) => add("warning", title, options),
   dismiss,
 };

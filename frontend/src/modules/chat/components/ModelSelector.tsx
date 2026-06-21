@@ -23,16 +23,19 @@ interface ModelSelectorProps {
 const SEPARATOR = "::";
 const encode = (provider: string, name: string) => `${provider}${SEPARATOR}${name}`;
 
-const MODALITY_META: Record<string, { icon: React.ComponentType<{ size?: number }>; label: string; className: string }> = {
-  text:  { icon: FileText,   label: "Text",  className: "bg-neutral-700 text-neutral-300" },
-  image: { icon: ImageIcon,  label: "Image", className: "bg-violet-900/60 text-violet-300" },
-  audio: { icon: Mic,        label: "Audio", className: "bg-blue-900/60 text-blue-300" },
-  video: { icon: Video,      label: "Video", className: "bg-amber-900/60 text-amber-300" },
+const MODALITY_META: Record<
+  string,
+  { icon: React.ComponentType<{ size?: number }>; label: string; className: string }
+> = {
+  text: { icon: FileText, label: "Text", className: "bg-neutral-700 text-neutral-300" },
+  image: { icon: ImageIcon, label: "Image", className: "bg-violet-900/60 text-violet-300" },
+  audio: { icon: Mic, label: "Audio", className: "bg-blue-900/60 text-blue-300" },
+  video: { icon: Video, label: "Video", className: "bg-amber-900/60 text-amber-300" },
 };
 
 const PROVIDER_META: Record<ModelProvider, { label: string; className: string }> = {
   "ai-service": { label: "AI Service", className: "bg-emerald-900/60 text-emerald-300" },
-  ollama:       { label: "Ollama",     className: "bg-sky-900/60 text-sky-300" },
+  ollama: { label: "Ollama", className: "bg-sky-900/60 text-sky-300" },
 };
 
 const PROVIDER_ORDER: ModelProvider[] = ["ai-service", "ollama"];
@@ -72,7 +75,9 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       <SelectItem key={encode(m.provider, m.name)} value={encode(m.provider, m.name)}>
         <span className="flex items-center gap-2">
           {provider && (
-            <span className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${provider.className}`}>
+            <span
+              className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${provider.className}`}
+            >
               {provider.label}
             </span>
           )}
@@ -118,26 +123,31 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
           </span>
         )}
         <span className={isAvailable ? "text-neutral-300" : "text-neutral-400"}>{value.model}</span>
-        {isAvailable && modalities.map((mod) => {
-          const meta = MODALITY_META[mod];
-          if (!meta) return null;
-          const Icon = meta.icon;
-          return (
-            <span
-              key={mod}
-              title={meta.label}
-              className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${meta.className}`}
-            >
-              <Icon size={10} />
-              {meta.label}
-            </span>
-          );
-        })}
+        {isAvailable &&
+          modalities.map((mod) => {
+            const meta = MODALITY_META[mod];
+            if (!meta) return null;
+            const Icon = meta.icon;
+            return (
+              <span
+                key={mod}
+                title={meta.label}
+                className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${meta.className}`}
+              >
+                <Icon size={10} />
+                {meta.label}
+              </span>
+            );
+          })}
       </div>
     );
 
     if (!isAvailable) {
-      return <Tooltip content="Model not available" side="top">{display}</Tooltip>;
+      return (
+        <Tooltip content="Model not available" side="top">
+          {display}
+        </Tooltip>
+      );
     }
     return display;
   }

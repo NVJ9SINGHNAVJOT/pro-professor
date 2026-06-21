@@ -3,11 +3,7 @@ import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import { toast } from "@/components/common/toast";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
-import {
-  removeConversation,
-  setHistory,
-  type ChatHistoryItem,
-} from "@/redux/slices/chatSlice";
+import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { ROUTES } from "@/constants/routes";
@@ -43,9 +39,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
   // filter by search query, then bucket by recency
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? history.filter((chat) => chat.title.toLowerCase().includes(q))
-      : history;
+    const filtered = q ? history.filter((chat) => chat.title.toLowerCase().includes(q)) : history;
     const buckets = new Map<Group, ChatHistoryItem[]>();
     filtered.forEach((chat) => {
       const group = groupOf(chat.updatedAt);
@@ -83,9 +77,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
         className={cn(
           "z-40 h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-67.5",
-          isOpen
-            ? "w-67.5 max-md:translate-x-0"
-            : "w-0 max-md:-translate-x-full",
+          isOpen ? "w-67.5 max-md:translate-x-0" : "w-0 max-md:-translate-x-full",
         )}
       >
         <div
@@ -122,15 +114,11 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           {/* Chat history, grouped by recency */}
           <div className="chat-scroll flex-1 overflow-y-auto px-2 pb-2">
             {grouped.length === 0 && (
-              <div className="px-2 caption-regular text-neutral-500">
-                {query ? "No chats found" : "No chats yet"}
-              </div>
+              <div className="px-2 caption-regular text-neutral-500">{query ? "No chats found" : "No chats yet"}</div>
             )}
             {grouped.map((group) => (
               <div key={group.label} className="mb-4">
-                <div className="px-2 pb-1 caption-small-medium text-neutral-500">
-                  {group.label}
-                </div>
+                <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
                 {group.chats.map((chat) => (
                   <NavLink
                     key={chat.id}
