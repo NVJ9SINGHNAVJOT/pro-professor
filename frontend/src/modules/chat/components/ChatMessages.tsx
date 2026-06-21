@@ -28,6 +28,7 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
+import { blobToWav } from "@/modules/chat/wav";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/services/operations/models/models.route";
@@ -87,7 +88,7 @@ const ErrorMessage = ({ content }: { content: string }) => (
   </div>
 );
 
-/** Renders a message's attachments — images inline, other files as a download chip. */
+/** Renders a message's attachments — images inline, audio as a player, other files as a chip. */
 const MessageAttachments = ({
   attachments,
 }: {
@@ -110,6 +111,13 @@ const MessageAttachments = ({
               className="max-h-48 max-w-64 rounded-2xl object-cover"
             />
           </a>
+        ) : a.mimeType.startsWith("audio/") ? (
+          <audio
+            key={a.id}
+            src={mediaApi.fileUrl(a.id)}
+            controls
+            className="h-10 max-w-64"
+          />
         ) : (
           <a
             key={a.id}
@@ -181,6 +189,13 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     selectedRef.current = selected;
   }, [selected]);
 
+  // Input modalities for a model, from the loaded list (falls back to text-only).
+  // Read at decision time so it's correct even if the conversation loaded before
+  // the models list did (cold reload).
+  const findModalities = (provider: ModelProvider, model: string): string[] =>
+    models.find((m) => m.provider === provider && m.name === model)
+      ?.inputModalities ?? ["text"];
+
   // load (or reset) conversation when the route param changes
   useEffect(() => {
     autoScrollRef.current = true;
@@ -223,7 +238,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       setSelected({
         provider: detail.provider as ModelProvider,
         model: detail.model,
-        inputModalities: ["text"],
+        inputModalities: findModalities(
+          detail.provider as ModelProvider,
+          detail.model,
+        ),
       });
       convIdRef.current = id;
       loadedRef.current = id;
@@ -309,9 +327,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const removeAttachment = (id: number) =>
     setAttachments((prev) => prev.filter((a) => a.id !== id));
 
-  const handleSend = (text?: string, opts?: { speak?: boolean }) => {
+  const handleSend = (
+    text?: string,
+    opts?: { speak?: boolean; attachments?: MediaAttachment[] },
+  ) => {
     const content = (text ?? input).trim();
-    const pending = attachments;
+    // The voice/audio path passes its uploaded clip explicitly; otherwise use the
+    // attachments pending in the input bar.
+    const pending = opts?.attachments ?? attachments;
     if ((!content && pending.length === 0) || streaming) return;
     if (!selected) {
       toast.error("Select a model first");
@@ -324,8 +347,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       { role: "user", content, attachments: pending },
       { role: "assistant", content: "" },
     ]);
-    setInput("");
-    setAttachments([]);
+    // Only clear the input bar's own state when we actually consumed it.
+    if (!opts?.attachments) {
+      setInput("");
+      setAttachments([]);
+    }
     setStreaming(true);
 
     let fullReply = "";
@@ -415,7 +441,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setVoiceMode("idle");
   };
 
-  // Voice utterance: transcribe → send as a normal chat message → speak the reply
+  // Voice utterance. Audio-capable models receive the clip directly (uploaded as
+  // WAV, sent with empty text); text models are transcribed to text first. Either
+  // way the reply is spoken back.
   const handleUtterance = async (blob: Blob) => {
     if (!selected) {
       toast.error("Select a model first");
@@ -424,6 +452,17 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
     try {
       setVoiceMode("thinking");
+      const acceptsAudio = findModalities(
+        selected.provider,
+        selected.model,
+      ).includes("audio");
+      if (acceptsAudio) {
+        const wav = await blobToWav(blob);
+        const file = new File([wav], "utterance.wav", { type: "audio/wav" });
+        const media = await mediaApi.upload(file);
+        handleSend("", { speak: true, attachments: [media] });
+        return;
+      }
       const text = await audioApi.transcribe(blob);
       if (!text.trim()) {
         toast.error("Didn't catch that — please try again");
@@ -432,7 +471,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       }
       handleSend(text, { speak: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Transcription failed");
+      toast.error(err instanceof Error ? err.message : "Couldn't process the recording");
       setVoiceMode("idle");
     }
   };

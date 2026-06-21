@@ -46,6 +46,11 @@ public class MediaService {
         return storageClient.download(row.storageId());
     }
 
+    /** Raw stored bytes for a known media row — used to forward audio clips to the model. */
+    public byte[] bytes(MediaRow row) {
+        return storageClient.download(row.storageId()).getBody();
+    }
+
     /** Maps a stored row to the wire shape, deriving the central-server download URL. */
     public MediaResponse toResponse(MediaRow row) {
         return new MediaResponse(

@@ -15,6 +15,7 @@ import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ClientDisconnectedException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
 import com.proprofessor.server.media.MediaRepository;
+import com.proprofessor.server.media.MediaService;
 import com.proprofessor.server.model.ModelService;
 import com.proprofessor.server.model.dto.ModelProvider;
 import org.slf4j.Logger;
@@ -23,8 +24,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -47,6 +52,7 @@ public class ChatService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final MediaRepository mediaRepository;
+    private final MediaService mediaService;
     private final ModelService modelService;
     private final ChatCompletionClient chatCompletionClient;
     private final ChatMapper chatMapper;
@@ -55,6 +61,7 @@ public class ChatService {
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             MediaRepository mediaRepository,
+            MediaService mediaService,
             ModelService modelService,
             ChatCompletionClient chatCompletionClient,
             ChatMapper chatMapper
@@ -62,6 +69,7 @@ public class ChatService {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.mediaRepository = mediaRepository;
+        this.mediaService = mediaService;
         this.modelService = modelService;
         this.chatCompletionClient = chatCompletionClient;
         this.chatMapper = chatMapper;
@@ -79,6 +87,9 @@ public class ChatService {
         linkAttachments(userMessage.id(), command.attachmentIds());
 
         List<ChatMessage> history = messageRepository.findHistory(conversation.id(), MODEL_ROLES);
+        if (provider == ModelProvider.AI_SERVICE) {
+            history = withCurrentTurnAudio(history, command.attachmentIds());
+        }
 
         try {
             if (provider == ModelProvider.AI_SERVICE) {
@@ -150,6 +161,56 @@ public class ChatService {
         }
         mediaRepository.findByIds(attachmentIds)
                 .forEach(media -> mediaRepository.linkToMessage(messageId, media.id()));
+    }
+
+    /**
+     * Forwards the current turn's spoken input to an audio-capable model: when this turn's
+     * attachments include audio, the last (current) user message in {@code history} is rebuilt
+     * to carry each clip as an {@code input_audio} part. Earlier turns stay text-only, matching
+     * the AI service's "most recent media only" behavior. Returns the history unchanged when
+     * there's no audio to forward.
+     */
+    private List<ChatMessage> withCurrentTurnAudio(List<ChatMessage> history, List<Long> attachmentIds) {
+        if (history.isEmpty() || attachmentIds == null || attachmentIds.isEmpty()) {
+            return history;
+        }
+        List<ChatMessage.AudioPart> audioParts = mediaRepository.findByIds(attachmentIds).stream()
+                .filter(media -> media.mimeType() != null && media.mimeType().startsWith("audio/"))
+                .map(this::toAudioPart)
+                .filter(Objects::nonNull)
+                .toList();
+        if (audioParts.isEmpty()) {
+            return history;
+        }
+        List<ChatMessage> updated = new ArrayList<>(history);
+        int last = updated.size() - 1;
+        ChatMessage current = updated.get(last);
+        updated.set(last, new ChatMessage(current.role(), current.content(), audioParts));
+        return updated;
+    }
+
+    /** Loads a stored clip's bytes and base64-encodes them for an {@code input_audio} part. */
+    private ChatMessage.AudioPart toAudioPart(MediaRow media) {
+        byte[] bytes = mediaService.bytes(media);
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        return new ChatMessage.AudioPart(
+                Base64.getEncoder().encodeToString(bytes),
+                audioFormat(media.mimeType()));
+    }
+
+    /** Maps an audio MIME type to the format hint the model decodes by (defaults to {@code wav}). */
+    private static String audioFormat(String mimeType) {
+        if (mimeType == null) {
+            return "wav";
+        }
+        String subtype = mimeType.substring(mimeType.indexOf('/') + 1).toLowerCase(Locale.ROOT);
+        return switch (subtype) {
+            case "wave", "x-wav", "vnd.wave", "wav" -> "wav";
+            case "mpeg", "mp3" -> "mp3";
+            default -> subtype.isBlank() ? "wav" : subtype;
+        };
     }
 
     private static String deriveTitle(String content) {

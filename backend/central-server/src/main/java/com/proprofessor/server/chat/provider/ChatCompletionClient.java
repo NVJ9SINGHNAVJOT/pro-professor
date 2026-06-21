@@ -4,12 +4,16 @@ import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.core.http.StreamResponse;
 import com.openai.models.chat.completions.ChatCompletionChunk;
+import com.openai.models.chat.completions.ChatCompletionContentPart;
+import com.openai.models.chat.completions.ChatCompletionContentPartInputAudio;
+import com.openai.models.chat.completions.ChatCompletionContentPartText;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import com.proprofessor.server.chat.provider.dto.ChatMessage;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -80,8 +84,38 @@ public class ChatCompletionClient {
         switch (message.role()) {
             case "system" -> params.addSystemMessage(content);
             case "assistant" -> params.addAssistantMessage(content);
-            default -> params.addUserMessage(content);
+            default -> appendUserMessage(params, message);
         }
+    }
+
+    /**
+     * Adds a user turn. Text-only turns go through the plain string overload; a turn
+     * carrying audio becomes a multimodal message with one {@code input_audio} content
+     * part per clip (plus a text part when there's also typed text).
+     */
+    private static void appendUserMessage(ChatCompletionCreateParams.Builder params, ChatMessage message) {
+        List<ChatMessage.AudioPart> audio = message.audio();
+        if (audio == null || audio.isEmpty()) {
+            params.addUserMessage(message.content());
+            return;
+        }
+
+        List<ChatCompletionContentPart> parts = new ArrayList<>();
+        String text = message.content();
+        if (text != null && !text.isBlank()) {
+            parts.add(ChatCompletionContentPart.ofText(
+                    ChatCompletionContentPartText.builder().text(text).build()));
+        }
+        for (ChatMessage.AudioPart clip : audio) {
+            parts.add(ChatCompletionContentPart.ofInputAudio(
+                    ChatCompletionContentPartInputAudio.builder()
+                            .inputAudio(ChatCompletionContentPartInputAudio.InputAudio.builder()
+                                    .data(clip.base64Data())
+                                    .format(ChatCompletionContentPartInputAudio.InputAudio.Format.of(clip.format()))
+                                    .build())
+                            .build()));
+        }
+        params.addUserMessageOfArrayOfContentParts(parts);
     }
 
     private static OpenAIClient buildClient(String baseUrl, String apiKey) {
