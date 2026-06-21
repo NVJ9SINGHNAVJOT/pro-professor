@@ -1,6 +1,6 @@
 import { createRoute } from "@/services/client/apiRoute";
 import { BASE_URL_SERVER } from "@/services/client/config";
-import type { MediaAttachment } from "@/services/operations/media/media";
+import type { MediaAttachment } from "@/services/operations/media/media.api";
 
 const chatsEndPoints = {
   GET_ALL: `${BASE_URL_SERVER}/chats`,

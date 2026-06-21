@@ -16,16 +16,12 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat } from "@/services/operations/chats/chats.stream";
+import { chatsStream } from "@/services/operations/chats/chats.stream";
+import { audioApi } from "@/services/operations/audio/audio.api";
 import {
-  synthesizeSpeech,
-  transcribeAudio,
-} from "@/services/operations/audio/audio";
-import {
-  mediaFileUrl,
-  uploadMedia,
+  mediaApi,
   type MediaAttachment,
-} from "@/services/operations/media/media";
+} from "@/services/operations/media/media.api";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -104,12 +100,12 @@ const MessageAttachments = ({
         a.mimeType.startsWith("image/") ? (
           <a
             key={a.id}
-            href={mediaFileUrl(a.id)}
+            href={mediaApi.fileUrl(a.id)}
             target="_blank"
             rel="noreferrer"
           >
             <img
-              src={mediaFileUrl(a.id)}
+              src={mediaApi.fileUrl(a.id)}
               alt={a.originalFilename}
               className="max-h-48 max-w-64 rounded-2xl object-cover"
             />
@@ -117,7 +113,7 @@ const MessageAttachments = ({
         ) : (
           <a
             key={a.id}
-            href={mediaFileUrl(a.id)}
+            href={mediaApi.fileUrl(a.id)}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-2xl bg-neutral-700 px-3 py-2 para-small-medium text-neutral-100 hover:bg-neutral-600"
@@ -266,7 +262,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   // Synthesize the assistant reply and play it back (used in voice mode).
   const playReply = async (text: string) => {
     try {
-      const blob = await synthesizeSpeech(text);
+      const blob = await audioApi.synthesize(text);
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -300,7 +296,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setUploading(true);
     try {
       const uploaded = await Promise.all(
-        files.map((file) => uploadMedia(file)),
+        files.map((file) => mediaApi.upload(file)),
       );
       setAttachments((prev) => [...prev, ...uploaded]);
     } catch (err) {
@@ -333,7 +329,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setStreaming(true);
 
     let fullReply = "";
-    const controller = streamChat(
+    const controller = chatsStream.send(
       {
         conversationId: convIdRef.current,
         provider: selected.provider,
@@ -428,7 +424,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
     try {
       setVoiceMode("thinking");
-      const text = await transcribeAudio(blob);
+      const text = await audioApi.transcribe(blob);
       if (!text.trim()) {
         toast.error("Didn't catch that — please try again");
         setVoiceMode("idle");
@@ -568,7 +564,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                     >
                       {a.mimeType.startsWith("image/") ? (
                         <img
-                          src={mediaFileUrl(a.id)}
+                          src={mediaApi.fileUrl(a.id)}
                           alt={a.originalFilename}
                           className="size-9 rounded-lg object-cover"
                         />
