@@ -450,8 +450,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         </div>
       )}
 
-      {/* Floating toggle button */}
-      <div className="absolute left-4 top-2.5 z-20">
+      {/* Top bar: sidebar toggle + model selector */}
+      <div className="relative z-20 flex items-center gap-2 px-4 py-2.5">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -460,6 +460,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         >
           {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
+        <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
       </div>
 
       {/* Empty state or message list */}
@@ -587,9 +588,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                     inputDisabled ? "cursor-not-allowed placeholder:text-neutral-600" : "placeholder:text-neutral-500",
                   )}
                 />
-                <div className="mb-0.5 shrink-0">
-                  <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-                </div>
                 {streaming ? (
                   <button
                     type="button"
