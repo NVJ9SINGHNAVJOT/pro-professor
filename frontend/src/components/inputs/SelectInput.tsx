@@ -1,6 +1,12 @@
-import { cn } from "@/utils/cn";
+import { cn } from "@/lib/utils";
 import { forwardRef } from "react";
-import { Select as RadixSelect, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select as RadixSelect,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 interface Option {
   label: string;
@@ -40,7 +46,7 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
       optionClassName,
       defaultOpen,
     },
-    ref
+    ref,
   ) => {
     const handleSelect = (val: string) => {
       if (readOnly) return;
@@ -49,27 +55,45 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
 
     return (
       <div ref={ref} className={cn("relative", className)}>
-        {name && <input type="hidden" name={name} value={value ?? ""} required={required} readOnly={readOnly} />}
+        {name && (
+          <input
+            type="hidden"
+            name={name}
+            value={value ?? ""}
+            required={required}
+            readOnly={readOnly}
+          />
+        )}
 
-        <RadixSelect value={value} onValueChange={handleSelect} disabled={readOnly} defaultOpen={defaultOpen}>
+        <RadixSelect
+          value={value}
+          onValueChange={handleSelect}
+          disabled={readOnly}
+          defaultOpen={defaultOpen}
+        >
           <SelectTrigger
             className={cn(
               "h-12 w-full rounded-xl border-neutral-700 bg-chat-input para-small-medium text-white! shadow-none data-[placeholder]:text-neutral-500 focus-visible:border-neutral-500 focus-visible:ring-0",
               readOnly && "cursor-not-allowed opacity-70",
               buttonClassName,
-              placeholderClassName
+              placeholderClassName,
             )}
           >
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
-          <SelectContent className={cn("border-neutral-700 bg-chat-input text-white", dropdownClassName)}>
+          <SelectContent
+            className={cn(
+              "border-neutral-700 bg-chat-input text-white",
+              dropdownClassName,
+            )}
+          >
             {options.map((o) => (
               <SelectItem
                 key={o.value}
                 value={o.value}
                 className={cn(
                   "para-small-medium text-neutral-100 focus:bg-neutral-700 focus:text-white",
-                  optionClassName
+                  optionClassName,
                 )}
               >
                 {o.label}
@@ -79,7 +103,7 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
         </RadixSelect>
       </div>
     );
-  }
+  },
 );
 
 SelectInput.displayName = "SelectInput";

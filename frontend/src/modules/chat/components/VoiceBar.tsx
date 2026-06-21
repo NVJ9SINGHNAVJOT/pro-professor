@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Loader2Icon, SquareIcon, XIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/common/toast";
 
 /** Pick the first MediaRecorder MIME type the browser supports (Chrome: webm, Safari: mp4). */
 function pickMimeType(): string {

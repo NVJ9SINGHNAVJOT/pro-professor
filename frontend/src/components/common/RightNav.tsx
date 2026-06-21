@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, SettingsIcon } from "lucide-react";
+import { NavLink } from "react-router";
+import {
+  LayoutDashboardIcon,
+  HomeIcon,
+  MessageSquareIcon,
+  SettingsIcon,
+} from "lucide-react";
 import { ROUTES } from "@/constants/routes";
-import { cn } from "@/utils/cn";
+import { cn } from "@/lib/utils";
 
 const name = import.meta.env.VITE_PROFESSOR_NAME;
 
@@ -34,9 +39,15 @@ const RightNav = () => {
           className="w-9 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
         />
         {/* Falling musical notes */}
-        <div aria-hidden className="relative mt-3 w-full flex-1 overflow-hidden">
+        <div
+          aria-hidden
+          className="relative mt-3 w-full flex-1 overflow-hidden"
+        >
           {notes.map((note, index) => (
-            <span key={index} className="ct-note text-neutral-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.35)]">
+            <span
+              key={index}
+              className="ct-note text-neutral-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.35)]"
+            >
               {note}
             </span>
           ))}
@@ -48,7 +59,7 @@ const RightNav = () => {
         onClick={() => setOpen(false)}
         className={cn(
           "fixed inset-0 z-40 bg-black/20 transition-opacity duration-300",
-          open ? "opacity-100" : "pointer-events-none opacity-0"
+          open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       />
 
@@ -56,7 +67,7 @@ const RightNav = () => {
       <aside
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex w-64 flex-col gap-y-2 border-l border-neutral-800 bg-neutral-950 p-3 text-white shadow-2xl transition-transform duration-300 ease-in-out",
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "translate-x-full",
         )}
       >
         <div className="flex items-center gap-x-5 px-1 py-1">
@@ -79,7 +90,7 @@ const RightNav = () => {
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white",
-                  isActive && "bg-neutral-800 text-white"
+                  isActive && "bg-neutral-800 text-white",
                 )
               }
             >

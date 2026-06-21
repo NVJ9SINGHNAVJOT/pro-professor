@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { NavLink, useNavigate, useParams } from "react-router";
+import { toast } from "@/components/common/toast";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
+import {
+  removeConversation,
+  setHistory,
+  type ChatHistoryItem,
+} from "@/redux/slices/chatSlice";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { ROUTES } from "@/constants/routes";
-import { cn } from "@/utils/cn";
+import { cn } from "@/lib/utils";
 import { GROUPS } from "@/modules/chat/constants";
 import type { Group } from "@/modules/chat/types";
 import { groupOf } from "@/modules/chat/utils";
@@ -39,13 +43,18 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
   // filter by search query, then bucket by recency
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q ? history.filter((chat) => chat.title.toLowerCase().includes(q)) : history;
+    const filtered = q
+      ? history.filter((chat) => chat.title.toLowerCase().includes(q))
+      : history;
     const buckets = new Map<Group, ChatHistoryItem[]>();
     filtered.forEach((chat) => {
       const group = groupOf(chat.updatedAt);
       buckets.set(group, [...(buckets.get(group) ?? []), chat]);
     });
-    return GROUPS.filter((group) => buckets.has(group)).map((group) => ({ label: group, chats: buckets.get(group)! }));
+    return GROUPS.filter((group) => buckets.has(group)).map((group) => ({
+      label: group,
+      chats: buckets.get(group)!,
+    }));
   }, [history, query]);
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
@@ -67,20 +76,22 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
         onClick={onToggle}
         className={cn(
           "fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity duration-300 md:hidden",
-          isOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       />
       <aside
         className={cn(
           "z-40 h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-67.5",
-          isOpen ? "w-67.5 max-md:translate-x-0" : "w-0 max-md:-translate-x-full"
+          isOpen
+            ? "w-67.5 max-md:translate-x-0"
+            : "w-0 max-md:-translate-x-full",
         )}
       >
         <div
           className={cn(
             "flex h-full w-67.5 flex-col gap-y-2 pt-2 transition-opacity duration-300",
-            isOpen ? "opacity-100" : "opacity-0"
+            isOpen ? "opacity-100" : "opacity-0",
           )}
         >
           {/* New chat */}
@@ -111,11 +122,15 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           {/* Chat history, grouped by recency */}
           <div className="chat-scroll flex-1 overflow-y-auto px-2 pb-2">
             {grouped.length === 0 && (
-              <div className="px-2 caption-regular text-neutral-500">{query ? "No chats found" : "No chats yet"}</div>
+              <div className="px-2 caption-regular text-neutral-500">
+                {query ? "No chats found" : "No chats yet"}
+              </div>
             )}
             {grouped.map((group) => (
               <div key={group.label} className="mb-4">
-                <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
+                <div className="px-2 pb-1 caption-small-medium text-neutral-500">
+                  {group.label}
+                </div>
                 {group.chats.map((chat) => (
                   <NavLink
                     key={chat.id}
@@ -123,7 +138,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
                     className={({ isActive }) =>
                       cn(
                         "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 para-small-medium hover:bg-neutral-800",
-                        isActive && "bg-neutral-800"
+                        isActive && "bg-neutral-800",
                       )
                     }
                   >

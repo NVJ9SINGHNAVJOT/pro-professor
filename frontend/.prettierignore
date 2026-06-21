@@ -1,7 +1,0 @@
-dist
-node_modules
-public
-.env
-.env.example
-package-lock.json
-DockerFile

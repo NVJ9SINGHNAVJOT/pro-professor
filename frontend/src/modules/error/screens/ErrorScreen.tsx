@@ -1,6 +1,6 @@
 import Page from "@/components/common/Page";
 import { ROUTES } from "@/constants/routes";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 const ErrorScreen = () => {
   const navigate = useNavigate();

@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/common/toast";
 import { WS_URL_SERVER } from "@/services/client/config";
 import { wsEvents } from "@/socket/events";
 import type { ServerEvent, ServerEventMap, ServerEventType } from "@/types/socket/chatEvents";
@@ -117,7 +117,9 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [dispatch, stopHeartbeat]);
 
-  connectRef.current = connect;
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;

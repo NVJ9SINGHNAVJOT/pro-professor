@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { useNavigate, useParams } from "react-router";
+import { toast } from "@/components/common/toast";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -17,8 +17,15 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { streamChat } from "@/services/operations/chats/chats.stream";
-import { synthesizeSpeech, transcribeAudio } from "@/services/operations/audio/audio";
-import { mediaFileUrl, uploadMedia, type MediaAttachment } from "@/services/operations/media/media";
+import {
+  synthesizeSpeech,
+  transcribeAudio,
+} from "@/services/operations/audio/audio";
+import {
+  mediaFileUrl,
+  uploadMedia,
+  type MediaAttachment,
+} from "@/services/operations/media/media";
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -26,12 +33,22 @@ import { addConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import { ROUTES } from "@/constants/routes";
-import { cn } from "@/utils/cn";
+import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/services/operations/models/models.route";
 import type { SelectedModel, UiMessage } from "@/modules/chat/types";
-import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
+import {
+  AUTOSCROLL_THRESHOLD_PX,
+  MAX_TEXTAREA_HEIGHT_PX,
+  SUGGESTIONS,
+} from "@/modules/chat/constants";
 
-const AssistantMessage = ({ content, isStreaming }: { content: string; isStreaming: boolean }) => {
+const AssistantMessage = ({
+  content,
+  isStreaming,
+}: {
+  content: string;
+  isStreaming: boolean;
+}) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -54,7 +71,11 @@ const AssistantMessage = ({ content, isStreaming }: { content: string; isStreami
             aria-label="Copy message"
             className="mt-4 cursor-pointer rounded-md text-neutral-400 transition-opacity hover:bg-neutral-800 hover:text-white"
           >
-            {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+            {copied ? (
+              <CheckIcon className="size-4" />
+            ) : (
+              <CopyIcon className="size-4" />
+            )}
           </button>
         )}
       </div>
@@ -71,13 +92,22 @@ const ErrorMessage = ({ content }: { content: string }) => (
 );
 
 /** Renders a message's attachments — images inline, other files as a download chip. */
-const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] }) => {
+const MessageAttachments = ({
+  attachments,
+}: {
+  attachments: MediaAttachment[];
+}) => {
   if (attachments.length === 0) return null;
   return (
     <div className="mb-1.5 flex flex-wrap justify-end gap-2">
       {attachments.map((a) =>
         a.mimeType.startsWith("image/") ? (
-          <a key={a.id} href={mediaFileUrl(a.id)} target="_blank" rel="noreferrer">
+          <a
+            key={a.id}
+            href={mediaFileUrl(a.id)}
+            target="_blank"
+            rel="noreferrer"
+          >
             <img
               src={mediaFileUrl(a.id)}
               alt={a.originalFilename}
@@ -95,7 +125,7 @@ const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] })
             <FileIcon className="size-4 shrink-0" />
             <span className="max-w-48 truncate">{a.originalFilename}</span>
           </a>
-        )
+        ),
       )}
     </div>
   );
@@ -111,7 +141,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
-  const { models, loaded: modelsLoaded } = useAppSelector((state) => state.models);
+  const { models, loaded: modelsLoaded } = useAppSelector(
+    (state) => state.models,
+  );
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
@@ -123,14 +155,20 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const inputDisabled = modelsLoaded && (
-    models.length === 0 ||
-    (Boolean(chatId) && selected !== null && !models.some((m) => m.provider === selected.provider && m.name === selected.model))
-  );
+  const inputDisabled =
+    modelsLoaded &&
+    (models.length === 0 ||
+      (Boolean(chatId) &&
+        selected !== null &&
+        !models.some(
+          (m) => m.provider === selected.provider && m.name === selected.model,
+        )));
 
   // voice chat state
   const [voiceMode, setVoiceMode] = useState<VoiceMode | "idle">("idle");
-  const [playbackAudio, setPlaybackAudio] = useState<HTMLAudioElement | null>(null);
+  const [playbackAudio, setPlaybackAudio] = useState<HTMLAudioElement | null>(
+    null,
+  );
 
   // refs
   const convIdRef = useRef<number | null>(null);
@@ -176,12 +214,21 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       const detail = res.response.data;
       setMessages(
         detail.messages.map((m) => ({
-          role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
+          role:
+            m.role === "assistant"
+              ? "assistant"
+              : m.role === "error"
+                ? "error"
+                : "user",
           content: m.content,
           attachments: m.attachments,
-        }))
+        })),
       );
-      setSelected({ provider: detail.provider as ModelProvider, model: detail.model, inputModalities: ["text"] });
+      setSelected({
+        provider: detail.provider as ModelProvider,
+        model: detail.model,
+        inputModalities: ["text"],
+      });
       convIdRef.current = id;
       loadedRef.current = id;
     })();
@@ -243,14 +290,18 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // allow re-selecting the same file
     if (files.length === 0) return;
 
     setUploading(true);
     try {
-      const uploaded = await Promise.all(files.map((file) => uploadMedia(file)));
+      const uploaded = await Promise.all(
+        files.map((file) => uploadMedia(file)),
+      );
       setAttachments((prev) => [...prev, ...uploaded]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -259,7 +310,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
   };
 
-  const removeAttachment = (id: number) => setAttachments((prev) => prev.filter((a) => a.id !== id));
+  const removeAttachment = (id: number) =>
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
 
   const handleSend = (text?: string, opts?: { speak?: boolean }) => {
     const content = (text ?? input).trim();
@@ -301,7 +353,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 title,
                 model: selectedRef.current?.model ?? "",
                 updatedAt: new Date().toISOString(),
-              })
+              }),
             );
             navigate(ROUTES.CHAT_DETAIL(conversationId), { replace: true });
           }
@@ -312,7 +364,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             const next = [...prev];
             const last = next[next.length - 1];
             if (last && last.role === "assistant") {
-              next[next.length - 1] = { ...last, content: last.content + delta };
+              next[next.length - 1] = {
+                ...last,
+                content: last.content + delta,
+              };
             }
             return next;
           });
@@ -325,7 +380,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         onError: (message, meta) => {
           setStreaming(false);
           if (opts?.speak) setVoiceMode("idle");
-          const display = meta?.requestId ? `${message} (ref: ${meta.requestId})` : message;
+          const display = meta?.requestId
+            ? `${message} (ref: ${meta.requestId})`
+            : message;
           // Replace the empty assistant placeholder with the error; keep any partial reply above it.
           setMessages((prev) => {
             const next = [...prev];
@@ -339,7 +396,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           });
           toast.error(message);
         },
-      }
+      },
     );
 
     abortRef.current = controller;
@@ -412,7 +469,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
       {/* Background glow (only for empty state, covers full section) */}
       {showEmptyState && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
           <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
         </div>
       )}
@@ -425,14 +485,20 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           aria-label="Toggle sidebar"
           className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
         >
-          {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
+          {sidebarOpen ? (
+            <PanelLeftCloseIcon className="size-5" />
+          ) : (
+            <PanelLeftOpenIcon className="size-5" />
+          )}
         </button>
       </div>
 
       {/* Empty state or message list */}
       {showEmptyState ? (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4">
-          <h1 className="relative heading-small-medium text-center">What can I help with?</h1>
+          <h1 className="relative heading-small-medium text-center">
+            What can I help with?
+          </h1>
           <div className="relative mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
             {SUGGESTIONS.map((suggestion) => (
               <button
@@ -441,20 +507,30 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 onClick={() => handleSend(suggestion.prompt)}
                 className="cursor-pointer rounded-2xl border border-neutral-800 bg-neutral-800/40 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-neutral-600 hover:bg-neutral-800"
               >
-                <div className="para-small-semibold text-neutral-200">{suggestion.title}</div>
-                <div className="truncate caption-small-regular text-neutral-500">{suggestion.prompt}</div>
+                <div className="para-small-semibold text-neutral-200">
+                  {suggestion.title}
+                </div>
+                <div className="truncate caption-small-regular text-neutral-500">
+                  {suggestion.prompt}
+                </div>
               </button>
             ))}
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll relative z-10 flex-1 overflow-y-auto px-4 py-6">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="chat-scroll relative z-10 flex-1 overflow-y-auto px-4 py-6"
+        >
           <div className="mx-auto flex max-w-5xl flex-col gap-y-6">
             {messages.map((message, index) => {
               if (message.role === "user") {
                 return (
                   <div key={index} className="flex flex-col items-end">
-                    {message.attachments && <MessageAttachments attachments={message.attachments} />}
+                    {message.attachments && (
+                      <MessageAttachments attachments={message.attachments} />
+                    )}
                     {message.content && (
                       <div className="max-w-[75%] whitespace-pre-wrap wrap-break-word rounded-3xl bg-linear-to-br from-neutral-700 to-neutral-600 px-4 py-2 para-small-medium shadow-sm">
                         {message.content}
@@ -491,11 +567,17 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                       className="group relative flex items-center gap-2 rounded-xl bg-neutral-700 py-1.5 pl-2 pr-1.5 caption-small-regular text-neutral-200"
                     >
                       {a.mimeType.startsWith("image/") ? (
-                        <img src={mediaFileUrl(a.id)} alt={a.originalFilename} className="size-9 rounded-lg object-cover" />
+                        <img
+                          src={mediaFileUrl(a.id)}
+                          alt={a.originalFilename}
+                          className="size-9 rounded-lg object-cover"
+                        />
                       ) : (
                         <FileIcon className="size-4 shrink-0" />
                       )}
-                      <span className="max-w-32 truncate">{a.originalFilename}</span>
+                      <span className="max-w-32 truncate">
+                        {a.originalFilename}
+                      </span>
                       <button
                         type="button"
                         onClick={() => removeAttachment(a.id)}
@@ -509,80 +591,88 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 </div>
               )}
               <div className="flex items-end gap-x-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                aria-label="Upload file"
-                tabIndex={-1}
-                onChange={handleFilesSelected}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={handleAttachClick}
-                disabled={inputDisabled || uploading}
-                aria-label="Attach file"
-                className={cn(
-                  "rounded-full p-2.5 transition-colors",
-                  inputDisabled || uploading
-                    ? "cursor-not-allowed text-neutral-600"
-                    : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white"
-                )}
-              >
-                <PaperclipIcon className="size-4.5" />
-              </button>
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                disabled={inputDisabled}
-                placeholder={inputDisabled ? "Model not available" : "Message..."}
-                className={cn(
-                  "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
-                  inputDisabled ? "cursor-not-allowed placeholder:text-neutral-600" : "placeholder:text-neutral-500"
-                )}
-              />
-              <div className="mb-0.5 shrink-0">
-                <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-              </div>
-              {streaming ? (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  aria-label="Upload file"
+                  tabIndex={-1}
+                  onChange={handleFilesSelected}
+                  className="hidden"
+                />
                 <button
                   type="button"
-                  onClick={handleStop}
-                  aria-label="Stop generating"
-                  className="cursor-pointer rounded-full bg-white p-2.5 text-black transition-transform hover:scale-105"
-                >
-                  <SquareIcon className="size-4 fill-current" />
-                </button>
-              ) : input.trim() || attachments.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  aria-label="Send message"
-                  className="cursor-pointer rounded-full bg-linear-to-br from-white to-neutral-400 p-2.5 text-black transition-all hover:scale-105"
-                >
-                  <ArrowUpIcon className="size-4.5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={enterVoiceMode}
-                  disabled={inputDisabled}
-                  aria-label="Start voice chat"
+                  onClick={handleAttachClick}
+                  disabled={inputDisabled || uploading}
+                  aria-label="Attach file"
                   className={cn(
-                    "rounded-full p-2.5 transition-all",
-                    inputDisabled
+                    "rounded-full p-2.5 transition-colors",
+                    inputDisabled || uploading
                       ? "cursor-not-allowed text-neutral-600"
-                      : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                      : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white",
                   )}
                 >
-                  <MicIcon className="size-4.5" />
+                  <PaperclipIcon className="size-4.5" />
                 </button>
-              )}
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  disabled={inputDisabled}
+                  placeholder={
+                    inputDisabled ? "Model not available" : "Message..."
+                  }
+                  className={cn(
+                    "flex-1 resize-none bg-transparent px-1 py-2 outline-none para-small-medium",
+                    inputDisabled
+                      ? "cursor-not-allowed placeholder:text-neutral-600"
+                      : "placeholder:text-neutral-500",
+                  )}
+                />
+                <div className="mb-0.5 shrink-0">
+                  <ModelSelector
+                    value={selected}
+                    onChange={setSelected}
+                    disabled={Boolean(chatId)}
+                  />
+                </div>
+                {streaming ? (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    aria-label="Stop generating"
+                    className="cursor-pointer rounded-full bg-white p-2.5 text-black transition-transform hover:scale-105"
+                  >
+                    <SquareIcon className="size-4 fill-current" />
+                  </button>
+                ) : input.trim() || attachments.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    aria-label="Send message"
+                    className="cursor-pointer rounded-full bg-linear-to-br from-white to-neutral-400 p-2.5 text-black transition-all hover:scale-105"
+                  >
+                    <ArrowUpIcon className="size-4.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={enterVoiceMode}
+                    disabled={inputDisabled}
+                    aria-label="Start voice chat"
+                    className={cn(
+                      "rounded-full p-2.5 transition-all",
+                      inputDisabled
+                        ? "cursor-not-allowed text-neutral-600"
+                        : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white",
+                    )}
+                  >
+                    <MicIcon className="size-4.5" />
+                  </button>
+                )}
               </div>
             </div>
           ) : (
