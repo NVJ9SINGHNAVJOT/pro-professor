@@ -6,6 +6,7 @@ import com.openai.core.JsonValue;
 import com.openai.core.http.StreamResponse;
 import com.openai.models.chat.completions.ChatCompletionChunk;
 import com.openai.models.chat.completions.ChatCompletionContentPart;
+import com.openai.models.chat.completions.ChatCompletionContentPartImage;
 import com.openai.models.chat.completions.ChatCompletionContentPartInputAudio;
 import com.openai.models.chat.completions.ChatCompletionContentPartText;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
@@ -230,12 +231,16 @@ public class ChatCompletionClient {
 
     /**
      * Adds a user turn. Text-only turns go through the plain string overload; a turn
-     * carrying audio becomes a multimodal message with one {@code input_audio} content
-     * part per clip (plus a text part when there's also typed text).
+     * carrying images and/or audio becomes a multimodal message with one {@code image_url}
+     * part per image and one {@code input_audio} part per clip (plus a text part when
+     * there's also typed text).
      */
     private static void appendUserMessage(ChatCompletionCreateParams.Builder params, ChatMessage message) {
         List<ChatMessage.AudioPart> audio = message.audio();
-        if (audio == null || audio.isEmpty()) {
+        List<ChatMessage.ImagePart> images = message.images();
+        boolean hasAudio = audio != null && !audio.isEmpty();
+        boolean hasImages = images != null && !images.isEmpty();
+        if (!hasAudio && !hasImages) {
             params.addUserMessage(message.content());
             return;
         }
@@ -245,6 +250,14 @@ public class ChatCompletionClient {
         if (text != null && !text.isBlank()) {
             parts.add(ChatCompletionContentPart.ofText(
                     ChatCompletionContentPartText.builder().text(text).build()));
+        }
+        for (ChatMessage.ImagePart image : images) {
+            parts.add(ChatCompletionContentPart.ofImageUrl(
+                    ChatCompletionContentPartImage.builder()
+                            .imageUrl(ChatCompletionContentPartImage.ImageUrl.builder()
+                                    .url(image.dataUrl())
+                                    .build())
+                            .build()));
         }
         for (ChatMessage.AudioPart clip : audio) {
             parts.add(ChatCompletionContentPart.ofInputAudio(

@@ -12,6 +12,8 @@ import java.util.List;
  * @param model          required when {@code conversationId} is null
  * @param content        the user's message text
  * @param attachmentIds  media ids (from {@code POST /api/v1/media/upload}) to attach, or {@code null}
+ * @param systemPrompt   persona/instructions for a new conversation, or {@code null}; only honored
+ *                       when {@code conversationId} is null (the first turn persists it as a system row)
  * @param maxTokens          max new tokens to generate, or {@code null} for the provider default
  * @param temperature        sampling temperature, or {@code null} for the provider default
  * @param topP               nucleus sampling top-p, or {@code null} for the provider default
@@ -24,6 +26,7 @@ public record ChatSendRequest(
         String model,
         String content,
         List<Long> attachmentIds,
+        String systemPrompt,
         Integer maxTokens,
         Double temperature,
         Double topP,

@@ -7,6 +7,11 @@ import { MAX_TOKENS_LIMIT, type InferenceParams } from "@/modules/chat/types";
 interface ChatSettingsProps {
   params: InferenceParams;
   onParamsChange: (params: InferenceParams) => void;
+  /** Persona/instructions for a new conversation (the system prompt). */
+  systemPrompt: string;
+  onSystemPromptChange: (value: string) => void;
+  /** Only a new chat can set a persona; it's baked into history once the conversation exists. */
+  canEditSystemPrompt: boolean;
   verbose: boolean;
   onVerboseChange: (value: boolean) => void;
   thinkingEnabled: boolean;
@@ -101,6 +106,9 @@ const ToggleRow = ({
 const ChatSettings = ({
   params,
   onParamsChange,
+  systemPrompt,
+  onSystemPromptChange,
+  canEditSystemPrompt,
   verbose,
   onVerboseChange,
   thinkingEnabled,
@@ -146,6 +154,24 @@ const ChatSettings = ({
       {open && (
         <div className="absolute right-0 top-12 z-30 w-72 rounded-2xl border border-neutral-700 bg-neutral-900 p-4 shadow-xl">
           <div className="flex flex-col gap-3.5">
+            {canEditSystemPrompt && (
+              <>
+                <label className="block">
+                  <span className="mb-1 block caption-small-regular text-neutral-300">System prompt</span>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => onSystemPromptChange(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. You are a professor of English literature."
+                    className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-2 caption-small-regular text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-richblue-300"
+                  />
+                  <span className="mt-1 block caption-small-regular text-neutral-500">
+                    Sets the model's persona for this chat. Locked once the chat starts.
+                  </span>
+                </label>
+                <div className="my-0.5 h-px bg-neutral-800" />
+              </>
+            )}
             {modelSelected ? (
               <div className="flex items-center justify-between">
                 <span className="caption-small-regular text-neutral-300">Context window</span>

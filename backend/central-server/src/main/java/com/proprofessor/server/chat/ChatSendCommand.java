@@ -13,6 +13,8 @@ import java.util.List;
  * @param model          required when {@code conversationId} is null
  * @param content        the user's message text
  * @param attachmentIds  media ids to attach to the user message (never {@code null}; may be empty)
+ * @param systemPrompt   persona/instructions persisted as a system row when starting a new
+ *                       conversation; ignored for existing conversations (may be {@code null}/blank)
  * @param options        per-request inference settings (never {@code null}; see {@link InferenceOptions})
  */
 public record ChatSendCommand(
@@ -21,6 +23,7 @@ public record ChatSendCommand(
         String model,
         String content,
         List<Long> attachmentIds,
+        String systemPrompt,
         InferenceOptions options
 ) {
 }

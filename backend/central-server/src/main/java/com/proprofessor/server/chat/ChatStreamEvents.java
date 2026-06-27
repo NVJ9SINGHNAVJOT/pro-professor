@@ -10,6 +10,8 @@ public final class ChatStreamEvents {
     }
 
     public static final String CHAT_START = "chat.start";
+    public static final String CHAT_TITLE = "chat.title";
+    public static final String CHAT_TRANSCRIPT = "chat.transcript";
     public static final String CHAT_CHUNK = "chat.chunk";
     public static final String CHAT_THINKING = "chat.thinking";
     public static final String CHAT_METRICS = "chat.metrics";

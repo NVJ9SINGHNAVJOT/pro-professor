@@ -47,6 +47,14 @@ public class ConversationRepository {
         return findById(id).orElseThrow();
     }
 
+    /** Sets a conversation's title — used to backfill a voice-started chat from its first transcript. */
+    public void updateTitle(long id, String title) {
+        dsl.update(CONVERSATIONS)
+                .set(CONVERSATIONS.TITLE, title)
+                .where(CONVERSATIONS.ID.eq(id))
+                .execute();
+    }
+
     public boolean existsById(long id) {
         return dsl.fetchExists(CONVERSATIONS, CONVERSATIONS.ID.eq(id));
     }

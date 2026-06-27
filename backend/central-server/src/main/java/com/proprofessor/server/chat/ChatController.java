@@ -65,7 +65,8 @@ public class ChatController {
                         request.repetitionPenalty(), Boolean.TRUE.equals(request.verbose()));
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
-                        request.attachmentIds() == null ? List.of() : request.attachmentIds(), options);
+                        request.attachmentIds() == null ? List.of() : request.attachmentIds(),
+                        request.systemPrompt(), options);
                 log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={}",
                         command.conversationId(), command.provider(), command.model(),
                         command.content() == null ? 0 : command.content().length(),
@@ -134,6 +135,16 @@ public class ChatController {
         public void onStart(long conversationId, String title) {
             this.conversationId = conversationId;
             emitEvent(emitter, ChatStreamEvent.ChatStart.of(conversationId, title));
+        }
+
+        @Override
+        public void onTitle(String title) {
+            emitEvent(emitter, ChatStreamEvent.ChatTitle.of(conversationId, title));
+        }
+
+        @Override
+        public void onTranscript(String content) {
+            emitEvent(emitter, ChatStreamEvent.ChatTranscript.of(conversationId, content));
         }
 
         @Override

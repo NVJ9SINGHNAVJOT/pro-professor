@@ -32,11 +32,16 @@ const chatSlice = createSlice({
       // de-dupe, then put newest on top
       state.history = [action.payload, ...state.history.filter((chat) => chat.id !== action.payload.id)];
     },
+    renameConversation(state, action: PayloadAction<{ id: number; title: string }>) {
+      const item = state.history.find((chat) => chat.id === action.payload.id);
+      if (item) item.title = action.payload.title;
+    },
     removeConversation(state, action: PayloadAction<number>) {
       state.history = state.history.filter((chat) => chat.id !== action.payload);
     },
   },
 });
 
-export const { setChatHistoryLoading, setHistory, addConversation, removeConversation } = chatSlice.actions;
+export const { setChatHistoryLoading, setHistory, addConversation, renameConversation, removeConversation } =
+  chatSlice.actions;
 export default chatSlice.reducer;

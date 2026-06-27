@@ -24,7 +24,7 @@ import { mediaApi, type MediaAttachment } from "@/services/operations/media/medi
 import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { addConversation } from "@/redux/slices/chatSlice";
+import { addConversation, renameConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import ChatSettings from "@/modules/chat/components/ChatSettings";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
@@ -40,6 +40,9 @@ import {
   type UiMessage,
 } from "@/modules/chat/types";
 import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
+
+/** Max images attachable to one turn — base64 inflates the request and small VLMs degrade past a couple. */
+const MAX_IMAGES = 2;
 
 /** Collapsible panel showing a model's streamed reasoning. */
 const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreaming: boolean }) => {
@@ -180,6 +183,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [params, setParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [verbose, setVerbose] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  // persona for a new conversation — sent only on the first turn, then baked into history
+  const [systemPrompt, setSystemPrompt] = useState("");
 
   // pending attachments uploaded for the next message
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
@@ -232,6 +237,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       setMessages([]);
       setSelected(null);
       setAttachments([]);
+      setSystemPrompt("");
       convIdRef.current = null;
       loadedRef.current = null;
       isNewChatRef.current = true;
@@ -252,11 +258,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       }
       const detail = res.response.data;
       setMessages(
-        detail.messages.map((m) => ({
-          role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
-          content: m.content,
-          attachments: m.attachments,
-        })),
+        // The persona is stored as a system row; it's an instruction, not a chat bubble.
+        detail.messages
+          .filter((m) => m.role !== "system")
+          .map((m) => ({
+            role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
+            content: m.content,
+            attachments: m.attachments,
+          })),
       );
       setSelected({
         provider: detail.provider as ModelProvider,
@@ -331,9 +340,19 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     e.target.value = ""; // allow re-selecting the same file
     if (files.length === 0) return;
 
+    const remaining = MAX_IMAGES - attachments.length;
+    if (remaining <= 0) {
+      toast.error(`You can attach up to ${MAX_IMAGES} images`);
+      return;
+    }
+    const toUpload = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.error(`You can attach up to ${MAX_IMAGES} images`);
+    }
+
     setUploading(true);
     try {
-      const uploaded = await Promise.all(files.map((file) => mediaApi.upload(file)));
+      const uploaded = await Promise.all(toUpload.map((file) => mediaApi.upload(file)));
       setAttachments((prev) => [...prev, ...uploaded]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -376,6 +395,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         model: selected.model,
         content,
         attachmentIds: pending.map((a) => a.id),
+        // Only a new conversation can take a persona; ignored once one exists.
+        systemPrompt: convIdRef.current === null ? systemPrompt.trim() || undefined : undefined,
         maxTokens: params.maxTokens,
         temperature: params.temperature,
         topP: params.topP,
@@ -398,6 +419,24 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             );
             navigate(ROUTES.CHAT_DETAIL(conversationId), { replace: true });
           }
+        },
+        onTitle: ({ conversationId, title }) => {
+          // A voice-started chat had no typed text to title itself — fill the sidebar entry
+          // (added empty in onStart) once the backend derives a title from the transcript.
+          dispatch(renameConversation({ id: conversationId, title }));
+        },
+        onTranscript: ({ content }) => {
+          // Audio turn: the model transcribed its own input. Fill the user bubble (sent with
+          // empty text) — it sits just before the streaming assistant placeholder.
+          setMessages((prev) => {
+            const next = [...prev];
+            const userIdx = next.length - 2;
+            const userMsg = next[userIdx];
+            if (userMsg && userMsg.role === "user") {
+              next[userIdx] = { ...userMsg, content };
+            }
+            return next;
+          });
         },
         onChunk: ({ delta }) => {
           fullReply += delta;
@@ -536,6 +575,17 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
 
   const showEmptyState = !chatId && messages.length === 0;
 
+  // Paperclip is image-only: enable it only for image-capable models, and cap at MAX_IMAGES.
+  // findModalities re-derives from the loaded list, so this is correct even on a cold reload.
+  const acceptsImages = Boolean(selected && findModalities(selected.provider, selected.model).includes("image"));
+  const attachLimitReached = attachments.length >= MAX_IMAGES;
+  const attachDisabled = inputDisabled || uploading || !acceptsImages || attachLimitReached;
+  const attachTitle = !acceptsImages
+    ? "This model doesn't accept images"
+    : attachLimitReached
+      ? `You can attach up to ${MAX_IMAGES} images`
+      : "Attach image";
+
   return (
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
       {/* Background glow (only for empty state, covers full section) */}
@@ -560,6 +610,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           <ChatSettings
             params={params}
             onParamsChange={setParams}
+            systemPrompt={systemPrompt}
+            onSystemPromptChange={setSystemPrompt}
+            canEditSystemPrompt={!chatId}
             verbose={verbose}
             onVerboseChange={setVerbose}
             thinkingEnabled={thinkingEnabled}
@@ -675,11 +728,12 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 <button
                   type="button"
                   onClick={handleAttachClick}
-                  disabled={inputDisabled || uploading}
-                  aria-label="Attach file"
+                  disabled={attachDisabled}
+                  aria-label="Attach image"
+                  title={attachTitle}
                   className={cn(
                     "rounded-full p-2.5 transition-colors",
-                    inputDisabled || uploading
+                    attachDisabled
                       ? "cursor-not-allowed text-neutral-600"
                       : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white",
                   )}

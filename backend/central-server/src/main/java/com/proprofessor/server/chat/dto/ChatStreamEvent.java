@@ -8,8 +8,9 @@ import com.proprofessor.server.chat.ChatStreamEvents;
  * contract, and the frontend can dispatch by {@code type}.
  */
 public sealed interface ChatStreamEvent
-        permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatThinking,
-        ChatStreamEvent.ChatMetrics, ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
+        permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatTitle, ChatStreamEvent.ChatTranscript,
+        ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatThinking, ChatStreamEvent.ChatMetrics,
+        ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
 
     String type();
 
@@ -17,6 +18,26 @@ public sealed interface ChatStreamEvent
     record ChatStart(String type, long conversationId, String title) implements ChatStreamEvent {
         public static ChatStart of(long conversationId, String title) {
             return new ChatStart(ChatStreamEvents.CHAT_START, conversationId, title);
+        }
+    }
+
+    /**
+     * {@code chat.title} — a derived title for a conversation that started without one (a voice turn
+     * carries no typed text). Sent once the spoken words are known so the sidebar entry can fill in.
+     */
+    record ChatTitle(String type, long conversationId, String title) implements ChatStreamEvent {
+        public static ChatTitle of(long conversationId, String title) {
+            return new ChatTitle(ChatStreamEvents.CHAT_TITLE, conversationId, title);
+        }
+    }
+
+    /**
+     * {@code chat.transcript} — an audio turn's transcribed user words, sent once so the user's
+     * bubble fills in live. The model produced this by transcribing its own audio input.
+     */
+    record ChatTranscript(String type, long conversationId, String content) implements ChatStreamEvent {
+        public static ChatTranscript of(long conversationId, String content) {
+            return new ChatTranscript(ChatStreamEvents.CHAT_TRANSCRIPT, conversationId, content);
         }
     }
 

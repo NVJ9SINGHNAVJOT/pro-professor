@@ -46,6 +46,14 @@ public class MessageRepository {
                 .fetchOne(this::toRow);
     }
 
+    /** Replaces a message's content — used to backfill an audio turn's transcribed words. */
+    public void updateContent(long id, String content) {
+        dsl.update(MESSAGES)
+                .set(MESSAGES.CONTENT, content)
+                .where(MESSAGES.ID.eq(id))
+                .execute();
+    }
+
     private MessageRow toRow(MessagesRecord r) {
         return new MessageRow(
                 r.getId(),

@@ -5,6 +5,7 @@ import com.proprofessor.server.chat.dto.ConversationSummary;
 import com.proprofessor.server.chat.mapper.ChatMapper;
 import com.proprofessor.server.chat.provider.ChatCompletionClient;
 import com.proprofessor.server.chat.provider.dto.ChatMessage;
+import com.proprofessor.server.audio.AudioClient;
 import com.proprofessor.server.chat.repository.ConversationRepository;
 import com.proprofessor.server.chat.repository.MessageRepository;
 import com.proprofessor.server.common.db.ConversationRow;
@@ -31,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 
 @Service
 public class ChatService {
@@ -49,12 +51,25 @@ public class ChatService {
     private static final String DEFAULT_MODE = "simple";
     private static final int TITLE_MAX_LENGTH = 60;
 
+    /**
+     * Sent as a system message on audio turns so the audio-capable model transcribes its own input
+     * (preserving its understanding for history) before replying. The backend splits the stream on
+     * the {@code <transcript>…</transcript>} delimiter; see {@link AudioTranscriptStream}.
+     */
+    private static final String AUDIO_TRANSCRIPT_INSTRUCTION = """
+            The user's message includes an audio clip of them speaking. Before you reply, \
+            transcribe exactly what the user said, wrapped in <transcript> and </transcript> tags. \
+            Immediately after the closing </transcript> tag, write your spoken reply to the user. \
+            For example: <transcript>what time is it in tokyo</transcript>It's currently 3pm in Tokyo. \
+            Always output the <transcript> block first, before anything else.""";
+
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final MediaRepository mediaRepository;
     private final MediaService mediaService;
     private final ModelService modelService;
     private final ChatCompletionClient chatCompletionClient;
+    private final AudioClient audioClient;
     private final ChatMapper chatMapper;
 
     public ChatService(
@@ -64,6 +79,7 @@ public class ChatService {
             MediaService mediaService,
             ModelService modelService,
             ChatCompletionClient chatCompletionClient,
+            AudioClient audioClient,
             ChatMapper chatMapper
     ) {
         this.conversationRepository = conversationRepository;
@@ -72,6 +88,7 @@ public class ChatService {
         this.mediaService = mediaService;
         this.modelService = modelService;
         this.chatCompletionClient = chatCompletionClient;
+        this.audioClient = audioClient;
         this.chatMapper = chatMapper;
     }
 
@@ -87,20 +104,44 @@ public class ChatService {
         linkAttachments(userMessage.id(), command.attachmentIds());
 
         List<ChatMessage> history = messageRepository.findHistory(conversation.id(), MODEL_ROLES);
-        if (provider == ModelProvider.AI_SERVICE) {
-            history = withCurrentTurnAudio(history, command.attachmentIds());
+        List<MediaRow> audioClips = provider == ModelProvider.AI_SERVICE
+                ? audioClips(command.attachmentIds())
+                : List.of();
+        boolean audioTurn = !audioClips.isEmpty();
+        if (audioTurn) {
+            history = withTranscriptInstruction(withCurrentTurnAudio(history, audioClips));
+        }
+        // Images apply to both providers (Ollama vision + ai-service mlx-vlm use the same
+        // image_url part) and need none of the audio path's transcript machinery.
+        List<MediaRow> images = imageAttachments(command.attachmentIds());
+        if (!images.isEmpty()) {
+            history = withCurrentTurnImage(history, images);
         }
 
         try {
             if (provider == ModelProvider.AI_SERVICE) {
                 modelService.loadModel(modelName);
             }
-            String reply = chatCompletionClient.streamChat(
+            // For an audio turn the model first transcribes the clip inside a delimiter; the splitter
+            // strips that from the reply so only the answer reaches the UI/TTS.
+            AudioTranscriptStream transcriptStream =
+                    audioTurn ? new AudioTranscriptStream(listener::onToken, listener::onTranscript) : null;
+            Consumer<String> onToken = audioTurn ? transcriptStream::accept : listener::onToken;
+
+            String raw = chatCompletionClient.streamChat(
                     provider, modelName, history, command.options(),
-                    listener::onToken, listener::onThinking,
+                    onToken, listener::onThinking,
                     metrics -> listener.onMetrics(
                             metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),
                             metrics.evalRate(), metrics.totalDurationS()));
+
+            String reply = raw;
+            if (audioTurn) {
+                reply = transcriptStream.finish(raw);
+                String spoken = persistTranscript(
+                        userMessage.id(), audioClips, transcriptStream.transcript(), listener);
+                titleFromSpokenTurn(conversation, spoken, listener);
+            }
             MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
             listener.onComplete(assistantMessage.id());
         } catch (ClientDisconnectedException disconnect) {
@@ -156,7 +197,15 @@ public class ChatService {
                     "provider and model are required to start a conversation");
         }
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
-        return conversationRepository.insert(model.id(), deriveTitle(command.content()), DEFAULT_MODE);
+        ConversationRow conversation =
+                conversationRepository.insert(model.id(), deriveTitle(command.content()), DEFAULT_MODE);
+        // A persona is the conversation's first (oldest) system row, so it replays to the model on
+        // every later turn via findHistory — no per-request plumbing needed.
+        String systemPrompt = command.systemPrompt();
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            messageRepository.insert(conversation.id(), ROLE_SYSTEM, systemPrompt.strip());
+        }
+        return conversation;
     }
 
     /** Links already-uploaded media to the just-inserted user message, ignoring unknown ids. */
@@ -168,19 +217,37 @@ public class ChatService {
                 .forEach(media -> mediaRepository.linkToMessage(messageId, media.id()));
     }
 
+    /** The audio attachments on this turn, in id order; empty when the turn carries no audio. */
+    private List<MediaRow> audioClips(List<Long> attachmentIds) {
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return List.of();
+        }
+        return mediaRepository.findByIds(attachmentIds).stream()
+                .filter(media -> media.mimeType() != null && media.mimeType().startsWith("audio/"))
+                .toList();
+    }
+
+    /** The image attachments on this turn, in id order; empty when the turn carries no image. */
+    private List<MediaRow> imageAttachments(List<Long> attachmentIds) {
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return List.of();
+        }
+        return mediaRepository.findByIds(attachmentIds).stream()
+                .filter(media -> media.mimeType() != null && media.mimeType().startsWith("image/"))
+                .toList();
+    }
+
     /**
-     * Forwards the current turn's spoken input to an audio-capable model: when this turn's
-     * attachments include audio, the last (current) user message in {@code history} is rebuilt
-     * to carry each clip as an {@code input_audio} part. Earlier turns stay text-only, matching
-     * the AI service's "most recent media only" behavior. Returns the history unchanged when
-     * there's no audio to forward.
+     * Forwards the current turn's spoken input to an audio-capable model: the last (current) user
+     * message in {@code history} is rebuilt to carry each clip as an {@code input_audio} part.
+     * Earlier turns stay text-only, matching the AI service's "most recent media only" behavior.
+     * Returns the history unchanged when the clips have no readable bytes.
      */
-    private List<ChatMessage> withCurrentTurnAudio(List<ChatMessage> history, List<Long> attachmentIds) {
-        if (history.isEmpty() || attachmentIds == null || attachmentIds.isEmpty()) {
+    private List<ChatMessage> withCurrentTurnAudio(List<ChatMessage> history, List<MediaRow> audioClips) {
+        if (history.isEmpty()) {
             return history;
         }
-        List<ChatMessage.AudioPart> audioParts = mediaRepository.findByIds(attachmentIds).stream()
-                .filter(media -> media.mimeType() != null && media.mimeType().startsWith("audio/"))
+        List<ChatMessage.AudioPart> audioParts = audioClips.stream()
                 .map(this::toAudioPart)
                 .filter(Objects::nonNull)
                 .toList();
@@ -192,6 +259,119 @@ public class ChatService {
         ChatMessage current = updated.get(last);
         updated.set(last, new ChatMessage(current.role(), current.content(), audioParts));
         return updated;
+    }
+
+    /**
+     * Forwards the current turn's images to an image-capable model: the last (current) user
+     * message in {@code history} is rebuilt to carry each image as an {@code image_url} part
+     * (base64 data URL). Earlier turns stay text-only, matching the audio path's "most recent
+     * media only" behavior. Preserves any audio parts already on the turn (runs after the audio
+     * rewrite). Returns the history unchanged when the images have no readable bytes.
+     */
+    private List<ChatMessage> withCurrentTurnImage(List<ChatMessage> history, List<MediaRow> images) {
+        if (history.isEmpty()) {
+            return history;
+        }
+        List<ChatMessage.ImagePart> imageParts = images.stream()
+                .map(this::toImagePart)
+                .filter(Objects::nonNull)
+                .toList();
+        if (imageParts.isEmpty()) {
+            return history;
+        }
+        List<ChatMessage> updated = new ArrayList<>(history);
+        int last = updated.size() - 1;
+        ChatMessage current = updated.get(last);
+        updated.set(last, new ChatMessage(current.role(), current.content(), current.audio(), imageParts));
+        return updated;
+    }
+
+    /** Loads a stored image's bytes and base64-encodes them into a data URL for an {@code image_url} part. */
+    private ChatMessage.ImagePart toImagePart(MediaRow media) {
+        byte[] bytes = mediaService.bytes(media);
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        String mimeType = media.mimeType() != null ? media.mimeType() : "image/png";
+        String dataUrl = "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
+        return new ChatMessage.ImagePart(dataUrl);
+    }
+
+    /**
+     * Adds the transcribe-then-answer directive for an audio turn. When the conversation has a
+     * persona (its leading system row), the directive is folded into that one system message —
+     * persona first, format directive last — so the model sees a single system message and the
+     * persona never competes with (or gets ordered after) the format instruction. With no persona
+     * this is the original behavior: prepend the directive as its own system message.
+     */
+    private List<ChatMessage> withTranscriptInstruction(List<ChatMessage> history) {
+        if (!history.isEmpty() && ROLE_SYSTEM.equals(history.get(0).role())) {
+            ChatMessage persona = history.get(0);
+            List<ChatMessage> updated = new ArrayList<>(history);
+            updated.set(0, new ChatMessage(ROLE_SYSTEM,
+                    persona.content() + "\n\n" + AUDIO_TRANSCRIPT_INSTRUCTION));
+            return updated;
+        }
+        List<ChatMessage> updated = new ArrayList<>(history.size() + 1);
+        updated.add(new ChatMessage(ROLE_SYSTEM, AUDIO_TRANSCRIPT_INSTRUCTION));
+        updated.addAll(history);
+        return updated;
+    }
+
+    /**
+     * Backfills the audio turn's user message with the spoken words and returns them. When the model
+     * produced its own {@code <transcript>}, it was already streamed to the UI live, so we only
+     * persist it here. Otherwise we fall back to a separate STT pass — and emit it now — so a spoken
+     * turn is never persisted blank. Returns {@code null} when no words could be recovered.
+     */
+    private String persistTranscript(long userMessageId, List<MediaRow> audioClips,
+                                     String transcript, ChatStreamListener listener) {
+        if (transcript != null) {
+            messageRepository.updateContent(userMessageId, transcript);
+            return transcript;
+        }
+        String content = transcribeClips(audioClips);
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+        messageRepository.updateContent(userMessageId, content);
+        listener.onTranscript(content);
+        return content;
+    }
+
+    /**
+     * Titles a conversation that started without one from its first spoken turn — a voice turn
+     * carries no typed text, so {@link #resolveConversation} couldn't derive a title at creation.
+     * Skips conversations that already have a title (text-started, or an earlier spoken turn).
+     */
+    private void titleFromSpokenTurn(ConversationRow conversation, String spokenText,
+                                     ChatStreamListener listener) {
+        if (spokenText == null || spokenText.isBlank()
+                || (conversation.title() != null && !conversation.title().isBlank())) {
+            return;
+        }
+        String title = deriveTitle(spokenText);
+        conversationRepository.updateTitle(conversation.id(), title);
+        listener.onTitle(title);
+    }
+
+    /** STT fallback: transcribes the first readable clip when the model skipped the delimiter. */
+    private String transcribeClips(List<MediaRow> audioClips) {
+        for (MediaRow clip : audioClips) {
+            byte[] bytes = mediaService.bytes(clip);
+            if (bytes == null || bytes.length == 0) {
+                continue;
+            }
+            try {
+                String text = audioClient.transcribe(bytes, clip.originalFilename());
+                if (text != null && !text.isBlank()) {
+                    return text.strip();
+                }
+            } catch (RuntimeException ex) {
+                log.warn("STT fallback failed for media {}: {}", clip.id(), ex.getMessage());
+            }
+        }
+        return null;
     }
 
     /** Loads a stored clip's bytes and base64-encodes them for an {@code input_audio} part. */
@@ -225,6 +405,12 @@ public class ChatService {
 
     public interface ChatStreamListener {
         void onStart(long conversationId, String title);
+
+        /** A title derived for a conversation that started without one (e.g. a voice turn). */
+        void onTitle(String title);
+
+        /** An audio turn's transcribed user words (live-only fill of the user bubble). */
+        void onTranscript(String content);
 
         void onToken(String delta);
 

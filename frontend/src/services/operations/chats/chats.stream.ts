@@ -11,6 +11,8 @@ export interface ChatSendPayload {
   model?: string;
   content: string;
   attachmentIds?: number[];
+  /** Persona/instructions for a new conversation; honored only on the first turn (no conversationId). */
+  systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -20,6 +22,8 @@ export interface ChatSendPayload {
 
 export interface ChatStreamCallbacks {
   onStart: (data: { conversationId: number; title: string }) => void;
+  onTitle: (data: { conversationId: number; title: string }) => void;
+  onTranscript: (data: { content: string }) => void;
   onChunk: (data: { delta: string }) => void;
   onThinking: (data: { delta: string }) => void;
   onMetrics: (data: ChatMetricsData) => void;
@@ -33,6 +37,18 @@ interface ChatStartFrame {
   type: "chat.start";
   conversationId: number;
   title: string;
+}
+
+interface ChatTitleFrame {
+  type: "chat.title";
+  conversationId: number;
+  title: string;
+}
+
+interface ChatTranscriptFrame {
+  type: "chat.transcript";
+  conversationId: number;
+  content: string;
 }
 
 interface ChatChunkFrame {
@@ -73,6 +89,8 @@ interface ChatErrorFrame {
 
 type ChatStreamFrame =
   | ChatStartFrame
+  | ChatTitleFrame
+  | ChatTranscriptFrame
   | ChatChunkFrame
   | ChatThinkingFrame
   | ChatMetricsFrame
@@ -171,6 +189,12 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
   switch (event.type) {
     case "chat.start":
       cb.onStart({ conversationId: event.conversationId, title: event.title });
+      break;
+    case "chat.title":
+      cb.onTitle({ conversationId: event.conversationId, title: event.title });
+      break;
+    case "chat.transcript":
+      cb.onTranscript({ content: event.content });
       break;
     case "chat.chunk":
       cb.onChunk({ delta: event.delta });
