@@ -28,6 +28,7 @@ import { addConversation, renameConversation } from "@/redux/slices/chatSlice";
 import ModelSelector from "@/modules/chat/components/ModelSelector";
 import ChatSettings from "@/modules/chat/components/ChatSettings";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
+import AudioPlayer from "@/modules/chat/components/AudioPlayer";
 import { blobToWav } from "@/modules/chat/wav";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
@@ -103,7 +104,14 @@ const AssistantMessage = ({
         {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-          {isStreaming && <span className="ct-cursor-blink">▋</span>}
+          {isStreaming && (
+            <span aria-hidden className="ct-wave ml-1 text-neutral-400">
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+          )}
         </div>
         {metrics && <MetricsLine metrics={metrics} />}
         {!isStreaming && content && (
@@ -144,7 +152,7 @@ const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] })
             />
           </a>
         ) : a.mimeType.startsWith("audio/") ? (
-          <audio key={a.id} src={mediaApi.fileUrl(a.id)} controls className="h-10 max-w-64" />
+          <AudioPlayer key={a.id} src={mediaApi.fileUrl(a.id)} />
         ) : (
           <a
             key={a.id}
@@ -595,8 +603,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         </div>
       )}
 
-      {/* Top bar: sidebar toggle + model selector */}
-      <div className="relative z-20 flex items-center gap-2 px-4 py-2.5">
+      {/* Top bar: sidebar toggle + model selector — height matches the sidebar header */}
+      <div className="relative z-20 flex h-11.5 shrink-0 items-center gap-2 px-4">
         <button
           type="button"
           onClick={onToggleSidebar}

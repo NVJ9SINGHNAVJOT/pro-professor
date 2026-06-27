@@ -82,12 +82,12 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
       >
         <div
           className={cn(
-            "flex h-full w-67.5 flex-col gap-y-2 pt-2 transition-opacity duration-300",
+            "flex h-full w-67.5 flex-col gap-y-2 transition-opacity duration-300",
             isOpen ? "opacity-100" : "opacity-0",
           )}
         >
-          {/* New chat */}
-          <div className="px-2">
+          {/* New chat — shares the chat top bar's height for a uniform top band */}
+          <div className="flex h-11.5 shrink-0 items-center px-2">
             <button
               type="button"
               onClick={() => navigate(ROUTES.CHAT)}

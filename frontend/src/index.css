@@ -101,10 +101,29 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* ===== Chat UI ===== */
 
-/* Blinking cursor shown while the assistant response streams in */
-@utility ct-cursor-blink {
-  display: inline-block;
-  animation: ct-blink 1s steps(2, start) infinite;
+/* Themed audio scrubber — track fill is set inline; this styles the rail + thumb */
+.ct-audio-range {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 9999px;
+  outline: none;
+}
+.ct-audio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  cursor: pointer;
+}
+.ct-audio-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 9999px;
+  background: #ffffff;
+  cursor: pointer;
 }
 
 /* Slow-drifting gradient blob behind the chat empty state */
@@ -129,13 +148,41 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 @layer components {
-  @keyframes ct-blink {
+  /* Small horizontal wave shown while the assistant response streams in */
+  .ct-wave {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 0.9em;
+    vertical-align: middle;
+  }
+  .ct-wave > span {
+    width: 3px;
+    height: 100%;
+    border-radius: 9999px;
+    background: currentColor;
+    transform-origin: center;
+    animation: ct-wave 1s ease-in-out infinite;
+  }
+  .ct-wave > span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .ct-wave > span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .ct-wave > span:nth-child(4) {
+    animation-delay: 0.45s;
+  }
+
+  @keyframes ct-wave {
     0%,
     100% {
-      opacity: 1;
+      transform: scaleY(0.4);
+      opacity: 0.5;
     }
     50% {
-      opacity: 0;
+      transform: scaleY(1);
+      opacity: 1;
     }
   }
 
@@ -262,7 +309,7 @@ input[type="number"]::-webkit-outer-spin-button {
     margin-bottom: 0;
   }
   .chat-markdown p {
-    margin: 0.5rem 0;
+    margin: 1rem 0;
   }
   .chat-markdown h1,
   .chat-markdown h2,

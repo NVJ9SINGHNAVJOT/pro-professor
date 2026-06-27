@@ -37,7 +37,7 @@ export interface InferenceParams {
 
 /** Defaults mirror the AI service's built-in fallbacks. */
 export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
-  maxTokens: 512,
+  maxTokens: 20000,
   temperature: 0.7,
   topP: 0.9,
   repetitionPenalty: 1.1,

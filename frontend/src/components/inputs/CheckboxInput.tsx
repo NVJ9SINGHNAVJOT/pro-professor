@@ -2,26 +2,6 @@ import { cn } from "@/lib/utils";
 import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 
-interface CheckboxProps extends ComponentPropsWithoutRef<"input"> {
-  className?: string;
-}
-
-export const CustomCheckbox = forwardRef<HTMLInputElement, CheckboxProps>(({ className, ...props }, ref) => {
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      className={cn(
-        "m-0 size-5 appearance-none rounded border border-solid border-neutral-700 bg-chat-input checked:border-richblue-300 checked:bg-richblue-300",
-        props.readOnly && "cursor-not-allowed opacity-70",
-        className,
-      )}
-      {...props}
-    />
-  );
-});
-CustomCheckbox.displayName = "CustomCheckbox";
-
 interface CheckboxInputProps extends ComponentPropsWithoutRef<typeof Checkbox> {
   label?: string;
   labelClassName?: string;
