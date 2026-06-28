@@ -26,7 +26,7 @@ const RightNav = () => {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="flex h-full w-16 shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900"
+        className="flex h-full w-16 shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
       >
         <img
           alt="Logo"
@@ -55,7 +55,7 @@ const RightNav = () => {
       {/* Sliding sidebar — overlays the content, never resizes the main screen */}
       <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-64 flex-col gap-y-2 border-l border-neutral-800 bg-neutral-950 p-3 text-white shadow-2xl transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 right-0 z-50 flex w-64 flex-col gap-y-2 border-l border-neutral-800 bg-chat-sidebar p-3 text-white shadow-2xl transition-transform duration-300 ease-in-out",
           open ? "translate-x-0" : "translate-x-full",
         )}
       >

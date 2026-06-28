@@ -10,11 +10,11 @@
   /* Transparent color */
   --color-transparent: #ffffff00;
 
-  --color-grey: #212121;
+  --color-grey: #121212;
   --color-grey-50: #181818;
 
   /* Chat UI tokens */
-  --color-chat-sidebar: #181818;
+  --color-chat-sidebar: #000000;
   --color-chat-input: #303030;
 
   /* Rich Black shades */
