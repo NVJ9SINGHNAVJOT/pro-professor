@@ -8,6 +8,7 @@ public record ConversationRow(
         String title,
         String mode,
         ConversationSettings settings,
+        int lastContextTokens,
         Instant createdAt,
         Instant updatedAt
 ) {

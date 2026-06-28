@@ -62,16 +62,13 @@ public class ChatCompletionClient {
      * are <em>not</em> persisted. When {@link InferenceOptions#verbose()} is set, the final
      * token/timing metrics are delivered once to {@code onMetrics}.
      *
-     * @param provider             which backend owns the model
-     * @param model                provider model id
-     * @param messages             full conversation history (oldest first)
-     * @param options              per-request inference settings
-     * @param preloadLoadDurationS Ollama's preload cost for this turn (seconds), used to fill
-     *                             {@code load_duration} when the provider reports counts only;
-     *                             {@code null} for the AI service (its x_metrics carry timing)
-     * @param onAnswer             called once per streamed answer token
-     * @param onThinking           called once per streamed reasoning token
-     * @param onMetrics            called at most once with the final metrics (only when verbose)
+     * @param provider   which backend owns the model
+     * @param model      provider model id
+     * @param messages   full conversation history (oldest first)
+     * @param options    per-request inference settings
+     * @param onAnswer   called once per streamed answer token
+     * @param onThinking called once per streamed reasoning token
+     * @param onMetrics  called once with the final metrics (counts always; timing only when verbose)
      * @return the complete assembled assistant answer (reasoning excluded)
      */
     public String streamChat(
@@ -79,7 +76,6 @@ public class ChatCompletionClient {
             String model,
             List<ChatMessage> messages,
             InferenceOptions options,
-            Double preloadLoadDurationS,
             Consumer<String> onAnswer,
             Consumer<String> onThinking,
             Consumer<StreamMetrics> onMetrics
@@ -101,8 +97,8 @@ public class ChatCompletionClient {
         AtomicReference<StreamMetrics> lastMetrics = new AtomicReference<>();
         // Wall-clock markers for providers that report counts only (Ollama): time-to-first-token
         // approximates prompt eval, and first→last token approximates generation. Accurate on the
-        // local network this runs over; the model is already warm from the preload, so the load
-        // cost is excluded from time-to-first-token.
+        // local network this runs over; on a cold turn time-to-first-token also includes the model
+        // load (Ollama's OpenAI endpoint reports no separate load_duration).
         AtomicLong firstTokenNanos = new AtomicLong(0);
         AtomicLong lastTokenNanos = new AtomicLong(0);
         long startNanos = System.nanoTime();
@@ -126,52 +122,45 @@ public class ChatCompletionClient {
                         }
                     });
                 }
-                if (options.verbose()) {
-                    // Counts (usage) and timing (x_metrics) can arrive on separate chunks — the
-                    // trailing usage chunk would otherwise clobber the timing — so merge, keeping
-                    // each field's first non-null value.
-                    StreamMetrics partial = extractMetrics(chunk);
-                    if (partial != null) {
-                        lastMetrics.updateAndGet(prev -> mergeMetrics(prev, partial));
-                    }
+                // Always collect token counts (every turn carries a usage chunk) so context
+                // accounting works without verbose. Counts (usage) and timing (x_metrics) can
+                // arrive on separate chunks, so merge, keeping each field's first non-null value.
+                StreamMetrics partial = extractMetrics(chunk);
+                if (partial != null) {
+                    lastMetrics.updateAndGet(prev -> mergeMetrics(prev, partial));
                 }
             });
         }
         StreamMetrics metrics = lastMetrics.get();
         if (metrics != null) {
-            // A counts-only result (no timing) means the provider didn't report timing — Ollama's
-            // OpenAI-compatible endpoint. Fill it from our measurements + the preload's load cost.
-            if (metrics.totalDurationS() == null) {
+            // Only fill timing when verbose: a counts-only result means the provider didn't report
+            // it (Ollama's OpenAI-compatible endpoint), so synthesize from our measurements.
+            // Non-verbose turns keep counts only.
+            if (options.verbose() && metrics.totalDurationS() == null) {
                 metrics = withMeasuredTimings(
-                        metrics, startNanos, firstTokenNanos.get(), lastTokenNanos.get(), preloadLoadDurationS);
+                        metrics, startNanos, firstTokenNanos.get(), lastTokenNanos.get());
             }
             onMetrics.accept(metrics);
         }
         return full.toString();
     }
 
-    /** Load durations below this (seconds) mean the model was already warm; reported as no load. */
-    private static final double WARM_LOAD_THRESHOLD_S = 0.02;
-
     /**
-     * Fills a counts-only {@link StreamMetrics} with timing derived from wall-clock markers and the
-     * preload's load cost, computing the rates. A field is left {@code null} when its inputs are
-     * missing (e.g. an empty reply yields no token timestamps).
+     * Fills a counts-only {@link StreamMetrics} with timing derived from wall-clock markers, computing
+     * the rates. A field is left {@code null} when its inputs are missing (e.g. an empty reply yields
+     * no token timestamps). {@code load_duration} is always {@code null} here — Ollama's
+     * OpenAI-compatible endpoint doesn't report it and we no longer preload to obtain it.
      */
     private static StreamMetrics withMeasuredTimings(
-            StreamMetrics base, long startNanos, long firstTokenNanos, long lastTokenNanos,
-            Double preloadLoadDurationS) {
+            StreamMetrics base, long startNanos, long firstTokenNanos, long lastTokenNanos) {
         double totalDurationS = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         Double promptEvalDurationS = firstTokenNanos > 0
                 ? (firstTokenNanos - startNanos) / 1_000_000_000.0 : null;
         Double evalDurationS = (firstTokenNanos > 0 && lastTokenNanos > firstTokenNanos)
                 ? (lastTokenNanos - firstTokenNanos) / 1_000_000_000.0 : null;
-        // Match the AI service, which omits load_duration on a warm turn.
-        Double loadDurationS = (preloadLoadDurationS != null && preloadLoadDurationS >= WARM_LOAD_THRESHOLD_S)
-                ? preloadLoadDurationS : null;
         return new StreamMetrics(
                 base.promptTokens(), base.completionTokens(), base.totalTokens(),
-                rate(base.completionTokens(), evalDurationS), totalDurationS, loadDurationS,
+                rate(base.completionTokens(), evalDurationS), totalDurationS, null,
                 promptEvalDurationS, rate(base.promptTokens(), promptEvalDurationS), evalDurationS);
     }
 

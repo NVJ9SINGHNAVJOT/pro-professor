@@ -30,7 +30,7 @@ export interface ChatStreamCallbacks {
   onSettings: (data: { messageId: number; summary: string }) => void;
   onThinking: (data: { delta: string }) => void;
   onMetrics: (data: ChatMetricsData) => void;
-  onDone: (data: { conversationId: number; messageId: number }) => void;
+  onDone: (data: { conversationId: number; messageId: number; contextTokens: number | null }) => void;
   onError: (message: string, meta?: { conversationId?: number; messageId?: number; requestId?: string }) => void;
 }
 
@@ -91,6 +91,7 @@ interface ChatDoneFrame {
   type: "chat.done";
   conversationId: number;
   messageId: number;
+  contextTokens: number | null;
 }
 
 interface ChatErrorFrame {
@@ -237,6 +238,7 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
       cb.onDone({
         conversationId: event.conversationId,
         messageId: event.messageId,
+        contextTokens: event.contextTokens,
       });
       break;
     case "chat.error":

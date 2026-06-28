@@ -200,6 +200,39 @@ const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
   );
 };
 
+/** Compact token count, e.g. 1234 → "1.2k", 12345 → "12k". */
+const formatTokens = (n: number): string =>
+  n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+
+/** Context-window usage meter: how much of the model's context the conversation currently occupies. */
+const ContextMeter = ({ used, max }: { used: number | null; max: number | null }) => {
+  if (used == null || used === 0) return null;
+  // No known window for this model — show the raw count only.
+  if (max == null) {
+    return (
+      <span className="caption-small-regular text-neutral-500" title={`${used.toLocaleString()} tokens used`}>
+        {formatTokens(used)} tokens
+      </span>
+    );
+  }
+  const pct = Math.min(100, (used / max) * 100);
+  const remaining = Math.max(0, max - used);
+  const barColor = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
+  return (
+    <div
+      className="flex items-center gap-2 caption-small-regular text-neutral-400"
+      title={`${used.toLocaleString()} / ${max.toLocaleString()} tokens · ${remaining.toLocaleString()} left`}
+    >
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-neutral-700">
+        <span className={cn("block h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
+      </span>
+      <span>
+        {formatTokens(used)} / {formatTokens(max)}
+      </span>
+    </div>
+  );
+};
+
 const AssistantMessage = ({
   content,
   thinking,
@@ -312,6 +345,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const [params, setParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [verbose, setVerbose] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  // context-window usage (tokens) after the latest turn; powers the context meter
+  const [usedTokens, setUsedTokens] = useState<number | null>(null);
   // persona for a new conversation — sent only on the first turn, then baked into history
   const [systemPrompt, setSystemPrompt] = useState("");
 
@@ -374,6 +409,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       setSelected(null);
       setAttachments([]);
       setSystemPrompt("");
+      setUsedTokens(null);
       convIdRef.current = null;
       loadedRef.current = null;
       isNewChatRef.current = true;
@@ -413,6 +449,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       });
       setVerbose(detail.verbose);
       setThinkingEnabled(detail.thinkingEnabled);
+      setUsedTokens(detail.lastContextTokens);
       setSelected({
         provider: detail.provider as ModelProvider,
         model: detail.model,
@@ -691,7 +728,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             return next;
           });
         },
-        onDone: () => {
+        onDone: ({ contextTokens }) => {
+          // Update the context meter with this turn's usage (null when the provider gave no counts).
+          if (contextTokens != null) setUsedTokens(contextTokens);
           // Let the reveal drain the remaining backlog; the loop settles (and speaks) when caught up.
           streamDone = true;
           pump();
@@ -824,7 +863,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
         <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <ContextMeter used={usedTokens} max={selected ? findMaxContextTokens(selected.provider, selected.model) : null} />
           <ChatSettings
             params={params}
             onParamsChange={setParams}

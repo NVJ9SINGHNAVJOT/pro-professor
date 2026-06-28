@@ -95,10 +95,16 @@ public sealed interface ChatStreamEvent
         }
     }
 
-    /** {@code chat.done} — assistant message persisted. */
-    record ChatDone(String type, long conversationId, long messageId) implements ChatStreamEvent {
-        public static ChatDone of(long conversationId, long messageId) {
-            return new ChatDone(ChatStreamEvents.CHAT_DONE, conversationId, messageId);
+    /**
+     * {@code chat.done} — assistant message persisted. {@code contextTokens} is the conversation's
+     * context size in tokens (the prompt fed to the model this turn, excluding the reply and any
+     * stripped reasoning) — it powers the context meter; {@code null} when the provider reported no
+     * counts.
+     */
+    record ChatDone(String type, long conversationId, long messageId, Long contextTokens)
+            implements ChatStreamEvent {
+        public static ChatDone of(long conversationId, long messageId, Long contextTokens) {
+            return new ChatDone(ChatStreamEvents.CHAT_DONE, conversationId, messageId, contextTokens);
         }
     }
 

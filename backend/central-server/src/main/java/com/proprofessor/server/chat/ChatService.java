@@ -128,14 +128,12 @@ public class ChatService {
         }
 
         try {
-            // Pre-warm the model. The AI service reports its own load time in x_metrics; Ollama's
-            // OpenAI-compatible chat endpoint omits timing, so on a verbose turn we preload it
-            // natively to capture this turn's load_duration and leave a clean prompt-eval timing.
-            Double ollamaLoadDurationS = null;
+            // The AI service reports its own timing (including load) in x_metrics. Ollama's
+            // OpenAI-compatible endpoint omits timing; we synthesize it from wall-clock and do NOT
+            // preload — a native preload warms Ollama's KV cache, which deflates the prompt token
+            // count the context meter relies on (and Ollama's load_duration is unavailable here).
             if (provider == ModelProvider.AI_SERVICE) {
                 modelService.loadModel(modelName);
-            } else if (provider == ModelProvider.OLLAMA && command.options().verbose()) {
-                ollamaLoadDurationS = modelService.preloadOllama(modelName);
             }
             // For an audio turn the model first transcribes the clip inside a delimiter; the splitter
             // strips that from the reply so only the answer reaches the UI/TTS.
@@ -143,13 +141,25 @@ public class ChatService {
                     audioTurn ? new AudioTranscriptStream(listener::onToken, listener::onTranscript) : null;
             Consumer<String> onToken = audioTurn ? transcriptStream::accept : listener::onToken;
 
+            // Token counts arrive every turn (for the context meter); the verbose timing block is
+            // forwarded for display only when the user asked for it. The meter tracks prompt tokens
+            // — the context actually fed to the model (excludes the reply and any stripped reasoning).
+            boolean verbose = command.options().verbose();
+            Long[] contextTokens = {null};
             String raw = chatCompletionClient.streamChat(
-                    provider, modelName, history, command.options(), ollamaLoadDurationS,
+                    provider, modelName, history, command.options(),
                     onToken, listener::onThinking,
-                    metrics -> listener.onMetrics(
-                            metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),
-                            metrics.evalRate(), metrics.totalDurationS(), metrics.loadDurationS(),
-                            metrics.promptEvalDurationS(), metrics.promptEvalRate(), metrics.evalDurationS()));
+                    metrics -> {
+                        if (metrics.promptTokens() != null) {
+                            contextTokens[0] = metrics.promptTokens();
+                        }
+                        if (verbose) {
+                            listener.onMetrics(
+                                    metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),
+                                    metrics.evalRate(), metrics.totalDurationS(), metrics.loadDurationS(),
+                                    metrics.promptEvalDurationS(), metrics.promptEvalRate(), metrics.evalDurationS());
+                        }
+                    });
 
             String reply = raw;
             if (audioTurn) {
@@ -159,7 +169,11 @@ public class ChatService {
                 titleFromSpokenTurn(conversation, spoken, listener);
             }
             MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
-            listener.onComplete(assistantMessage.id());
+            // Persist the conversation's current context usage so the meter is correct on reload.
+            if (contextTokens[0] != null) {
+                conversationRepository.updateLastContextTokens(conversation.id(), contextTokens[0].intValue());
+            }
+            listener.onComplete(assistantMessage.id(), contextTokens[0]);
         } catch (ClientDisconnectedException disconnect) {
             // User hit Stop — not a generation failure. Let the controller handle it.
             throw disconnect;
@@ -496,7 +510,12 @@ public class ChatService {
                        Double evalRate, Double totalDurationS, Double loadDurationS,
                        Double promptEvalDurationS, Double promptEvalRate, Double evalDurationS);
 
-        void onComplete(long messageId);
+        /**
+         * The assistant turn finished. {@code contextTokens} is the conversation's context size in
+         * tokens (the prompt fed to the model this turn) for the context meter, or {@code null} when
+         * the provider reported no counts.
+         */
+        void onComplete(long messageId, Long contextTokens);
 
         /** Generation failed after the conversation existed; an error message was persisted. */
         void onError(long messageId, String message);

@@ -37,6 +37,8 @@ export interface ConversationDetail {
   repetitionPenalty: number;
   verbose: boolean;
   thinkingEnabled: boolean;
+  /** Token usage after the most recent turn (context meter); 0 before any turn. */
+  lastContextTokens: number;
   createdAt: string;
   updatedAt: string;
 }

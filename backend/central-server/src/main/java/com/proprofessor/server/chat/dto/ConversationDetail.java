@@ -18,6 +18,7 @@ import java.util.List;
  * @param repetitionPenalty  persisted repetition penalty, or {@code null} for the provider default
  * @param verbose            persisted "show metrics" UI preference
  * @param thinkingEnabled    persisted "show reasoning" UI preference
+ * @param lastContextTokens  token usage after the most recent turn (context meter); 0 before any turn
  * @param createdAt when the conversation started
  * @param updatedAt last activity
  */
@@ -34,6 +35,7 @@ public record ConversationDetail(
         Double repetitionPenalty,
         boolean verbose,
         boolean thinkingEnabled,
+        int lastContextTokens,
         Instant createdAt,
         Instant updatedAt
 ) {

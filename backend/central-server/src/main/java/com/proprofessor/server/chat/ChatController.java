@@ -173,8 +173,8 @@ public class ChatController {
         }
 
         @Override
-        public void onComplete(long messageId) {
-            emitEvent(emitter, ChatStreamEvent.ChatDone.of(conversationId, messageId));
+        public void onComplete(long messageId, Long contextTokens) {
+            emitEvent(emitter, ChatStreamEvent.ChatDone.of(conversationId, messageId, contextTokens));
         }
 
         @Override

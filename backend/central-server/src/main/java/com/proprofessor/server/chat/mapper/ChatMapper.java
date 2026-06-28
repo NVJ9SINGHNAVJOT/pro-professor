@@ -63,6 +63,7 @@ public class ChatMapper {
                 conversation.settings().repetitionPenalty(),
                 conversation.settings().verbose(),
                 conversation.settings().thinkingEnabled(),
+                conversation.lastContextTokens(),
                 conversation.createdAt(),
                 conversation.updatedAt()
         );

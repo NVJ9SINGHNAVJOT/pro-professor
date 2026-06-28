@@ -62,6 +62,14 @@ public class ConversationRepository {
                 .execute();
     }
 
+    /** Records the conversation's context usage (tokens) after a turn, for the context meter. */
+    public void updateLastContextTokens(long id, int tokens) {
+        dsl.update(CONVERSATIONS)
+                .set(CONVERSATIONS.LAST_CONTEXT_TOKENS, tokens)
+                .where(CONVERSATIONS.ID.eq(id))
+                .execute();
+    }
+
     /** Overwrites a conversation's inference settings — used when the user changes them mid-chat. */
     public void updateSettings(long id, ConversationSettings settings) {
         dsl.update(CONVERSATIONS)
@@ -108,6 +116,7 @@ public class ConversationRepository {
                 r.get(CONVERSATIONS.TITLE),
                 r.get(CONVERSATIONS.MODE),
                 settings,
+                r.get(CONVERSATIONS.LAST_CONTEXT_TOKENS),
                 r.get(CONVERSATIONS.CREATED_AT).toInstant(),
                 r.get(CONVERSATIONS.UPDATED_AT).toInstant()
         );
