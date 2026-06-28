@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Talks to the local Ollama service and maps its models into {@link ProviderModel}.
@@ -43,6 +44,7 @@ public class OllamaClient {
         }
         return response.models().stream()
                 .map(m -> toProviderModel(m, fetchShow(m.name())))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -104,6 +106,12 @@ public class OllamaClient {
     }
 
     private static ProviderModel toProviderModel(OllamaTagsResponse.OllamaModel model, OllamaShowResponse show) {
+        Integer maxContextTokens = extractContextLength(show != null ? show.modelInfo() : null);
+        if (maxContextTokens == null) {
+            log.error("Excluding Ollama model '{}': no context window in /api/show model_info", model.name());
+            return null;
+        }
+
         OllamaTagsResponse.OllamaDetails details = model.details();
         String parameterSize = details != null ? details.parameterSize() : null;
 
@@ -113,7 +121,6 @@ public class OllamaClient {
 
         List<String> capabilities = show != null && show.capabilities() != null ? show.capabilities() : List.of();
         List<String> modalities = mapCapabilitiesToModalities(capabilities);
-        Integer maxContextTokens = extractContextLength(show != null ? show.modelInfo() : null);
         boolean supportsThinking = capabilities.contains("thinking");
         return new ProviderModel(model.name(), ModelProvider.OLLAMA, "chat", version, true,
                 modalities, maxContextTokens, supportsThinking);

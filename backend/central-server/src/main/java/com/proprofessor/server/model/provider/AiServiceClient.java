@@ -5,11 +5,14 @@ import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
 import com.proprofessor.server.model.provider.dto.AiServiceModelsResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Talks to the Python AI service and maps its models into {@link ProviderModel}.
@@ -17,6 +20,8 @@ import java.util.List;
  */
 @Component
 public class AiServiceClient {
+
+    private static final Logger log = LoggerFactory.getLogger(AiServiceClient.class);
 
     private final RestClient restClient;
 
@@ -36,6 +41,7 @@ public class AiServiceClient {
         }
         return response.data().stream()
                 .map(AiServiceClient::toProviderModel)
+                .filter(Objects::nonNull)
                 .filter(ProviderModel::isActive)
                 .toList();
     }
@@ -51,6 +57,10 @@ public class AiServiceClient {
     }
 
     private static ProviderModel toProviderModel(AiServiceModelsResponse.AiServiceModel model) {
+        if (model.maxContextTokens() == null) {
+            log.error("Excluding AI-service model '{}': no context window reported", model.name());
+            return null;
+        }
         List<String> modalities = model.inputModalities() != null ? model.inputModalities() : List.of("text");
         // The AI service does not yet advertise thinking capability; treat as unsupported for now.
         return new ProviderModel(model.name(), ModelProvider.AI_SERVICE, "chat", null, model.loadable(),
