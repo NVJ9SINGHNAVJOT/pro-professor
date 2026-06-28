@@ -14,8 +14,11 @@ import com.openai.models.chat.completions.ChatCompletionStreamOptions;
 import com.openai.models.completions.CompletionUsage;
 import com.proprofessor.server.chat.InferenceOptions;
 import com.proprofessor.server.chat.provider.dto.ChatMessage;
+import com.proprofessor.server.common.http.CorrelationIdInterceptor;
+import com.proprofessor.server.common.web.RequestIdFilter;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -81,6 +84,13 @@ public class ChatCompletionClient {
             appendMessage(params, message);
         }
         applyOptions(params, options);
+
+        // The OpenAI SDK client is built outside HttpClientFactory, so it bypasses the
+        // RestClient CorrelationIdInterceptor; forward the correlation id here instead.
+        String correlationId = MDC.get(RequestIdFilter.MDC_KEY);
+        if (correlationId != null && !correlationId.isBlank()) {
+            params.putAdditionalHeader(CorrelationIdInterceptor.HEADER, correlationId);
+        }
 
         StringBuilder full = new StringBuilder();
         AtomicReference<StreamMetrics> lastMetrics = new AtomicReference<>();

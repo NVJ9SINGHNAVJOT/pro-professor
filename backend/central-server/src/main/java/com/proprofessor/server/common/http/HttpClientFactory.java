@@ -32,6 +32,7 @@ public final class HttpClientFactory {
         return RestClient.builder()
                 .baseUrl(stripTrailingSlash(baseUrl))
                 .requestFactory(new JdkClientHttpRequestFactory(HTTP_1_1))
+                .requestInterceptor(new CorrelationIdInterceptor())
                 .build();
     }
 
