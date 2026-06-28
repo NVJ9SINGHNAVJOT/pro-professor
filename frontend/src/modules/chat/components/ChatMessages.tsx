@@ -270,11 +270,27 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         detail.messages
           .filter((m) => m.role !== "system")
           .map((m) => ({
-            role: m.role === "assistant" ? "assistant" : m.role === "error" ? "error" : "user",
+            role:
+              m.role === "assistant"
+                ? "assistant"
+                : m.role === "error"
+                  ? "error"
+                  : m.role === "settings"
+                    ? "settings"
+                    : "user",
             content: m.content,
             attachments: m.attachments,
           })),
       );
+      // Restore the conversation's persisted inference settings + display toggles.
+      setParams({
+        maxTokens: detail.maxTokens,
+        temperature: detail.temperature,
+        topP: detail.topP,
+        repetitionPenalty: detail.repetitionPenalty,
+      });
+      setVerbose(detail.verbose);
+      setThinkingEnabled(detail.thinkingEnabled);
       setSelected({
         provider: detail.provider as ModelProvider,
         model: detail.model,
@@ -410,6 +426,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         topP: params.topP,
         repetitionPenalty: params.repetitionPenalty,
         verbose,
+        thinkingEnabled,
       },
       {
         onStart: ({ conversationId, title }) => {
@@ -443,6 +460,15 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             if (userMsg && userMsg.role === "user") {
               next[userIdx] = { ...userMsg, content };
             }
+            return next;
+          });
+        },
+        onSettings: () => {
+          // Drop the divider above this turn's user/assistant pair (the last two entries),
+          // matching where it lands on reload.
+          setMessages((prev) => {
+            const next = [...prev];
+            next.splice(next.length - 2, 0, { role: "settings", content: "" });
             return next;
           });
         },
@@ -668,6 +694,15 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                         {message.content}
                       </div>
                     )}
+                  </div>
+                );
+              }
+              if (message.role === "settings") {
+                return (
+                  <div key={index} className="flex items-center justify-center gap-3 py-1">
+                    <span className="h-px flex-1 bg-neutral-800" />
+                    <span className="shrink-0 caption-small-regular text-neutral-500">Model settings changed</span>
+                    <span className="h-px flex-1 bg-neutral-800" />
                   </div>
                 );
               }

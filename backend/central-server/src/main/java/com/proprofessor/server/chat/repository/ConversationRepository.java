@@ -1,6 +1,7 @@
 package com.proprofessor.server.chat.repository;
 
 import com.proprofessor.server.common.db.ConversationRow;
+import com.proprofessor.server.common.db.ConversationSettings;
 import com.proprofessor.server.common.db.ModelRow;
 import org.jooq.DSLContext;
 import org.jooq.Record;
@@ -37,11 +38,17 @@ public class ConversationRepository {
                 .fetchOptional(this::toRow);
     }
 
-    public ConversationRow insert(long modelId, String title, String mode) {
+    public ConversationRow insert(long modelId, String title, String mode, ConversationSettings settings) {
         Long id = dsl.insertInto(CONVERSATIONS)
                 .set(CONVERSATIONS.MODEL_ID, modelId)
                 .set(CONVERSATIONS.TITLE, title)
                 .set(CONVERSATIONS.MODE, mode)
+                .set(CONVERSATIONS.MAX_TOKENS, settings.maxTokens())
+                .set(CONVERSATIONS.TEMPERATURE, settings.temperature())
+                .set(CONVERSATIONS.TOP_P, settings.topP())
+                .set(CONVERSATIONS.REPETITION_PENALTY, settings.repetitionPenalty())
+                .set(CONVERSATIONS.VERBOSE_ENABLED, settings.verbose())
+                .set(CONVERSATIONS.THINKING_ENABLED, settings.thinkingEnabled())
                 .returning(CONVERSATIONS.ID)
                 .fetchOne(CONVERSATIONS.ID);
         return findById(id).orElseThrow();
@@ -51,6 +58,19 @@ public class ConversationRepository {
     public void updateTitle(long id, String title) {
         dsl.update(CONVERSATIONS)
                 .set(CONVERSATIONS.TITLE, title)
+                .where(CONVERSATIONS.ID.eq(id))
+                .execute();
+    }
+
+    /** Overwrites a conversation's inference settings — used when the user changes them mid-chat. */
+    public void updateSettings(long id, ConversationSettings settings) {
+        dsl.update(CONVERSATIONS)
+                .set(CONVERSATIONS.MAX_TOKENS, settings.maxTokens())
+                .set(CONVERSATIONS.TEMPERATURE, settings.temperature())
+                .set(CONVERSATIONS.TOP_P, settings.topP())
+                .set(CONVERSATIONS.REPETITION_PENALTY, settings.repetitionPenalty())
+                .set(CONVERSATIONS.VERBOSE_ENABLED, settings.verbose())
+                .set(CONVERSATIONS.THINKING_ENABLED, settings.thinkingEnabled())
                 .where(CONVERSATIONS.ID.eq(id))
                 .execute();
     }
@@ -74,11 +94,20 @@ public class ConversationRepository {
                 r.get(MODELS.CREATED_AT).toInstant(),
                 r.get(MODELS.UPDATED_AT).toInstant()
         );
+        ConversationSettings settings = new ConversationSettings(
+                r.get(CONVERSATIONS.MAX_TOKENS),
+                r.get(CONVERSATIONS.TEMPERATURE),
+                r.get(CONVERSATIONS.TOP_P),
+                r.get(CONVERSATIONS.REPETITION_PENALTY),
+                Boolean.TRUE.equals(r.get(CONVERSATIONS.VERBOSE_ENABLED)),
+                Boolean.TRUE.equals(r.get(CONVERSATIONS.THINKING_ENABLED))
+        );
         return new ConversationRow(
                 r.get(CONVERSATIONS.ID),
                 model,
                 r.get(CONVERSATIONS.TITLE),
                 r.get(CONVERSATIONS.MODE),
+                settings,
                 r.get(CONVERSATIONS.CREATED_AT).toInstant(),
                 r.get(CONVERSATIONS.UPDATED_AT).toInstant()
         );

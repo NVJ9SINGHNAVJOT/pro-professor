@@ -10,7 +10,7 @@ export interface ChatMetricsData {
 }
 
 export interface UiMessage {
-  role: "user" | "assistant" | "error";
+  role: "user" | "assistant" | "error" | "settings";
   content: string;
   attachments?: MediaAttachment[];
   /** Streamed reasoning for a thinking-capable model (live-only; not persisted). */

@@ -7,6 +7,7 @@ public record ConversationRow(
         ModelRow model,
         String title,
         String mode,
+        ConversationSettings settings,
         Instant createdAt,
         Instant updatedAt
 ) {

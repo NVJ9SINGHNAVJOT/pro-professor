@@ -62,7 +62,8 @@ public class ChatController {
             try {
                 InferenceOptions options = new InferenceOptions(
                         request.maxTokens(), request.temperature(), request.topP(),
-                        request.repetitionPenalty(), Boolean.TRUE.equals(request.verbose()));
+                        request.repetitionPenalty(), Boolean.TRUE.equals(request.verbose()),
+                        Boolean.TRUE.equals(request.thinkingEnabled()));
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
                         request.attachmentIds() == null ? List.of() : request.attachmentIds(),
@@ -150,6 +151,11 @@ public class ChatController {
         @Override
         public void onToken(String delta) {
             emitEvent(emitter, ChatStreamEvent.ChatChunk.of(conversationId, delta));
+        }
+
+        @Override
+        public void onSettingsChanged(long messageId) {
+            emitEvent(emitter, ChatStreamEvent.ChatSettings.of(conversationId, messageId));
         }
 
         @Override

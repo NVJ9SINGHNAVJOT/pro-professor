@@ -9,6 +9,7 @@ import com.proprofessor.server.audio.AudioClient;
 import com.proprofessor.server.chat.repository.ConversationRepository;
 import com.proprofessor.server.chat.repository.MessageRepository;
 import com.proprofessor.server.common.db.ConversationRow;
+import com.proprofessor.server.common.db.ConversationSettings;
 import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.db.MessageRow;
 import com.proprofessor.server.common.db.ModelRow;
@@ -43,6 +44,7 @@ public class ChatService {
     private static final String ROLE_ASSISTANT = "assistant";
     private static final String ROLE_SYSTEM = "system";
     private static final String ROLE_ERROR = "error";
+    private static final String ROLE_SETTINGS = "settings";
     /** Roles that are replayed to the model; {@code error} rows are persisted for the UI only. */
     private static final Set<String> MODEL_ROLES = Set.of(ROLE_USER, ROLE_ASSISTANT, ROLE_SYSTEM);
     /** Clean, user-facing failure text saved to history. Full detail goes to the logs. */
@@ -99,6 +101,13 @@ public class ChatService {
         String modelName = model.name();
 
         listener.onStart(conversation.id(), conversation.title());
+
+        // An existing conversation may carry changed settings; persist them and, when the inference
+        // params (not the display toggles) changed, drop a marker before the new turn. A brand-new
+        // conversation stored its initial settings at creation, so there's nothing to diff.
+        if (command.conversationId() != null) {
+            applySettingsChange(conversation, command.options(), listener);
+        }
 
         MessageRow userMessage = messageRepository.insert(conversation.id(), ROLE_USER, command.content());
         linkAttachments(userMessage.id(), command.attachmentIds());
@@ -197,8 +206,8 @@ public class ChatService {
                     "provider and model are required to start a conversation");
         }
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
-        ConversationRow conversation =
-                conversationRepository.insert(model.id(), deriveTitle(command.content()), DEFAULT_MODE);
+        ConversationRow conversation = conversationRepository.insert(
+                model.id(), deriveTitle(command.content()), DEFAULT_MODE, settingsFrom(command.options()));
         // A persona is the conversation's first (oldest) system row, so it replays to the model on
         // every later turn via findHistory — no per-request plumbing needed.
         String systemPrompt = command.systemPrompt();
@@ -206,6 +215,42 @@ public class ChatService {
             messageRepository.insert(conversation.id(), ROLE_SYSTEM, systemPrompt.strip());
         }
         return conversation;
+    }
+
+    /**
+     * Persists the turn's settings onto an existing conversation and, when the inference params
+     * changed (the display toggles {@code verbose}/{@code thinking} don't count), inserts a
+     * {@code settings} marker before the user message so the UI shows a divider on this turn and
+     * on reload.
+     */
+    private void applySettingsChange(ConversationRow conversation, InferenceOptions options,
+                                     ChatStreamListener listener) {
+        ConversationSettings stored = conversation.settings();
+        boolean paramsChanged = !Objects.equals(stored.maxTokens(), options.maxTokens())
+                || !Objects.equals(stored.temperature(), options.temperature())
+                || !Objects.equals(stored.topP(), options.topP())
+                || !Objects.equals(stored.repetitionPenalty(), options.repetitionPenalty());
+        boolean togglesChanged = stored.verbose() != options.verbose()
+                || stored.thinkingEnabled() != options.thinkingEnabled();
+        if (paramsChanged || togglesChanged) {
+            conversationRepository.updateSettings(conversation.id(), settingsFrom(options));
+        }
+        if (paramsChanged) {
+            MessageRow marker =
+                    messageRepository.insert(conversation.id(), ROLE_SETTINGS, settingsJson(options));
+            listener.onSettingsChanged(marker.id());
+        }
+    }
+
+    private static ConversationSettings settingsFrom(InferenceOptions o) {
+        return new ConversationSettings(o.maxTokens(), o.temperature(), o.topP(),
+                o.repetitionPenalty(), o.verbose(), o.thinkingEnabled());
+    }
+
+    /** Compact JSON snapshot of the new inference params, stored on the marker for a future diff view. */
+    private static String settingsJson(InferenceOptions o) {
+        return String.format("{\"maxTokens\":%s,\"temperature\":%s,\"topP\":%s,\"repetitionPenalty\":%s}",
+                o.maxTokens(), o.temperature(), o.topP(), o.repetitionPenalty());
     }
 
     /** Links already-uploaded media to the just-inserted user message, ignoring unknown ids. */
@@ -413,6 +458,9 @@ public class ChatService {
         void onTranscript(String content);
 
         void onToken(String delta);
+
+        /** The user changed inference params mid-conversation; a {@code settings} marker was persisted. */
+        void onSettingsChanged(long messageId);
 
         /** One reasoning token (live-only; not persisted). */
         void onThinking(String delta);

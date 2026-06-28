@@ -18,7 +18,7 @@ export interface ConversationSummary {
 
 export interface ChatMessage {
   id: number;
-  role: "user" | "assistant" | "system" | "error";
+  role: "user" | "assistant" | "system" | "error" | "settings";
   content: string;
   createdAt: string;
   attachments: MediaAttachment[];
@@ -31,6 +31,12 @@ export interface ConversationDetail {
   provider: string;
   mode: string;
   messages: ChatMessage[];
+  maxTokens: number;
+  temperature: number;
+  topP: number;
+  repetitionPenalty: number;
+  verbose: boolean;
+  thinkingEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }

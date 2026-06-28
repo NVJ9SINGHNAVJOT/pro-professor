@@ -19,6 +19,8 @@ import java.util.List;
  * @param topP               nucleus sampling top-p, or {@code null} for the provider default
  * @param repetitionPenalty  repetition penalty, or {@code null} for the provider default
  * @param verbose            when {@code true}, stream token/timing metrics back to the client
+ * @param thinkingEnabled    UI preference (show the model's reasoning); persisted on the
+ *                           conversation, not forwarded to the provider
  */
 public record ChatSendRequest(
         Long conversationId,
@@ -31,6 +33,7 @@ public record ChatSendRequest(
         Double temperature,
         Double topP,
         Double repetitionPenalty,
-        Boolean verbose
+        Boolean verbose,
+        Boolean thinkingEnabled
 ) {
 }

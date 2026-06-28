@@ -9,8 +9,8 @@ import com.proprofessor.server.chat.ChatStreamEvents;
  */
 public sealed interface ChatStreamEvent
         permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatTitle, ChatStreamEvent.ChatTranscript,
-        ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatThinking, ChatStreamEvent.ChatMetrics,
-        ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
+        ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatSettings, ChatStreamEvent.ChatThinking,
+        ChatStreamEvent.ChatMetrics, ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
 
     String type();
 
@@ -45,6 +45,17 @@ public sealed interface ChatStreamEvent
     record ChatChunk(String type, long conversationId, String delta) implements ChatStreamEvent {
         public static ChatChunk of(long conversationId, String delta) {
             return new ChatChunk(ChatStreamEvents.CHAT_CHUNK, conversationId, delta);
+        }
+    }
+
+    /**
+     * {@code chat.settings} — the user changed inference params mid-conversation. A {@code settings}
+     * message row was persisted (id in {@code messageId}); the UI inserts a centered divider before
+     * the new turn. Sent once, right after {@code chat.start}.
+     */
+    record ChatSettings(String type, long conversationId, long messageId) implements ChatStreamEvent {
+        public static ChatSettings of(long conversationId, long messageId) {
+            return new ChatSettings(ChatStreamEvents.CHAT_SETTINGS, conversationId, messageId);
         }
     }
 

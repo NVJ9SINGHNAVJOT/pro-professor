@@ -18,6 +18,8 @@ export interface ChatSendPayload {
   topP?: number;
   repetitionPenalty?: number;
   verbose?: boolean;
+  /** UI preference (show reasoning); persisted on the conversation, not forwarded to the provider. */
+  thinkingEnabled?: boolean;
 }
 
 export interface ChatStreamCallbacks {
@@ -25,6 +27,7 @@ export interface ChatStreamCallbacks {
   onTitle: (data: { conversationId: number; title: string }) => void;
   onTranscript: (data: { content: string }) => void;
   onChunk: (data: { delta: string }) => void;
+  onSettings: (data: { messageId: number }) => void;
   onThinking: (data: { delta: string }) => void;
   onMetrics: (data: ChatMetricsData) => void;
   onDone: (data: { conversationId: number; messageId: number }) => void;
@@ -55,6 +58,12 @@ interface ChatChunkFrame {
   type: "chat.chunk";
   conversationId: number;
   delta: string;
+}
+
+interface ChatSettingsFrame {
+  type: "chat.settings";
+  conversationId: number;
+  messageId: number;
 }
 
 interface ChatThinkingFrame {
@@ -92,6 +101,7 @@ type ChatStreamFrame =
   | ChatTitleFrame
   | ChatTranscriptFrame
   | ChatChunkFrame
+  | ChatSettingsFrame
   | ChatThinkingFrame
   | ChatMetricsFrame
   | ChatDoneFrame
@@ -198,6 +208,9 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
       break;
     case "chat.chunk":
       cb.onChunk({ delta: event.delta });
+      break;
+    case "chat.settings":
+      cb.onSettings({ messageId: event.messageId });
       break;
     case "chat.thinking":
       cb.onThinking({ delta: event.delta });

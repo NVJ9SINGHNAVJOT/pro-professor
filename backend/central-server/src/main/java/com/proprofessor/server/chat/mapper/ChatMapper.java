@@ -57,6 +57,12 @@ public class ChatMapper {
                 conversation.model().provider(),
                 conversation.mode(),
                 messageDtos,
+                conversation.settings().maxTokens(),
+                conversation.settings().temperature(),
+                conversation.settings().topP(),
+                conversation.settings().repetitionPenalty(),
+                conversation.settings().verbose(),
+                conversation.settings().thinkingEnabled(),
                 conversation.createdAt(),
                 conversation.updatedAt()
         );
