@@ -7,6 +7,10 @@ export interface ChatMetricsData {
   totalTokens: number | null;
   evalRate: number | null;
   totalDurationS: number | null;
+  loadDurationS: number | null;
+  promptEvalDurationS: number | null;
+  promptEvalRate: number | null;
+  evalDurationS: number | null;
 }
 
 export interface UiMessage {

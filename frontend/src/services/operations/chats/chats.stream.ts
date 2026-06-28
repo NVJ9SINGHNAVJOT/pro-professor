@@ -27,7 +27,7 @@ export interface ChatStreamCallbacks {
   onTitle: (data: { conversationId: number; title: string }) => void;
   onTranscript: (data: { content: string }) => void;
   onChunk: (data: { delta: string }) => void;
-  onSettings: (data: { messageId: number }) => void;
+  onSettings: (data: { messageId: number; summary: string }) => void;
   onThinking: (data: { delta: string }) => void;
   onMetrics: (data: ChatMetricsData) => void;
   onDone: (data: { conversationId: number; messageId: number }) => void;
@@ -64,6 +64,7 @@ interface ChatSettingsFrame {
   type: "chat.settings";
   conversationId: number;
   messageId: number;
+  summary: string;
 }
 
 interface ChatThinkingFrame {
@@ -80,6 +81,10 @@ interface ChatMetricsFrame {
   totalTokens: number | null;
   evalRate: number | null;
   totalDurationS: number | null;
+  loadDurationS: number | null;
+  promptEvalDurationS: number | null;
+  promptEvalRate: number | null;
+  evalDurationS: number | null;
 }
 
 interface ChatDoneFrame {
@@ -210,7 +215,7 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
       cb.onChunk({ delta: event.delta });
       break;
     case "chat.settings":
-      cb.onSettings({ messageId: event.messageId });
+      cb.onSettings({ messageId: event.messageId, summary: event.summary });
       break;
     case "chat.thinking":
       cb.onThinking({ delta: event.delta });
@@ -222,6 +227,10 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
         totalTokens: event.totalTokens,
         evalRate: event.evalRate,
         totalDurationS: event.totalDurationS,
+        loadDurationS: event.loadDurationS,
+        promptEvalDurationS: event.promptEvalDurationS,
+        promptEvalRate: event.promptEvalRate,
+        evalDurationS: event.evalDurationS,
       });
       break;
     case "chat.done":

@@ -53,9 +53,10 @@ public sealed interface ChatStreamEvent
      * message row was persisted (id in {@code messageId}); the UI inserts a centered divider before
      * the new turn. Sent once, right after {@code chat.start}.
      */
-    record ChatSettings(String type, long conversationId, long messageId) implements ChatStreamEvent {
-        public static ChatSettings of(long conversationId, long messageId) {
-            return new ChatSettings(ChatStreamEvents.CHAT_SETTINGS, conversationId, messageId);
+    record ChatSettings(String type, long conversationId, long messageId, String summary)
+            implements ChatStreamEvent {
+        public static ChatSettings of(long conversationId, long messageId, String summary) {
+            return new ChatSettings(ChatStreamEvents.CHAT_SETTINGS, conversationId, messageId, summary);
         }
     }
 
@@ -78,13 +79,19 @@ public sealed interface ChatStreamEvent
             Long completionTokens,
             Long totalTokens,
             Double evalRate,
-            Double totalDurationS
+            Double totalDurationS,
+            Double loadDurationS,
+            Double promptEvalDurationS,
+            Double promptEvalRate,
+            Double evalDurationS
     ) implements ChatStreamEvent {
         public static ChatMetrics of(
                 long conversationId, Long promptTokens, Long completionTokens, Long totalTokens,
-                Double evalRate, Double totalDurationS) {
+                Double evalRate, Double totalDurationS, Double loadDurationS,
+                Double promptEvalDurationS, Double promptEvalRate, Double evalDurationS) {
             return new ChatMetrics(ChatStreamEvents.CHAT_METRICS, conversationId,
-                    promptTokens, completionTokens, totalTokens, evalRate, totalDurationS);
+                    promptTokens, completionTokens, totalTokens, evalRate, totalDurationS,
+                    loadDurationS, promptEvalDurationS, promptEvalRate, evalDurationS);
         }
     }
 

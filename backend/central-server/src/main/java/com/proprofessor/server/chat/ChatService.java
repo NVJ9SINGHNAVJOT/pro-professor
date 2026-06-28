@@ -142,7 +142,8 @@ public class ChatService {
                     onToken, listener::onThinking,
                     metrics -> listener.onMetrics(
                             metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),
-                            metrics.evalRate(), metrics.totalDurationS()));
+                            metrics.evalRate(), metrics.totalDurationS(), metrics.loadDurationS(),
+                            metrics.promptEvalDurationS(), metrics.promptEvalRate(), metrics.evalDurationS()));
 
             String reply = raw;
             if (audioTurn) {
@@ -226,10 +227,8 @@ public class ChatService {
     private void applySettingsChange(ConversationRow conversation, InferenceOptions options,
                                      ChatStreamListener listener) {
         ConversationSettings stored = conversation.settings();
-        boolean paramsChanged = !Objects.equals(stored.maxTokens(), options.maxTokens())
-                || !Objects.equals(stored.temperature(), options.temperature())
-                || !Objects.equals(stored.topP(), options.topP())
-                || !Objects.equals(stored.repetitionPenalty(), options.repetitionPenalty());
+        String summary = settingsChangeSummary(stored, options);
+        boolean paramsChanged = !summary.isEmpty();
         boolean togglesChanged = stored.verbose() != options.verbose()
                 || stored.thinkingEnabled() != options.thinkingEnabled();
         if (paramsChanged || togglesChanged) {
@@ -237,8 +236,8 @@ public class ChatService {
         }
         if (paramsChanged) {
             MessageRow marker =
-                    messageRepository.insert(conversation.id(), ROLE_SETTINGS, settingsJson(options));
-            listener.onSettingsChanged(marker.id());
+                    messageRepository.insert(conversation.id(), ROLE_SETTINGS, summary);
+            listener.onSettingsChanged(marker.id(), summary);
         }
     }
 
@@ -247,10 +246,31 @@ public class ChatService {
                 o.repetitionPenalty(), o.verbose(), o.thinkingEnabled());
     }
 
-    /** Compact JSON snapshot of the new inference params, stored on the marker for a future diff view. */
-    private static String settingsJson(InferenceOptions o) {
-        return String.format("{\"maxTokens\":%s,\"temperature\":%s,\"topP\":%s,\"repetitionPenalty\":%s}",
-                o.maxTokens(), o.temperature(), o.topP(), o.repetitionPenalty());
+    /**
+     * Human-readable summary of which sampling params changed, e.g.
+     * {@code "Temperature 0.7 → 0.8 · Max tokens 20000 → 1000"}. Stored as the marker's
+     * content (shown on reload) and sent live on the {@code chat.settings} event. Empty when
+     * nothing changed.
+     */
+    private static String settingsChangeSummary(ConversationSettings stored, InferenceOptions options) {
+        List<String> changes = new ArrayList<>();
+        if (!Objects.equals(stored.maxTokens(), options.maxTokens())) {
+            changes.add(formatChange("Max tokens", stored.maxTokens(), options.maxTokens()));
+        }
+        if (!Objects.equals(stored.temperature(), options.temperature())) {
+            changes.add(formatChange("Temperature", stored.temperature(), options.temperature()));
+        }
+        if (!Objects.equals(stored.topP(), options.topP())) {
+            changes.add(formatChange("Top P", stored.topP(), options.topP()));
+        }
+        if (!Objects.equals(stored.repetitionPenalty(), options.repetitionPenalty())) {
+            changes.add(formatChange("Repetition penalty", stored.repetitionPenalty(), options.repetitionPenalty()));
+        }
+        return String.join(" · ", changes);
+    }
+
+    private static String formatChange(String label, Object from, Object to) {
+        return label + " " + (from == null ? "default" : from) + " → " + (to == null ? "default" : to);
     }
 
     /** Links already-uploaded media to the just-inserted user message, ignoring unknown ids. */
@@ -460,14 +480,15 @@ public class ChatService {
         void onToken(String delta);
 
         /** The user changed inference params mid-conversation; a {@code settings} marker was persisted. */
-        void onSettingsChanged(long messageId);
+        void onSettingsChanged(long messageId, String summary);
 
         /** One reasoning token (live-only; not persisted). */
         void onThinking(String delta);
 
         /** Final token/timing metrics, emitted before completion when verbose was requested. */
         void onMetrics(Long promptTokens, Long completionTokens, Long totalTokens,
-                       Double evalRate, Double totalDurationS);
+                       Double evalRate, Double totalDurationS, Double loadDurationS,
+                       Double promptEvalDurationS, Double promptEvalRate, Double evalDurationS);
 
         void onComplete(long messageId);
 

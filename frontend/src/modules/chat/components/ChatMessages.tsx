@@ -12,12 +12,16 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
+  SlidersHorizontalIcon,
   SquareIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
 import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";
@@ -59,7 +63,7 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
         Thinking{isStreaming && "…"}
       </button>
       {open && (
-        <div className="whitespace-pre-wrap wrap-break-word px-3 pb-2.5 caption-small-regular text-neutral-400">
+        <div className="whitespace-pre-wrap wrap-break-word px-3 pb-2.5 para-small-regular text-neutral-400">
           {thinking}
         </div>
       )}
@@ -67,16 +71,85 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
   );
 };
 
-/** One-line token/timing summary shown under a reply when verbose was enabled. */
+/** Friendly labels for the inference params, used to render legacy JSON settings markers. */
+const SETTINGS_FIELD_LABELS: Record<string, string> = {
+  maxTokens: "Max tokens",
+  temperature: "Temperature",
+  topP: "Top P",
+  repetitionPenalty: "Repetition penalty",
+};
+
+/**
+ * Splits a settings marker's content into one entry per changed param.
+ * Current markers store a readable summary ("Temperature 0.7 → 0.8 · Max tokens …");
+ * markers saved before that change hold a JSON snapshot of the new params, parsed here so
+ * they still render as tidy pills.
+ */
+const parseSettingsChanges = (content: string): string[] => {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("{")) {
+    try {
+      const obj = JSON.parse(trimmed) as Record<string, unknown>;
+      return Object.entries(obj).map(([k, v]) => `${SETTINGS_FIELD_LABELS[k] ?? k} → ${v}`);
+    } catch {
+      return [trimmed];
+    }
+  }
+  return trimmed.split(" · ");
+};
+
+/** Centered divider marking a mid-conversation settings change, with a pill per changed param. */
+const SettingsDivider = ({ content }: { content: string }) => {
+  const changes = parseSettingsChanges(content);
+  return (
+    <div className="flex flex-col items-center gap-2 py-2">
+      <div className="flex w-full items-center gap-3">
+        <span className="h-px flex-1 bg-neutral-400" />
+        <span className="flex shrink-0 items-center gap-1.5 caption-small-regular text-neutral-400">
+          <SlidersHorizontalIcon className="size-3.5" />
+          Model settings changed
+        </span>
+        <span className="h-px flex-1 bg-neutral-400" />
+      </div>
+      {changes.length > 0 && (
+        <div className="flex max-w-md flex-wrap justify-center gap-1.5">
+          {changes.map((change, i) => (
+            <span
+              key={i}
+              className="rounded-full border border-neutral-800 bg-neutral-900/60 px-2.5 py-0.5 caption-small-regular text-neutral-400"
+            >
+              {change}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** CLI-style token/timing breakdown shown under a reply when verbose was enabled. */
 const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
-  const parts: string[] = [];
-  if (metrics.promptTokens != null) parts.push(`${metrics.promptTokens} in`);
-  if (metrics.completionTokens != null) parts.push(`${metrics.completionTokens} out`);
-  if (metrics.totalTokens != null) parts.push(`${metrics.totalTokens} total`);
-  if (metrics.evalRate != null) parts.push(`${metrics.evalRate.toFixed(1)} tok/s`);
-  if (metrics.totalDurationS != null) parts.push(`${metrics.totalDurationS.toFixed(2)}s`);
-  if (parts.length === 0) return null;
-  return <div className="mt-2 caption-small-regular text-neutral-500">{parts.join(" · ")}</div>;
+  const rows: { label: string; value: string }[] = [];
+  if (metrics.totalDurationS != null) rows.push({ label: "total duration", value: `${metrics.totalDurationS.toFixed(2)}s` });
+  if (metrics.loadDurationS != null) rows.push({ label: "load duration", value: `${metrics.loadDurationS.toFixed(2)}s` });
+  if (metrics.promptTokens != null) rows.push({ label: "prompt eval count", value: `${metrics.promptTokens} token(s)` });
+  if (metrics.promptEvalDurationS != null) rows.push({ label: "prompt eval duration", value: `${metrics.promptEvalDurationS.toFixed(2)}s` });
+  if (metrics.promptEvalRate != null) rows.push({ label: "prompt eval rate", value: `${metrics.promptEvalRate.toFixed(2)} tokens/s` });
+  if (metrics.completionTokens != null) rows.push({ label: "eval count", value: `${metrics.completionTokens} token(s)` });
+  if (metrics.evalDurationS != null) rows.push({ label: "eval duration", value: `${metrics.evalDurationS.toFixed(2)}s` });
+  if (metrics.evalRate != null) rows.push({ label: "eval rate", value: `${metrics.evalRate.toFixed(2)} tokens/s` });
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-2 w-fit rounded-xl border border-neutral-800 bg-neutral-900/60 px-3 py-2 font-mono caption-small-regular text-neutral-500">
+      {rows.map((row) => (
+        <div key={row.label} className="flex gap-3">
+          <span className="w-36 shrink-0">{row.label}:</span>
+          <span className="text-neutral-400">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 const AssistantMessage = ({
@@ -103,7 +176,9 @@ const AssistantMessage = ({
       <div className="flex-1 min-w-0">
         {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {content}
+          </ReactMarkdown>
           {isStreaming && (
             <span aria-hidden className="ct-wave ml-1 text-neutral-400">
               <span />
@@ -234,6 +309,9 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const findMaxContextTokens = (provider: ModelProvider, model: string): number | null =>
     models.find((m) => m.provider === provider && m.name === model)?.maxContextTokens ?? null;
 
+  // Re-derived at render time (like findModalities): on a cold reload the conversation loads
+  // before the models list does, so the flag baked into `selected` can be stale (false). This
+  // reads the loaded list, which is correct once it arrives.
   const findSupportsThinking = (provider: ModelProvider, model: string): boolean =>
     models.find((m) => m.provider === provider && m.name === model)?.supportsThinking ?? false;
 
@@ -463,12 +541,12 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             return next;
           });
         },
-        onSettings: () => {
+        onSettings: ({ summary }) => {
           // Drop the divider above this turn's user/assistant pair (the last two entries),
-          // matching where it lands on reload.
+          // matching where it lands on reload. The summary lists which params changed.
           setMessages((prev) => {
             const next = [...prev];
-            next.splice(next.length - 2, 0, { role: "settings", content: "" });
+            next.splice(next.length - 2, 0, { role: "settings", content: summary });
             return next;
           });
         },
@@ -651,7 +729,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             onVerboseChange={setVerbose}
             thinkingEnabled={thinkingEnabled}
             onThinkingChange={setThinkingEnabled}
-            supportsThinking={selected?.supportsThinking ?? false}
+            supportsThinking={selected ? findSupportsThinking(selected.provider, selected.model) : false}
             maxContextTokens={selected?.maxContextTokens ?? null}
             modelSelected={selected !== null}
             disabled={inputDisabled}
@@ -698,13 +776,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                 );
               }
               if (message.role === "settings") {
-                return (
-                  <div key={index} className="flex items-center justify-center gap-3 py-1">
-                    <span className="h-px flex-1 bg-neutral-800" />
-                    <span className="shrink-0 caption-small-regular text-neutral-500">Model settings changed</span>
-                    <span className="h-px flex-1 bg-neutral-800" />
-                  </div>
-                );
+                return <SettingsDivider key={index} content={message.content} />;
               }
               if (message.role === "error") {
                 return <ErrorMessage key={index} content={message.content} />;

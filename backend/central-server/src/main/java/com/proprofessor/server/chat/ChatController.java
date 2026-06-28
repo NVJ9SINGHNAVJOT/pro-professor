@@ -154,8 +154,8 @@ public class ChatController {
         }
 
         @Override
-        public void onSettingsChanged(long messageId) {
-            emitEvent(emitter, ChatStreamEvent.ChatSettings.of(conversationId, messageId));
+        public void onSettingsChanged(long messageId, String summary) {
+            emitEvent(emitter, ChatStreamEvent.ChatSettings.of(conversationId, messageId, summary));
         }
 
         @Override
@@ -165,9 +165,11 @@ public class ChatController {
 
         @Override
         public void onMetrics(Long promptTokens, Long completionTokens, Long totalTokens,
-                              Double evalRate, Double totalDurationS) {
+                              Double evalRate, Double totalDurationS, Double loadDurationS,
+                              Double promptEvalDurationS, Double promptEvalRate, Double evalDurationS) {
             emitEvent(emitter, ChatStreamEvent.ChatMetrics.of(
-                    conversationId, promptTokens, completionTokens, totalTokens, evalRate, totalDurationS));
+                    conversationId, promptTokens, completionTokens, totalTokens, evalRate, totalDurationS,
+                    loadDurationS, promptEvalDurationS, promptEvalRate, evalDurationS));
         }
 
         @Override

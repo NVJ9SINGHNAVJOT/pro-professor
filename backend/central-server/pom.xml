@@ -21,6 +21,8 @@
         <java.version>21</java.version>
         <!-- Align Jackson with what the OpenAI Java SDK requires (Spring Boot 3.3 ships 2.17). -->
         <jackson-bom.version>2.18.2</jackson-bom.version>
+        <!-- Override Spring Boot 3.3's managed Flyway (10.10) for PostgreSQL 17 support (added in 10.20). -->
+        <flyway.version>10.22.0</flyway.version>
     </properties>
 
     <dependencies>

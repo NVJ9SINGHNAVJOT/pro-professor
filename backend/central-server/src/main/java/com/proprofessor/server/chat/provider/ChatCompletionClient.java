@@ -172,6 +172,10 @@ public class ChatCompletionClient {
         Long totalTokens = null;
         Double evalRate = null;
         Double totalDurationS = null;
+        Double loadDurationS = null;
+        Double promptEvalDurationS = null;
+        Double promptEvalRate = null;
+        Double evalDurationS = null;
 
         if (chunk.usage().isPresent()) {
             CompletionUsage usage = chunk.usage().get();
@@ -199,6 +203,10 @@ public class ChatCompletionClient {
                     }
                     evalRate = asDouble(metrics.get("eval_rate"));
                     totalDurationS = asDouble(metrics.get("total_duration_s"));
+                    loadDurationS = asDouble(metrics.get("load_duration_s"));
+                    promptEvalDurationS = asDouble(metrics.get("prompt_eval_duration_s"));
+                    promptEvalRate = asDouble(metrics.get("prompt_eval_rate"));
+                    evalDurationS = asDouble(metrics.get("eval_duration_s"));
                 }
             } catch (RuntimeException ignored) {
                 // best-effort: leave whatever standard usage gave us
@@ -206,10 +214,12 @@ public class ChatCompletionClient {
         }
 
         if (promptTokens == null && completionTokens == null && totalTokens == null
-                && evalRate == null && totalDurationS == null) {
+                && evalRate == null && totalDurationS == null && loadDurationS == null
+                && promptEvalDurationS == null && promptEvalRate == null && evalDurationS == null) {
             return null;
         }
-        return new StreamMetrics(promptTokens, completionTokens, totalTokens, evalRate, totalDurationS);
+        return new StreamMetrics(promptTokens, completionTokens, totalTokens, evalRate,
+                totalDurationS, loadDurationS, promptEvalDurationS, promptEvalRate, evalDurationS);
     }
 
     private static Long asLong(Object value) {
@@ -226,7 +236,11 @@ public class ChatCompletionClient {
             Long completionTokens,
             Long totalTokens,
             Double evalRate,
-            Double totalDurationS
+            Double totalDurationS,
+            Double loadDurationS,
+            Double promptEvalDurationS,
+            Double promptEvalRate,
+            Double evalDurationS
     ) {
     }
 
