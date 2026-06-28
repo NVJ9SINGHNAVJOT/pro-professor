@@ -44,7 +44,13 @@ import {
   type SelectedModel,
   type UiMessage,
 } from "@/modules/chat/types";
-import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/modules/chat/constants";
+import {
+  AUTOSCROLL_THRESHOLD_PX,
+  MAX_TEXTAREA_HEIGHT_PX,
+  STREAM_MIN_CHARS_PER_FRAME,
+  STREAM_REVEAL_DIVISOR,
+  SUGGESTIONS,
+} from "@/modules/chat/constants";
 
 /** Max images attachable to one turn — base64 inflates the request and small VLMs degrade past a couple. */
 const MAX_IMAGES = 2;
@@ -331,6 +337,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const isNewChatRef = useRef<boolean>(true);
   const selectedRef = useRef<SelectedModel | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // rAF handle for the smooth-reveal loop, and a finalize hook so a stop/unmount can flush the
+  // received text and halt the loop from outside the per-request closure.
+  const rafRef = useRef<number | null>(null);
+  const finalizeRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -430,10 +440,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
   }, [input]);
 
-  // stop any in-flight playback when the component unmounts
+  // stop any in-flight playback and the reveal loop when the component unmounts
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
@@ -523,7 +534,83 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
     setStreaming(true);
 
+    // --- smooth reveal --------------------------------------------------------------------------
+    // Received text is the *target*; a character cursor walks toward it on a requestAnimationFrame
+    // loop, so the on-screen reveal stays steady even when the network delivers tokens in bursts.
     let fullReply = "";
+    let fullThinking = "";
+    let shownReply = 0;
+    let shownThinking = 0;
+    let streamDone = false;
+    let settled = false;
+
+    // Paint the currently revealed prefixes into the streaming assistant message.
+    const paint = () => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant") {
+          next[next.length - 1] = {
+            ...last,
+            content: fullReply.slice(0, shownReply),
+            ...(fullThinking ? { thinking: fullThinking.slice(0, shownThinking) } : {}),
+          };
+        }
+        return next;
+      });
+    };
+
+    // Reveal a slice of the backlog: larger when far behind, easing to the floor as it catches up.
+    const advance = (shown: number, total: number): number =>
+      shown >= total
+        ? shown
+        : Math.min(
+            total,
+            shown + Math.max(STREAM_MIN_CHARS_PER_FRAME, Math.ceil((total - shown) / STREAM_REVEAL_DIVISOR)),
+          );
+
+    // Finish once: reveal everything received, stop the loop, run completion side effects.
+    const settle = (speak: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      shownReply = fullReply.length;
+      shownThinking = fullThinking.length;
+      paint();
+      setStreaming(false);
+      finalizeRef.current = null;
+      if (speak && opts?.speak && fullReply.trim()) void playReply(fullReply);
+      else if (opts?.speak) setVoiceMode("idle");
+    };
+
+    const tick = () => {
+      const nextReply = advance(shownReply, fullReply.length);
+      const nextThinking = advance(shownThinking, fullThinking.length);
+      if (nextReply !== shownReply || nextThinking !== shownThinking) {
+        shownReply = nextReply;
+        shownThinking = nextThinking;
+        paint();
+      }
+      // Caught up: idle the loop (onChunk restarts it) — or settle if the stream has also ended.
+      if (shownReply >= fullReply.length && shownThinking >= fullThinking.length) {
+        rafRef.current = null;
+        if (streamDone) settle(true);
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    // Restart the loop after new tokens land (no-op while it's already running or after settle).
+    const pump = () => {
+      if (rafRef.current === null && !settled) rafRef.current = requestAnimationFrame(tick);
+    };
+
+    // A stop/unmount reveals what's been received and halts the loop without speaking the reply.
+    finalizeRef.current = () => settle(false);
+
     const controller = chatsStream.send(
       {
         conversationId: convIdRef.current,
@@ -586,29 +673,13 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         },
         onChunk: ({ delta }) => {
           fullReply += delta;
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant") {
-              next[next.length - 1] = {
-                ...last,
-                content: last.content + delta,
-              };
-            }
-            return next;
-          });
+          pump();
         },
         onThinking: ({ delta }) => {
           // The toggle is opt-in: drop reasoning when the user hasn't asked to see it.
           if (!thinkingEnabled) return;
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant") {
-              next[next.length - 1] = { ...last, thinking: (last.thinking ?? "") + delta };
-            }
-            return next;
-          });
+          fullThinking += delta;
+          pump();
         },
         onMetrics: (data) => {
           setMessages((prev) => {
@@ -621,13 +692,12 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           });
         },
         onDone: () => {
-          setStreaming(false);
-          if (opts?.speak && fullReply.trim()) void playReply(fullReply);
-          else if (opts?.speak) setVoiceMode("idle");
+          // Let the reveal drain the remaining backlog; the loop settles (and speaks) when caught up.
+          streamDone = true;
+          pump();
         },
         onError: (message, meta) => {
-          setStreaming(false);
-          if (opts?.speak) setVoiceMode("idle");
+          settle(false); // reveal any partial reply and stop the loop before showing the error
           const display = meta?.requestId ? `${message} (ref: ${meta.requestId})` : message;
           // Replace the empty assistant placeholder with the error; keep any partial reply above it.
           setMessages((prev) => {
@@ -652,6 +722,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const handleStop = () => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // Reveal whatever was received and halt the reveal loop (also clears `streaming`).
+    finalizeRef.current?.();
     setStreaming(false);
   };
 
