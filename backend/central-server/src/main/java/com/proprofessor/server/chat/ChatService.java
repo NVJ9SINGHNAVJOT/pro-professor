@@ -128,8 +128,14 @@ public class ChatService {
         }
 
         try {
+            // Pre-warm the model. The AI service reports its own load time in x_metrics; Ollama's
+            // OpenAI-compatible chat endpoint omits timing, so on a verbose turn we preload it
+            // natively to capture this turn's load_duration and leave a clean prompt-eval timing.
+            Double ollamaLoadDurationS = null;
             if (provider == ModelProvider.AI_SERVICE) {
                 modelService.loadModel(modelName);
+            } else if (provider == ModelProvider.OLLAMA && command.options().verbose()) {
+                ollamaLoadDurationS = modelService.preloadOllama(modelName);
             }
             // For an audio turn the model first transcribes the clip inside a delimiter; the splitter
             // strips that from the reply so only the answer reaches the UI/TTS.
@@ -138,7 +144,7 @@ public class ChatService {
             Consumer<String> onToken = audioTurn ? transcriptStream::accept : listener::onToken;
 
             String raw = chatCompletionClient.streamChat(
-                    provider, modelName, history, command.options(),
+                    provider, modelName, history, command.options(), ollamaLoadDurationS,
                     onToken, listener::onThinking,
                     metrics -> listener.onMetrics(
                             metrics.promptTokens(), metrics.completionTokens(), metrics.totalTokens(),

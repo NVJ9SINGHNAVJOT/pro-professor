@@ -55,6 +55,16 @@ public class ModelService {
         aiServiceClient.loadModel(name);
     }
 
+    /**
+     * Pre-warms an Ollama model so the following chat generation runs against a resident model,
+     * returning this turn's load cost in seconds (real on a cold start, near-zero when warm) or
+     * {@code null} on error. Used to report a clean {@code load_duration} for Ollama, whose
+     * OpenAI-compatible chat endpoint omits timing data.
+     */
+    public Double preloadOllama(String name) {
+        return ollamaClient.preload(name);
+    }
+
     @Transactional
     public ModelRow getOrCreateModel(ModelProvider provider, String name) {
         return modelRepository.findByProviderAndName(provider.getValue(), name)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "@/components/common/toast";
 import {
@@ -49,6 +49,41 @@ import { AUTOSCROLL_THRESHOLD_PX, MAX_TEXTAREA_HEIGHT_PX, SUGGESTIONS } from "@/
 /** Max images attachable to one turn — base64 inflates the request and small VLMs degrade past a couple. */
 const MAX_IMAGES = 2;
 
+/**
+ * Markdown + GitHub-flavored + KaTeX, memoized on its source so a token that doesn't change
+ * the rendered string (e.g. while an unclosed math token is being withheld) skips re-parsing.
+ */
+const Markdown = memo(({ children }: { children: string }) => (
+  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+    {children}
+  </ReactMarkdown>
+));
+Markdown.displayName = "Markdown";
+
+/** Characters that mark text inside `$…$` as a LaTeX expression rather than plain prose/currency. */
+const MATH_HINT = /[\\{}^_]/;
+
+/**
+ * While a reply streams, LaTeX arrives a character at a time, so the tail is often a half-typed
+ * expression ("$\text{CO" shows its raw source, then snaps to CO₂ once the closing "$" lands).
+ * Withholding just that dangling expression until it closes keeps the stream from flashing raw
+ * markup — the way ChatGPT/Gemini read. A lone "$" that looks like currency ("costs $5") is left
+ * alone so real text isn't hidden. Call this only mid-stream; the final content renders in full.
+ */
+const hideUnclosedMath = (text: string): string => {
+  // Display math ($$…$$): an odd count of delimiters means the last block is still open.
+  if ((text.match(/\$\$/g)?.length ?? 0) % 2 === 1) {
+    const cut = text.lastIndexOf("$$");
+    if (MATH_HINT.test(text.slice(cut))) return text.slice(0, cut);
+  }
+  // Inline math ($…$): same idea for single delimiters.
+  if ((text.match(/\$/g)?.length ?? 0) % 2 === 1) {
+    const cut = text.lastIndexOf("$");
+    if (MATH_HINT.test(text.slice(cut))) return text.slice(0, cut);
+  }
+  return text;
+};
+
 /** Collapsible panel showing a model's streamed reasoning. */
 const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreaming: boolean }) => {
   const [open, setOpen] = useState(true);
@@ -63,8 +98,8 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
         Thinking{isStreaming && "…"}
       </button>
       {open && (
-        <div className="whitespace-pre-wrap wrap-break-word px-3 pb-2.5 para-small-regular text-neutral-400">
-          {thinking}
+        <div className="chat-markdown wrap-break-word px-3 pb-2.5 para-small-regular text-neutral-400">
+          <Markdown>{isStreaming ? hideUnclosedMath(thinking) : thinking}</Markdown>
         </div>
       )}
     </div>
@@ -113,7 +148,7 @@ const SettingsDivider = ({ content }: { content: string }) => {
         <span className="h-px flex-1 bg-neutral-400" />
       </div>
       {changes.length > 0 && (
-        <div className="flex max-w-md flex-wrap justify-center gap-1.5">
+        <div className="flex flex-wrap justify-center gap-1.5">
           {changes.map((change, i) => (
             <span
               key={i}
@@ -131,20 +166,27 @@ const SettingsDivider = ({ content }: { content: string }) => {
 /** CLI-style token/timing breakdown shown under a reply when verbose was enabled. */
 const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
   const rows: { label: string; value: string }[] = [];
-  if (metrics.totalDurationS != null) rows.push({ label: "total duration", value: `${metrics.totalDurationS.toFixed(2)}s` });
-  if (metrics.loadDurationS != null) rows.push({ label: "load duration", value: `${metrics.loadDurationS.toFixed(2)}s` });
-  if (metrics.promptTokens != null) rows.push({ label: "prompt eval count", value: `${metrics.promptTokens} token(s)` });
-  if (metrics.promptEvalDurationS != null) rows.push({ label: "prompt eval duration", value: `${metrics.promptEvalDurationS.toFixed(2)}s` });
-  if (metrics.promptEvalRate != null) rows.push({ label: "prompt eval rate", value: `${metrics.promptEvalRate.toFixed(2)} tokens/s` });
-  if (metrics.completionTokens != null) rows.push({ label: "eval count", value: `${metrics.completionTokens} token(s)` });
-  if (metrics.evalDurationS != null) rows.push({ label: "eval duration", value: `${metrics.evalDurationS.toFixed(2)}s` });
+  if (metrics.totalDurationS != null)
+    rows.push({ label: "total duration", value: `${metrics.totalDurationS.toFixed(2)}s` });
+  if (metrics.loadDurationS != null)
+    rows.push({ label: "load duration", value: `${metrics.loadDurationS.toFixed(2)}s` });
+  if (metrics.promptTokens != null)
+    rows.push({ label: "prompt eval count", value: `${metrics.promptTokens} token(s)` });
+  if (metrics.promptEvalDurationS != null)
+    rows.push({ label: "prompt eval duration", value: `${metrics.promptEvalDurationS.toFixed(2)}s` });
+  if (metrics.promptEvalRate != null)
+    rows.push({ label: "prompt eval rate", value: `${metrics.promptEvalRate.toFixed(2)} tokens/s` });
+  if (metrics.completionTokens != null)
+    rows.push({ label: "eval count", value: `${metrics.completionTokens} token(s)` });
+  if (metrics.evalDurationS != null)
+    rows.push({ label: "eval duration", value: `${metrics.evalDurationS.toFixed(2)}s` });
   if (metrics.evalRate != null) rows.push({ label: "eval rate", value: `${metrics.evalRate.toFixed(2)} tokens/s` });
   if (rows.length === 0) return null;
   return (
     <div className="mt-2 w-fit rounded-xl border border-neutral-800 bg-neutral-900/60 px-3 py-2 font-mono caption-small-regular text-neutral-500">
       {rows.map((row) => (
         <div key={row.label} className="flex gap-3">
-          <span className="w-36 shrink-0">{row.label}:</span>
+          <span className="w-40 shrink-0">{row.label}:</span>
           <span className="text-neutral-400">{row.value}</span>
         </div>
       ))}
@@ -176,9 +218,7 @@ const AssistantMessage = ({
       <div className="flex-1 min-w-0">
         {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
         <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {content}
-          </ReactMarkdown>
+          <Markdown>{isStreaming ? hideUnclosedMath(content) : content}</Markdown>
           {isStreaming && (
             <span aria-hidden className="ct-wave ml-1 text-neutral-400">
               <span />
@@ -348,14 +388,8 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         detail.messages
           .filter((m) => m.role !== "system")
           .map((m) => ({
-            role:
-              m.role === "assistant"
-                ? "assistant"
-                : m.role === "error"
-                  ? "error"
-                  : m.role === "settings"
-                    ? "settings"
-                    : "user",
+            // "system" rows are filtered out above, so the role is never "system".
+            role: m.role as UiMessage["role"],
             content: m.content,
             attachments: m.attachments,
           })),
@@ -708,7 +742,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       )}
 
       {/* Top bar: sidebar toggle + model selector — height matches the sidebar header */}
-      <div className="relative z-20 flex h-11.5 shrink-0 items-center gap-2 px-4">
+      <div className="relative z-20 flex h-11.5 shrink-0 items-center gap-2 pt-2 px-4">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -730,7 +764,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             thinkingEnabled={thinkingEnabled}
             onThinkingChange={setThinkingEnabled}
             supportsThinking={selected ? findSupportsThinking(selected.provider, selected.model) : false}
-            maxContextTokens={selected?.maxContextTokens ?? null}
+            maxContextTokens={selected ? findMaxContextTokens(selected.provider, selected.model) : null}
             modelSelected={selected !== null}
             disabled={inputDisabled}
           />

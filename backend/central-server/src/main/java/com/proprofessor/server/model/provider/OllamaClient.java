@@ -47,6 +47,33 @@ public class OllamaClient {
     }
 
     /**
+     * Pre-warms a model via Ollama's native {@code POST /api/generate} (empty prompt) so the
+     * following chat generation runs against a resident model. Returns this call's load cost in
+     * seconds — the real load time on a cold start, near-zero when already resident — or
+     * {@code null} on any error (metrics are best-effort and must not break generation).
+     */
+    public Double preload(String modelName) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.post()
+                    .uri("/api/generate")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("model", modelName, "prompt", "", "stream", false))
+                    .retrieve()
+                    .body(Map.class);
+            if (response == null) {
+                return null;
+            }
+            // Ollama reports load_duration in nanoseconds.
+            Object loadDurationNs = response.get("load_duration");
+            return loadDurationNs instanceof Number number ? number.doubleValue() / 1_000_000_000.0 : null;
+        } catch (Exception e) {
+            log.warn("Failed to preload Ollama model '{}': {}", modelName, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Calls {@code POST /api/show} for a single model to retrieve its capabilities
      * and {@code model_info} (used for the context window). Returns {@code null} on
      * any error so one bad model doesn't block the entire list.

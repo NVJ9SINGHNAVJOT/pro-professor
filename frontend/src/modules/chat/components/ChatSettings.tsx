@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SettingsIcon } from "lucide-react";
 import Tooltip from "@/components/common/Tooltip";
+import { SliderInput } from "@/components/inputs/SliderInput";
+import { ToggleInput } from "@/components/inputs/ToggleInput";
 import { cn } from "@/lib/utils";
 import { MAX_TOKENS_LIMIT, type InferenceParams } from "@/modules/chat/types";
 
@@ -24,84 +26,6 @@ interface ChatSettingsProps {
   modelSelected: boolean;
   disabled?: boolean;
 }
-
-const SliderRow = ({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}) => (
-  <label className="block">
-    <div className="mb-1 flex items-center justify-between">
-      <span className="caption-small-regular text-neutral-300">{label}</span>
-      <span className="caption-small-regular tabular-nums text-neutral-400">{value}</span>
-    </div>
-    <input
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="ct-range h-1 w-full cursor-pointer accent-richblue-300"
-    />
-    <div className="mt-1 flex items-center justify-between caption-small-regular tabular-nums text-neutral-500">
-      <span>{min}</span>
-      <span>{max}</span>
-    </div>
-  </label>
-);
-
-const ToggleRow = ({
-  label,
-  description,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  disabled?: boolean;
-}) => (
-  <button
-    type="button"
-    onClick={() => onChange(!checked)}
-    disabled={disabled}
-    className={cn(
-      "flex w-full items-center justify-between gap-3 text-left",
-      disabled && "cursor-not-allowed opacity-50",
-    )}
-  >
-    <span>
-      <span className="block caption-small-regular text-neutral-200">{label}</span>
-      <span className="block caption-small-regular text-neutral-500">{description}</span>
-    </span>
-    <span
-      className={cn(
-        "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-        checked ? "bg-richblue-300" : "bg-neutral-700",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-4 rounded-full bg-white transition-transform",
-          checked ? "translate-x-4" : "translate-x-0.5",
-        )}
-      />
-    </span>
-  </button>
-);
 
 const ChatSettings = ({
   params,
@@ -190,7 +114,7 @@ const ChatSettings = ({
 
             <div className="my-0.5 h-px bg-neutral-800" />
 
-            <SliderRow
+            <SliderInput
               label="Max tokens"
               value={Math.min(params.maxTokens, maxTokensCeiling)}
               min={1}
@@ -198,7 +122,7 @@ const ChatSettings = ({
               step={1}
               onChange={(v) => set({ maxTokens: v })}
             />
-            <SliderRow
+            <SliderInput
               label="Temperature"
               value={params.temperature}
               min={0}
@@ -206,7 +130,7 @@ const ChatSettings = ({
               step={0.05}
               onChange={(v) => set({ temperature: v })}
             />
-            <SliderRow
+            <SliderInput
               label="Top P"
               value={params.topP}
               min={0}
@@ -214,7 +138,7 @@ const ChatSettings = ({
               step={0.05}
               onChange={(v) => set({ topP: v })}
             />
-            <SliderRow
+            <SliderInput
               label="Repetition penalty"
               value={params.repetitionPenalty}
               min={1}
@@ -225,7 +149,7 @@ const ChatSettings = ({
 
             <div className="my-0.5 h-px bg-neutral-800" />
 
-            <ToggleRow
+            <ToggleInput
               label="Verbose"
               description="Show token & timing stats"
               checked={verbose}
@@ -233,7 +157,7 @@ const ChatSettings = ({
             />
             {modelSelected ? (
               supportsThinking && (
-                <ToggleRow
+                <ToggleInput
                   label="Thinking"
                   description="Show the model's reasoning"
                   checked={thinkingEnabled}
@@ -243,7 +167,7 @@ const ChatSettings = ({
             ) : (
               <Tooltip content="Select a model first" side="left">
                 <div>
-                  <ToggleRow
+                  <ToggleInput
                     label="Thinking"
                     description="Show the model's reasoning"
                     checked={false}

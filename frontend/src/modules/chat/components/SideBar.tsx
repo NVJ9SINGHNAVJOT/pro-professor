@@ -87,7 +87,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           )}
         >
           {/* New chat — shares the chat top bar's height for a uniform top band */}
-          <div className="flex h-11.5 shrink-0 items-center px-2">
+          <div className="flex h-11.5 shrink-0 items-center pt-2 px-2">
             <button
               type="button"
               onClick={() => navigate(ROUTES.CHAT)}

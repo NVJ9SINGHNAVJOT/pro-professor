@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -61,13 +62,16 @@ public class ChatCompletionClient {
      * are <em>not</em> persisted. When {@link InferenceOptions#verbose()} is set, the final
      * token/timing metrics are delivered once to {@code onMetrics}.
      *
-     * @param provider   which backend owns the model
-     * @param model      provider model id
-     * @param messages   full conversation history (oldest first)
-     * @param options    per-request inference settings
-     * @param onAnswer   called once per streamed answer token
-     * @param onThinking called once per streamed reasoning token
-     * @param onMetrics  called at most once with the final metrics (only when verbose)
+     * @param provider             which backend owns the model
+     * @param model                provider model id
+     * @param messages             full conversation history (oldest first)
+     * @param options              per-request inference settings
+     * @param preloadLoadDurationS Ollama's preload cost for this turn (seconds), used to fill
+     *                             {@code load_duration} when the provider reports counts only;
+     *                             {@code null} for the AI service (its x_metrics carry timing)
+     * @param onAnswer             called once per streamed answer token
+     * @param onThinking           called once per streamed reasoning token
+     * @param onMetrics            called at most once with the final metrics (only when verbose)
      * @return the complete assembled assistant answer (reasoning excluded)
      */
     public String streamChat(
@@ -75,6 +79,7 @@ public class ChatCompletionClient {
             String model,
             List<ChatMessage> messages,
             InferenceOptions options,
+            Double preloadLoadDurationS,
             Consumer<String> onAnswer,
             Consumer<String> onThinking,
             Consumer<StreamMetrics> onMetrics
@@ -94,6 +99,13 @@ public class ChatCompletionClient {
 
         StringBuilder full = new StringBuilder();
         AtomicReference<StreamMetrics> lastMetrics = new AtomicReference<>();
+        // Wall-clock markers for providers that report counts only (Ollama): time-to-first-token
+        // approximates prompt eval, and first→last token approximates generation. Accurate on the
+        // local network this runs over; the model is already warm from the preload, so the load
+        // cost is excluded from time-to-first-token.
+        AtomicLong firstTokenNanos = new AtomicLong(0);
+        AtomicLong lastTokenNanos = new AtomicLong(0);
+        long startNanos = System.nanoTime();
         try (StreamResponse<ChatCompletionChunk> stream =
                      clients.get(provider).chat().completions().createStreaming(params.build())) {
             stream.stream().forEach(chunk -> {
@@ -101,6 +113,9 @@ public class ChatCompletionClient {
                     ChatCompletionChunk.Choice.Delta delta = choice.delta();
                     delta.content().ifPresent(token -> {
                         if (!token.isEmpty()) {
+                            long now = System.nanoTime();
+                            firstTokenNanos.compareAndSet(0, now);
+                            lastTokenNanos.set(now);
                             full.append(token);
                             onAnswer.accept(token);
                         }
@@ -112,18 +127,85 @@ public class ChatCompletionClient {
                     });
                 }
                 if (options.verbose()) {
-                    StreamMetrics metrics = extractMetrics(chunk);
-                    if (metrics != null) {
-                        lastMetrics.set(metrics);
+                    // Counts (usage) and timing (x_metrics) can arrive on separate chunks — the
+                    // trailing usage chunk would otherwise clobber the timing — so merge, keeping
+                    // each field's first non-null value.
+                    StreamMetrics partial = extractMetrics(chunk);
+                    if (partial != null) {
+                        lastMetrics.updateAndGet(prev -> mergeMetrics(prev, partial));
                     }
                 }
             });
         }
         StreamMetrics metrics = lastMetrics.get();
         if (metrics != null) {
+            // A counts-only result (no timing) means the provider didn't report timing — Ollama's
+            // OpenAI-compatible endpoint. Fill it from our measurements + the preload's load cost.
+            if (metrics.totalDurationS() == null) {
+                metrics = withMeasuredTimings(
+                        metrics, startNanos, firstTokenNanos.get(), lastTokenNanos.get(), preloadLoadDurationS);
+            }
             onMetrics.accept(metrics);
         }
         return full.toString();
+    }
+
+    /** Load durations below this (seconds) mean the model was already warm; reported as no load. */
+    private static final double WARM_LOAD_THRESHOLD_S = 0.02;
+
+    /**
+     * Fills a counts-only {@link StreamMetrics} with timing derived from wall-clock markers and the
+     * preload's load cost, computing the rates. A field is left {@code null} when its inputs are
+     * missing (e.g. an empty reply yields no token timestamps).
+     */
+    private static StreamMetrics withMeasuredTimings(
+            StreamMetrics base, long startNanos, long firstTokenNanos, long lastTokenNanos,
+            Double preloadLoadDurationS) {
+        double totalDurationS = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+        Double promptEvalDurationS = firstTokenNanos > 0
+                ? (firstTokenNanos - startNanos) / 1_000_000_000.0 : null;
+        Double evalDurationS = (firstTokenNanos > 0 && lastTokenNanos > firstTokenNanos)
+                ? (lastTokenNanos - firstTokenNanos) / 1_000_000_000.0 : null;
+        // Match the AI service, which omits load_duration on a warm turn.
+        Double loadDurationS = (preloadLoadDurationS != null && preloadLoadDurationS >= WARM_LOAD_THRESHOLD_S)
+                ? preloadLoadDurationS : null;
+        return new StreamMetrics(
+                base.promptTokens(), base.completionTokens(), base.totalTokens(),
+                rate(base.completionTokens(), evalDurationS), totalDurationS, loadDurationS,
+                promptEvalDurationS, rate(base.promptTokens(), promptEvalDurationS), evalDurationS);
+    }
+
+    /** Tokens-per-second, or {@code null} when the count or duration is missing/zero. */
+    private static Double rate(Long count, Double durationS) {
+        if (count == null || durationS == null || durationS <= 0) {
+            return null;
+        }
+        return count / durationS;
+    }
+
+    /**
+     * Merges two partial metrics, keeping each field's first non-null value ({@code prev} wins).
+     * Lets a counts-only usage chunk and a timing-bearing x_metrics chunk combine across the stream
+     * without either clobbering the other.
+     */
+    private static StreamMetrics mergeMetrics(StreamMetrics prev, StreamMetrics next) {
+        if (prev == null) {
+            return next;
+        }
+        return new StreamMetrics(
+                firstNonNull(prev.promptTokens(), next.promptTokens()),
+                firstNonNull(prev.completionTokens(), next.completionTokens()),
+                firstNonNull(prev.totalTokens(), next.totalTokens()),
+                firstNonNull(prev.evalRate(), next.evalRate()),
+                firstNonNull(prev.totalDurationS(), next.totalDurationS()),
+                firstNonNull(prev.loadDurationS(), next.loadDurationS()),
+                firstNonNull(prev.promptEvalDurationS(), next.promptEvalDurationS()),
+                firstNonNull(prev.promptEvalRate(), next.promptEvalRate()),
+                firstNonNull(prev.evalDurationS(), next.evalDurationS()));
+    }
+
+    private static <T> T firstNonNull(T a, T b) {
+        return a != null ? a : b;
     }
 
     /** Sets the per-request inference params on the builder, skipping nulls. */
@@ -141,10 +223,11 @@ public class ChatCompletionClient {
         if (options.repetitionPenalty() != null) {
             params.putAdditionalBodyProperty("repetition_penalty", JsonValue.from(options.repetitionPenalty()));
         }
+        // Always request token counts (usage) so context accounting works on every turn; both
+        // providers emit a standard usage chunk when asked. verbose=true additionally requests the
+        // provider's richer x_metrics timing block.
+        params.streamOptions(ChatCompletionStreamOptions.builder().includeUsage(true).build());
         if (options.verbose()) {
-            // include_usage gives standard token counts (e.g. Ollama); verbose=true asks the AI
-            // service for its richer x_metrics block on the final chunk.
-            params.streamOptions(ChatCompletionStreamOptions.builder().includeUsage(true).build());
             params.putAdditionalBodyProperty("verbose", JsonValue.from(true));
         }
     }
