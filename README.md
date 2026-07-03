@@ -3,6 +3,25 @@
 An AI-powered professor / chat application. This is a monorepo containing the web client,
 the orchestrating backend, a local AI inference service, and a file storage service.
 
+## Features
+
+A fully local AI chat app — every model runs on your own machine, nothing leaves the device.
+
+- **Chat with local models** — open-source models via **Ollama** and MLX models via the local
+  **ai-service**, all in one chat UI. ai-service models are loaded into memory on demand.
+- **Streaming replies** — responses stream token-by-token over Server-Sent Events, with a live
+  view of the model's reasoning ("thinking") and optional per-response metrics.
+- **Voice chat** — push-to-talk speech is transcribed locally (Whisper/MLX); for audio-capable
+  models the clip is sent to the model directly. Replies are spoken back with local
+  text-to-speech and a live waveform.
+- **Attachments** — upload files with a message; the bytes live in the storage service and the
+  chat keeps only a reference.
+- **Per-conversation settings** — sampling params (max tokens, temperature, top-p, repetition
+  penalty) and display toggles are saved per conversation and restored on reopen; mid-chat
+  changes are marked inline.
+- **Conversation management** — chats are persisted in PostgreSQL with auto-derived titles;
+  list, open, and delete them.
+
 ## Architecture
 
 ```text
