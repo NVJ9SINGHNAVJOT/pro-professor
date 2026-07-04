@@ -5,12 +5,25 @@ spring:
   profiles:
     active: ${ENVIRONMENT:development}
 
+  # ── Runtime footprint (low-memory tuning) ────────────────────────────────────
+  threads:
+    virtual:
+      enabled: true            # Java 21+ virtual threads — serve requests without a large platform-thread pool
+  main:
+    lazy-initialization: true  # defer bean creation until first use → lower startup memory
+  jmx:
+    enabled: false             # drop the unused JMX MBean machinery
+
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DB:AI-Professor-Database}
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
+    # Small pool — low-traffic service; each idle connection holds client + server memory.
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
 
   # ── Multipart (voice clips uploaded to /api/v1/audio/transcriptions) ─────────
   servlet:
@@ -21,6 +34,11 @@ spring:
 # ── Server ─────────────────────────────────────────────────────────────────
 server:
   port: ${PORT:4000}
+  # With virtual threads on, requests don't need the default 200-thread pool.
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 2
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 # Inject the per-request correlation id (set in RequestIdFilter's MDC) into every

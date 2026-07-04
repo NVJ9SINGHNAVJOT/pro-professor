@@ -25,9 +25,9 @@ tasks:
       - ./mvnw package -DskipTests
 
   start:
-    desc: Run the packaged JAR produced by the build task
+    desc: Run the packaged JAR produced by the build task (tuned for low memory footprint)
     cmds:
-      - java -jar target/central-server-0.0.1-SNAPSHOT.jar
+      - java -Xms64m -Xmx256m -XX:+UseSerialGC -XX:+UseCompactObjectHeaders -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -jar target/central-server-0.0.1-SNAPSHOT.jar
 
   audit:
     desc: Scan dependencies for known CVEs using OWASP Dependency Check
