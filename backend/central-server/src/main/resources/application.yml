@@ -12,17 +12,6 @@ spring:
     password: ${POSTGRES_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
 
-  # ── Redis ──────────────────────────────────────────────────────────────────
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-
-  # ── Kafka (connection only this phase) ──────────────────────────────────────
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
   # ── Multipart (voice clips uploaded to /api/v1/audio/transcriptions) ─────────
   servlet:
     multipart:
@@ -40,7 +29,7 @@ logging:
   pattern:
     level: "%5p [%X{requestId:-}]"
 
-# ── Actuator (exposes /actuator/health with db, redis, kafka components) ─────
+# ── Actuator (exposes /actuator/health with the db component) ────────────────
 management:
   endpoints:
     web:

@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.5</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -19,10 +19,6 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- Align Jackson with what the OpenAI Java SDK requires (Spring Boot 3.3 ships 2.17). -->
-        <jackson-bom.version>2.18.2</jackson-bom.version>
-        <!-- Override Spring Boot 3.3's managed Flyway (10.10) for PostgreSQL 17 support (added in 10.20). -->
-        <flyway.version>10.22.0</flyway.version>
     </properties>
 
     <dependencies>
@@ -66,18 +62,6 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- ── Redis ──────────────────────────────────────────────────── -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-
-        <!-- ── Kafka (broker connectivity + health) ───────────────────── -->
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-
         <!-- ── Validation ─────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -109,11 +93,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
 
