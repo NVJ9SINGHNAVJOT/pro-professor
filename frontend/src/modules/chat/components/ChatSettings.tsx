@@ -6,6 +6,12 @@ import { ToggleInput } from "@/components/inputs/ToggleInput";
 import { cn } from "@/lib/utils";
 import { MAX_TOKENS_LIMIT, type InferenceParams } from "@/modules/chat/types";
 
+// Slider bounds ({ min, max, step }) for each tunable inference param.
+const MAX_TOKENS = { min: 1, step: 1 };
+const TEMPERATURE = { min: 0, max: 2, step: 0.05 };
+const TOP_P = { min: 0, max: 1, step: 0.05 };
+const REPETITION_PENALTY = { min: 1, max: 2, step: 0.05 };
+
 interface ChatSettingsProps {
   params: InferenceParams;
   onParamsChange: (params: InferenceParams) => void;
@@ -117,33 +123,33 @@ const ChatSettings = ({
             <SliderInput
               label="Max tokens"
               value={Math.min(params.maxTokens, maxTokensCeiling)}
-              min={1}
+              min={MAX_TOKENS.min}
               max={maxTokensCeiling}
-              step={1}
+              step={MAX_TOKENS.step}
               onChange={(v) => set({ maxTokens: v })}
             />
             <SliderInput
               label="Temperature"
               value={params.temperature}
-              min={0}
-              max={2}
-              step={0.05}
+              min={TEMPERATURE.min}
+              max={TEMPERATURE.max}
+              step={TEMPERATURE.step}
               onChange={(v) => set({ temperature: v })}
             />
             <SliderInput
               label="Top P"
               value={params.topP}
-              min={0}
-              max={1}
-              step={0.05}
+              min={TOP_P.min}
+              max={TOP_P.max}
+              step={TOP_P.step}
               onChange={(v) => set({ topP: v })}
             />
             <SliderInput
               label="Repetition penalty"
               value={params.repetitionPenalty}
-              min={1}
-              max={2}
-              step={0.05}
+              min={REPETITION_PENALTY.min}
+              max={REPETITION_PENALTY.max}
+              step={REPETITION_PENALTY.step}
               onChange={(v) => set({ repetitionPenalty: v })}
             />
 
