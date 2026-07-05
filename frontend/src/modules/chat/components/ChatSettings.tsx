@@ -76,7 +76,7 @@ const ChatSettings = ({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-30 w-72 rounded-2xl border border-neutral-700 bg-neutral-900 p-4 shadow-xl">
+        <div className="absolute right-0 top-12 z-30 max-h-[calc(100vh-6rem)] w-72 overflow-y-auto rounded-2xl border border-neutral-700 bg-neutral-900 p-4 shadow-xl">
           <div className="flex flex-col gap-3.5">
             {canEditSystemPrompt && (
               <>
@@ -85,7 +85,7 @@ const ChatSettings = ({
                   <textarea
                     value={systemPrompt}
                     onChange={(e) => onSystemPromptChange(e.target.value)}
-                    rows={3}
+                    rows={6}
                     placeholder="e.g. You are a professor of English literature."
                     className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-2 caption-small-regular text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-richblue-300"
                   />

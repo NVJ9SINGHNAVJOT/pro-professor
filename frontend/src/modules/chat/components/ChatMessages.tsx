@@ -8,7 +8,6 @@ import {
   ChevronRightIcon,
   CopyIcon,
   FileIcon,
-  MicIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PaperclipIcon,
@@ -49,11 +48,29 @@ import {
   MAX_TEXTAREA_HEIGHT_PX,
   STREAM_MIN_CHARS_PER_FRAME,
   STREAM_REVEAL_DIVISOR,
-  SUGGESTIONS,
 } from "@/modules/chat/constants";
 
 /** Max images attachable to one turn — base64 inflates the request and small VLMs degrade past a couple. */
 const MAX_IMAGES = 2;
+
+/** Voice-mode glyph: a symmetric audio waveform, shown on the button that enters voice chat. */
+const WaveformIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <line x1="4" y1="10" x2="4" y2="14" />
+    <line x1="8.5" y1="7" x2="8.5" y2="17" />
+    <line x1="12" y1="3.5" x2="12" y2="20.5" />
+    <line x1="15.5" y1="7" x2="15.5" y2="17" />
+    <line x1="20" y1="10" x2="20" y2="14" />
+  </svg>
+);
 
 /**
  * Markdown + GitHub-flavored + KaTeX, memoized on its source so a token that doesn't change
@@ -201,8 +218,7 @@ const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
 };
 
 /** Compact token count, e.g. 1234 → "1.2k", 12345 → "12k". */
-const formatTokens = (n: number): string =>
-  n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+const formatTokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
 
 /** Context-window usage meter: how much of the model's context the conversation currently occupies. */
 const ContextMeter = ({ used, max }: { used: number | null; max: number | null }) => {
@@ -845,13 +861,6 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
 
   return (
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
-      {/* Background glow (only for empty state, covers full section) */}
-      {showEmptyState && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="ct-float absolute left-1/2 top-1/3 size-150 rounded-full bg-linear-to-br from-richblue-300/15 to-neutral-700/20 blur-3xl" />
-        </div>
-      )}
-
       {/* Top bar: sidebar toggle + model selector — height matches the sidebar header */}
       <div className="relative z-20 flex h-11.5 shrink-0 items-center gap-2 pt-2 px-4">
         <button
@@ -864,7 +873,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         </button>
         <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
         <div className="ml-auto flex items-center gap-3">
-          <ContextMeter used={usedTokens} max={selected ? findMaxContextTokens(selected.provider, selected.model) : null} />
+          <ContextMeter
+            used={usedTokens}
+            max={selected ? findMaxContextTokens(selected.provider, selected.model) : null}
+          />
           <ChatSettings
             params={params}
             onParamsChange={setParams}
@@ -886,20 +898,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       {/* Empty state or message list */}
       {showEmptyState ? (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4">
-          <h1 className="relative heading-small-medium text-center">What can I help with?</h1>
-          <div className="relative mt-8 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
-            {SUGGESTIONS.map((suggestion) => (
-              <button
-                key={suggestion.title}
-                type="button"
-                onClick={() => handleSend(suggestion.prompt)}
-                className="cursor-pointer rounded-2xl border border-neutral-800 bg-neutral-800/40 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-neutral-600 hover:bg-neutral-800"
-              >
-                <div className="para-small-semibold text-neutral-200">{suggestion.title}</div>
-                <div className="truncate caption-small-regular text-neutral-500">{suggestion.prompt}</div>
-              </button>
-            ))}
-          </div>
+          <h1 className="relative heading-small-medium text-center">What's up buddy?</h1>
         </div>
       ) : (
         <div
@@ -1039,13 +1038,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                     disabled={inputDisabled}
                     aria-label="Start voice chat"
                     className={cn(
-                      "rounded-full p-2.5 transition-all",
-                      inputDisabled
-                        ? "cursor-not-allowed text-neutral-600"
-                        : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white",
+                      "rounded-full bg-black p-2.5 text-white transition-all",
+                      inputDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:scale-105",
                     )}
                   >
-                    <MicIcon className="size-4.5" />
+                    <WaveformIcon className="size-6" />
                   </button>
                 )}
               </div>
