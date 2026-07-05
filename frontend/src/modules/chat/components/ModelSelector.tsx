@@ -13,6 +13,7 @@ import {
 import { useAppSelector } from "@/redux/store";
 import { type ModelProvider, type ProviderModel } from "@/services/operations/models/models.route";
 import type { SelectedModel } from "@/modules/chat/types";
+import { MODEL_SEPARATOR, PROVIDER_META, PROVIDER_ORDER } from "@/modules/chat/constants";
 
 interface ModelSelectorProps {
   value: SelectedModel | null;
@@ -20,8 +21,7 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
-const SEPARATOR = "::";
-const encode = (provider: string, name: string) => `${provider}${SEPARATOR}${name}`;
+const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
 
 const MODALITY_META: Record<
   string,
@@ -33,22 +33,15 @@ const MODALITY_META: Record<
   video: { icon: Video, label: "Video", className: "bg-amber-900/60 text-amber-300" },
 };
 
-const PROVIDER_META: Record<ModelProvider, { label: string; className: string }> = {
-  "ai-service": { label: "AI Service", className: "bg-emerald-900/60 text-emerald-300" },
-  ollama: { label: "Ollama", className: "bg-sky-900/60 text-sky-300" },
-};
-
-const PROVIDER_ORDER: ModelProvider[] = ["ai-service", "ollama"];
-
 const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
   const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
 
   const handleChange = (encoded: string) => {
-    const idx = encoded.indexOf(SEPARATOR);
+    const idx = encoded.indexOf(MODEL_SEPARATOR);
     const provider = encoded.slice(0, idx) as ModelProvider;
-    const model = encoded.slice(idx + SEPARATOR.length);
+    const model = encoded.slice(idx + MODEL_SEPARATOR.length);
     const match = models.find((m) => m.provider === provider && m.name === model);
     const inputModalities = match?.inputModalities ?? ["text"];
     const maxContextTokens = match?.maxContextTokens ?? null;

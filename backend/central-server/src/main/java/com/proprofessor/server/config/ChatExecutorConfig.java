@@ -21,6 +21,9 @@ public class ChatExecutorConfig {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("chat-stream-");
+        // On shutdown, let an in-flight generation finish instead of interrupting the stream.
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
         // Carry the SLF4J MDC (e.g. requestId) from the request thread onto the worker thread
         // so streaming logs stay correlated with the originating request.
         executor.setTaskDecorator(ChatExecutorConfig::withMdc);

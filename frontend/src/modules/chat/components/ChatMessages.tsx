@@ -45,13 +45,12 @@ import {
 } from "@/modules/chat/types";
 import {
   AUTOSCROLL_THRESHOLD_PX,
+  MAX_IMAGES,
   MAX_TEXTAREA_HEIGHT_PX,
   STREAM_MIN_CHARS_PER_FRAME,
   STREAM_REVEAL_DIVISOR,
 } from "@/modules/chat/constants";
-
-/** Max images attachable to one turn — base64 inflates the request and small VLMs degrade past a couple. */
-const MAX_IMAGES = 2;
+import { formatTokens, hideUnclosedMath, parseSettingsChanges } from "@/modules/chat/utils";
 
 /** Voice-mode glyph: a symmetric audio waveform, shown on the button that enters voice chat. */
 const WaveformIcon = ({ className }: { className?: string }) => (
@@ -83,30 +82,6 @@ const Markdown = memo(({ children }: { children: string }) => (
 ));
 Markdown.displayName = "Markdown";
 
-/** Characters that mark text inside `$…$` as a LaTeX expression rather than plain prose/currency. */
-const MATH_HINT = /[\\{}^_]/;
-
-/**
- * While a reply streams, LaTeX arrives a character at a time, so the tail is often a half-typed
- * expression ("$\text{CO" shows its raw source, then snaps to CO₂ once the closing "$" lands).
- * Withholding just that dangling expression until it closes keeps the stream from flashing raw
- * markup — the way ChatGPT/Gemini read. A lone "$" that looks like currency ("costs $5") is left
- * alone so real text isn't hidden. Call this only mid-stream; the final content renders in full.
- */
-const hideUnclosedMath = (text: string): string => {
-  // Display math ($$…$$): an odd count of delimiters means the last block is still open.
-  if ((text.match(/\$\$/g)?.length ?? 0) % 2 === 1) {
-    const cut = text.lastIndexOf("$$");
-    if (MATH_HINT.test(text.slice(cut))) return text.slice(0, cut);
-  }
-  // Inline math ($…$): same idea for single delimiters.
-  if ((text.match(/\$/g)?.length ?? 0) % 2 === 1) {
-    const cut = text.lastIndexOf("$");
-    if (MATH_HINT.test(text.slice(cut))) return text.slice(0, cut);
-  }
-  return text;
-};
-
 /** Collapsible panel showing a model's streamed reasoning. */
 const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreaming: boolean }) => {
   const [open, setOpen] = useState(true);
@@ -127,34 +102,6 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
       )}
     </div>
   );
-};
-
-/** Friendly labels for the inference params, used to render legacy JSON settings markers. */
-const SETTINGS_FIELD_LABELS: Record<string, string> = {
-  maxTokens: "Max tokens",
-  temperature: "Temperature",
-  topP: "Top P",
-  repetitionPenalty: "Repetition penalty",
-};
-
-/**
- * Splits a settings marker's content into one entry per changed param.
- * Current markers store a readable summary ("Temperature 0.7 → 0.8 · Max tokens …");
- * markers saved before that change hold a JSON snapshot of the new params, parsed here so
- * they still render as tidy pills.
- */
-const parseSettingsChanges = (content: string): string[] => {
-  const trimmed = content.trim();
-  if (!trimmed) return [];
-  if (trimmed.startsWith("{")) {
-    try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      return Object.entries(obj).map(([k, v]) => `${SETTINGS_FIELD_LABELS[k] ?? k} → ${v}`);
-    } catch {
-      return [trimmed];
-    }
-  }
-  return trimmed.split(" · ");
 };
 
 /** Centered divider marking a mid-conversation settings change, with a pill per changed param. */
@@ -217,8 +164,6 @@ const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
   );
 };
 
-/** Compact token count, e.g. 1234 → "1.2k", 12345 → "12k". */
-const formatTokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
 
 /** Context-window usage meter: how much of the model's context the conversation currently occupies. */
 const ContextMeter = ({ used, max }: { used: number | null; max: number | null }) => {

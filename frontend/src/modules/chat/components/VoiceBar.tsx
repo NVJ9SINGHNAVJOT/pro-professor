@@ -1,21 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Loader2Icon, SquareIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/common/toast";
-
-/** Pick the first MediaRecorder MIME type the browser supports (Chrome: webm, Safari: mp4). */
-function pickMimeType(): string {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
-  for (const candidate of candidates) {
-    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(candidate)) {
-      return candidate;
-    }
-  }
-  return "";
-}
+import { VOICE_BAR_COUNT } from "@/modules/chat/constants";
+import { pickMimeType } from "@/modules/chat/utils";
 
 export type VoiceMode = "recording" | "thinking" | "speaking";
-
-const BAR_COUNT = 80;
 
 interface VoiceBarProps {
   mode: VoiceMode;
@@ -61,7 +50,7 @@ const VoiceBar = ({ mode, playbackAudio, onRecorded, onStopSpeaking, onCancel }:
     if (!analyser || !canvas || !ctx) return;
 
     const freq = new Uint8Array(analyser.frequencyBinCount);
-    const smoothed = new Array<number>(BAR_COUNT).fill(0);
+    const smoothed = new Array<number>(VOICE_BAR_COUNT).fill(0);
     // Color distinguishes who's talking: cool cyan/blue while the user records,
     // the cyan → violet → pink neon ramp while the assistant speaks.
     const stops = variant === "color" ? ["#22d3ee", "#a78bfa", "#f472b6"] : ["#22d3ee", "#38bdf8", "#0ea5e9"];
@@ -77,14 +66,14 @@ const VoiceBar = ({ mode, playbackAudio, onRecorded, onStopSpeaking, onCancel }:
       grad.addColorStop(0.5, stops[1]);
       grad.addColorStop(1, stops[2]);
 
-      const gap = width / BAR_COUNT;
+      const gap = width / VOICE_BAR_COUNT;
       const barWidth = gap * 0.32;
       const usable = freq.length * 0.7; // skip the mostly-empty high bins
       const centerY = height / 2;
       const maxHalf = height / 2 - 2;
 
-      for (let i = 0; i < BAR_COUNT; i++) {
-        const t = i / (BAR_COUNT - 1);
+      for (let i = 0; i < VOICE_BAR_COUNT; i++) {
+        const t = i / (VOICE_BAR_COUNT - 1);
         // smooth bell envelope → the centre-heavy spindle shape
         const envelope = Math.pow(Math.sin(Math.PI * t), 0.8);
         // mirror the spectrum around the centre so the wave is left↔right symmetric

@@ -5,6 +5,12 @@ spring:
   profiles:
     active: ${ENVIRONMENT:development}
 
+  # ── Graceful shutdown ────────────────────────────────────────────────────────
+  # On SIGINT/SIGTERM, wait up to this long for in-flight chat streams / audio calls
+  # to finish before beans are destroyed (pairs with server.shutdown: graceful).
+  lifecycle:
+    timeout-per-shutdown-phase: 60s
+
   # ── Runtime footprint (low-memory tuning) ────────────────────────────────────
   threads:
     virtual:
@@ -34,6 +40,7 @@ spring:
 # ── Server ─────────────────────────────────────────────────────────────────
 server:
   port: ${PORT:4000}
+  shutdown: graceful           # drain in-flight requests before shutting down
   # With virtual threads on, requests don't need the default 200-thread pool.
   tomcat:
     threads:

@@ -4,6 +4,7 @@ import com.proprofessor.server.common.exception.ModelBusyException;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.provider.AiServiceClient;
 import com.proprofessor.server.model.provider.OllamaClient;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -77,6 +78,26 @@ public class ModelActivationService {
                 throw new ModelBusyException(active.name());
             }
             activate(provider, name);
+        }
+    }
+
+    /**
+     * Frees VRAM on shutdown by unloading whatever model is resident. Runs during bean destruction,
+     * which happens after the web server's graceful shutdown has drained in-flight streams, so it
+     * never evicts a model mid-generation. Best-effort: the unload calls log-and-swallow, so a downed
+     * engine can't hang shutdown.
+     */
+    @PreDestroy
+    public void unloadResident() {
+        synchronized (lock) {
+            if (active != null && active.provider() == ModelProvider.AI_SERVICE) {
+                aiServiceClient.unload();
+            }
+            if (residentOllamaModel != null) {
+                ollamaClient.unload(residentOllamaModel);
+                residentOllamaModel = null;
+            }
+            active = null;
         }
     }
 

@@ -1,12 +1,6 @@
 import { useRef, useState } from "react";
 import { PauseIcon, PlayIcon } from "lucide-react";
-
-const formatTime = (seconds: number): string => {
-  if (!Number.isFinite(seconds)) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
+import { formatTime } from "@/modules/chat/utils";
 
 /** Themed audio player — replaces the browser's default <audio controls> chrome. */
 const AudioPlayer = ({ src }: { src: string }) => {
