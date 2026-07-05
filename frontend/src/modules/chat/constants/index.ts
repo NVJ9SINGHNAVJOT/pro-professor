@@ -15,8 +15,61 @@ export const STREAM_MIN_CHARS_PER_FRAME = 2; // floor so the reveal never stalls
 
 export const GROUPS = ["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"] as const;
 
-// Slider bounds ({ min, max, step }) for each tunable inference param.
-export const MAX_TOKENS_SLIDER = { min: 500, step: 500 };
+// Preset definitions for inference parameters
+export interface InferencePreset {
+  id: string;
+  label: string;
+  description: string;
+  tooltip: string;
+  icon: string;
+  params: { temperature: number; topP: number; repetitionPenalty: number };
+}
+
+export const INFERENCE_PRESETS: InferencePreset[] = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    description: "General conversation",
+    tooltip: "A well-rounded setup for day-to-day chats, providing a good mix of creativity and focus without straying off-topic.",
+    icon: "Scale",
+    params: { temperature: 0.7, topP: 0.9, repetitionPenalty: 1.1 },
+  },
+  {
+    id: "creative",
+    label: "Creative",
+    description: "Writing and storytelling",
+    tooltip: "Boosts randomness and vocabulary diversity. Ideal for brainstorming, creative writing, and generating highly varied responses.",
+    icon: "Palette",
+    params: { temperature: 1.2, topP: 0.95, repetitionPenalty: 1.0 },
+  },
+  {
+    id: "precise",
+    label: "Precise",
+    description: "Factual Q&A and code",
+    tooltip: "Highly deterministic and focused. Best used for exact factual answers, structured data generation, and strict code writing.",
+    icon: "Target",
+    params: { temperature: 0.3, topP: 0.8, repetitionPenalty: 1.2 },
+  },
+  {
+    id: "reasoning",
+    label: "Reasoning",
+    description: "Math and logic",
+    tooltip: "Optimized for logical deduction and mathematical problem-solving, keeping the model strictly analytical while preventing loops.",
+    icon: "Brain",
+    params: { temperature: 0.5, topP: 0.85, repetitionPenalty: 1.15 },
+  },
+  {
+    id: "research",
+    label: "Research",
+    description: "Deep analysis",
+    tooltip: "Balanced for comprehensive analysis and thorough research tasks, maintaining coherence over long, detailed explanations.",
+    icon: "Microscope",
+    params: { temperature: 0.6, topP: 0.9, repetitionPenalty: 1.1 },
+  },
+];
+
+// Slider bounds for max tokens
+export const MAX_TOKENS_SLIDER = { min: 500, max: 32000, step: 500 };
 export const TEMPERATURE_SLIDER = { min: 0, max: 2, step: 0.05 };
 export const TOP_P_SLIDER = { min: 0, max: 1, step: 0.05 };
 export const REPETITION_PENALTY_SLIDER = { min: 1, max: 2, step: 0.05 };
