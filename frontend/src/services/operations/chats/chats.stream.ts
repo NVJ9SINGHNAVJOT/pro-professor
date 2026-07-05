@@ -32,6 +32,8 @@ export interface ChatStreamCallbacks {
   onMetrics: (data: ChatMetricsData) => void;
   onDone: (data: { conversationId: number; messageId: number; contextTokens: number | null }) => void;
   onError: (message: string, meta?: { conversationId?: number; messageId?: number; requestId?: string }) => void;
+  /** The turn was rejected because a different model is generating. Toast only — never persisted. */
+  onBusy: (message: string) => void;
 }
 
 /* ── SSE frame types (mirror backend ChatStreamEvent) ─────────────────────── */
@@ -102,6 +104,12 @@ interface ChatErrorFrame {
   requestId?: string;
 }
 
+interface ChatBusyFrame {
+  type: "chat.busy";
+  message: string;
+  requestId?: string;
+}
+
 type ChatStreamFrame =
   | ChatStartFrame
   | ChatTitleFrame
@@ -111,7 +119,8 @@ type ChatStreamFrame =
   | ChatThinkingFrame
   | ChatMetricsFrame
   | ChatDoneFrame
-  | ChatErrorFrame;
+  | ChatErrorFrame
+  | ChatBusyFrame;
 
 /* ── Stream parser ────────────────────────────────────────────────────────── */
 
@@ -247,6 +256,9 @@ function dispatch(event: ChatStreamFrame, cb: ChatStreamCallbacks) {
         messageId: event.messageId,
         requestId: event.requestId,
       });
+      break;
+    case "chat.busy":
+      cb.onBusy(event.message);
       break;
   }
 }

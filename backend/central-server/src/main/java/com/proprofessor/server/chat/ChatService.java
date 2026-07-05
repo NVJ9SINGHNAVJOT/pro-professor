@@ -18,6 +18,7 @@ import com.proprofessor.server.common.exception.ClientDisconnectedException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
 import com.proprofessor.server.media.MediaRepository;
 import com.proprofessor.server.media.MediaService;
+import com.proprofessor.server.model.ModelActivationService;
 import com.proprofessor.server.model.ModelService;
 import com.proprofessor.server.model.dto.ModelProvider;
 import org.slf4j.Logger;
@@ -70,6 +71,7 @@ public class ChatService {
     private final MediaRepository mediaRepository;
     private final MediaService mediaService;
     private final ModelService modelService;
+    private final ModelActivationService modelActivationService;
     private final ChatCompletionClient chatCompletionClient;
     private final AudioClient audioClient;
     private final ChatMapper chatMapper;
@@ -80,6 +82,7 @@ public class ChatService {
             MediaRepository mediaRepository,
             MediaService mediaService,
             ModelService modelService,
+            ModelActivationService modelActivationService,
             ChatCompletionClient chatCompletionClient,
             AudioClient audioClient,
             ChatMapper chatMapper
@@ -89,13 +92,38 @@ public class ChatService {
         this.mediaRepository = mediaRepository;
         this.mediaService = mediaService;
         this.modelService = modelService;
+        this.modelActivationService = modelActivationService;
         this.chatCompletionClient = chatCompletionClient;
         this.audioClient = audioClient;
         this.chatMapper = chatMapper;
     }
 
     public void streamReply(ChatSendCommand command, ChatStreamListener listener) {
-        ConversationRow conversation = resolveConversation(command);
+        // Resolve the target model up front (read-only) so the global single-model lock can be
+        // enforced before anything is persisted: a rejected turn (a different model is mid-generation)
+        // throws out of acquireForChat and leaves no conversation/message rows behind.
+        ConversationRow existing =
+                command.conversationId() == null ? null : loadConversation(command.conversationId());
+        ModelProvider provider = existing != null
+                ? ModelProvider.fromValue(existing.model().provider())
+                : requireProvider(command);
+        String modelName = existing != null ? existing.model().name() : command.model();
+
+        modelActivationService.acquireForChat(provider, modelName);
+        try {
+            ConversationRow conversation = existing != null ? existing : createConversation(command);
+            generate(command, conversation, listener);
+        } finally {
+            modelActivationService.releaseAfterChat();
+        }
+    }
+
+    /**
+     * Runs the turn against the already-activated model: persists the user message, replays history,
+     * and streams the assistant reply. The model is guaranteed loaded (and the only one resident) by
+     * {@link ModelActivationService#acquireForChat}, which ran before this was called.
+     */
+    private void generate(ChatSendCommand command, ConversationRow conversation, ChatStreamListener listener) {
         ModelRow model = conversation.model();
         ModelProvider provider = ModelProvider.fromValue(model.provider());
         String modelName = model.name();
@@ -129,12 +157,10 @@ public class ChatService {
 
         try {
             // The AI service reports its own timing (including load) in x_metrics. Ollama's
-            // OpenAI-compatible endpoint omits timing; we synthesize it from wall-clock and do NOT
-            // preload — a native preload warms Ollama's KV cache, which deflates the prompt token
-            // count the context meter relies on (and Ollama's load_duration is unavailable here).
-            if (provider == ModelProvider.AI_SERVICE) {
-                modelService.loadModel(modelName);
-            }
+            // OpenAI-compatible endpoint omits timing; we synthesize it from wall-clock. The model was
+            // already loaded (and the other engine freed) by acquireForChat, so we don't preload here —
+            // a native Ollama preload warms its KV cache, which deflates the prompt token count the
+            // context meter relies on (and Ollama's load_duration is unavailable here).
             // For an audio turn the model first transcribes the clip inside a delimiter; the splitter
             // strips that from the reply so only the answer reaches the UI/TTS.
             AudioTranscriptStream transcriptStream =
@@ -216,16 +242,24 @@ public class ChatService {
         conversationRepository.deleteById(id);
     }
 
-    private ConversationRow resolveConversation(ChatSendCommand command) {
-        if (command.conversationId() != null) {
-            return conversationRepository.findById(command.conversationId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Conversation not found: " + command.conversationId()));
-        }
+    /** Loads an existing conversation or fails with 404 — never creates. */
+    private ConversationRow loadConversation(long conversationId) {
+        return conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Conversation not found: " + conversationId));
+    }
+
+    /** Validates that a new conversation names a model, returning its provider. */
+    private ModelProvider requireProvider(ChatSendCommand command) {
         if (command.provider() == null || command.model() == null || command.model().isBlank()) {
             throw new AppException(HttpStatus.BAD_REQUEST,
                     "provider and model are required to start a conversation");
         }
+        return command.provider();
+    }
+
+    /** Creates a new conversation (title from the first message) and its optional persona system row. */
+    private ConversationRow createConversation(ChatSendCommand command) {
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
         ConversationRow conversation = conversationRepository.insert(
                 model.id(), deriveTitle(command.content()), DEFAULT_MODE, settingsFrom(command.options()));
@@ -426,7 +460,7 @@ public class ChatService {
 
     /**
      * Titles a conversation that started without one from its first spoken turn — a voice turn
-     * carries no typed text, so {@link #resolveConversation} couldn't derive a title at creation.
+     * carries no typed text, so {@link #createConversation} couldn't derive a title at creation.
      * Skips conversations that already have a title (text-started, or an earlier spoken turn).
      */
     private void titleFromSpokenTurn(ConversationRow conversation, String spokenText,

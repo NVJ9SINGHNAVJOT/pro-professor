@@ -30,11 +30,14 @@ public class ModelService {
     private final OllamaClient ollamaClient;
     private final AiServiceClient aiServiceClient;
     private final ModelRepository modelRepository;
+    private final ModelActivationService modelActivationService;
 
-    public ModelService(OllamaClient ollamaClient, AiServiceClient aiServiceClient, ModelRepository modelRepository) {
+    public ModelService(OllamaClient ollamaClient, AiServiceClient aiServiceClient,
+                        ModelRepository modelRepository, ModelActivationService modelActivationService) {
         this.ollamaClient = ollamaClient;
         this.aiServiceClient = aiServiceClient;
         this.modelRepository = modelRepository;
+        this.modelActivationService = modelActivationService;
     }
 
     public List<ProviderModel> getAllModels() {
@@ -52,7 +55,9 @@ public class ModelService {
     }
 
     public void loadModel(String name) {
-        aiServiceClient.loadModel(name);
+        // The load endpoint only serves AI-service models; route it through the gatekeeper so it also
+        // frees the other engine and is rejected while a different model is mid-generation.
+        modelActivationService.load(ModelProvider.AI_SERVICE, name);
     }
 
     @Transactional

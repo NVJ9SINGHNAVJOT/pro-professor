@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -54,6 +55,24 @@ public class AiServiceClient {
                 .body(new LoadModelBody(name))
                 .retrieve()
                 .toBodilessEntity();
+    }
+
+    /**
+     * Asks the AI service to unload whatever model it currently holds, freeing memory. Sent with an
+     * empty body so it unloads the resident model regardless of name. Best-effort: a failure is logged
+     * and swallowed so it never blocks the model switch that requested it.
+     */
+    public void unload() {
+        try {
+            restClient.post()
+                    .uri("/api/v1/models/unload")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of())
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception ex) {
+            log.warn("Failed to unload AI-service model: {}", ex.getMessage());
+        }
     }
 
     private static ProviderModel toProviderModel(AiServiceModelsResponse.AiServiceModel model) {

@@ -18,4 +18,5 @@ public final class ChatStreamEvents {
     public static final String CHAT_METRICS = "chat.metrics";
     public static final String CHAT_DONE = "chat.done";
     public static final String CHAT_ERROR = "chat.error";
+    public static final String CHAT_BUSY = "chat.busy";
 }

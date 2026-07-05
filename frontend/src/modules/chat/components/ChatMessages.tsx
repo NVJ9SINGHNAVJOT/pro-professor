@@ -767,6 +767,24 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
           });
           toast.error(message);
         },
+        onBusy: (message) => {
+          settle(false); // stop the reveal loop and clear `streaming`; nothing was streamed
+          // The server rejected the turn before persisting anything (a different model is
+          // generating), so drop the optimistic user + empty-assistant pair and surface a toast
+          // only — this must not land in the conversation history.
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            const user = next[next.length - 2];
+            if (last?.role === "assistant" && last.content === "" && user?.role === "user") {
+              next.splice(next.length - 2, 2);
+            }
+            return next;
+          });
+          // Restore the typed text so a transient rejection doesn't lose the user's message.
+          if (!opts?.attachments && content) setInput(content);
+          toast.error(message);
+        },
       },
     );
 

@@ -8,6 +8,7 @@ import com.proprofessor.server.chat.dto.ConversationListResponse;
 import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ClientDisconnectedException;
+import com.proprofessor.server.common.exception.ModelBusyException;
 import com.proprofessor.server.common.web.RequestIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,15 @@ public class ChatController {
                 chatService.streamReply(command, new SseStreamListener(emitter));
             } catch (ClientDisconnectedException ex) {
                 log.info("Client disconnected mid-stream; generation aborted");
+            } catch (ModelBusyException ex) {
+                // A different model is mid-generation; the turn was rejected before anything was
+                // persisted. Tell the client to toast it — not to record it in the conversation.
+                log.info("Chat send rejected: {}", ex.getMessage());
+                try {
+                    emitEvent(emitter, ChatStreamEvent.ChatBusy.of(MDC.get(RequestIdFilter.MDC_KEY), ex.getMessage()));
+                } catch (ClientDisconnectedException ignored) {
+                    // nothing to tell a client that's gone
+                }
             } catch (Exception ex) {
                 log.error("Chat streaming failed: {}", ex.getMessage(), ex);
                 String message = ex instanceof AppException ? ex.getMessage() : "Failed to generate reply";

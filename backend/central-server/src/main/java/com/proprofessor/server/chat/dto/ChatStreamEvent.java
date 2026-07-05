@@ -10,7 +10,8 @@ import com.proprofessor.server.chat.ChatStreamEvents;
 public sealed interface ChatStreamEvent
         permits ChatStreamEvent.ChatStart, ChatStreamEvent.ChatTitle, ChatStreamEvent.ChatTranscript,
         ChatStreamEvent.ChatChunk, ChatStreamEvent.ChatSettings, ChatStreamEvent.ChatThinking,
-        ChatStreamEvent.ChatMetrics, ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError {
+        ChatStreamEvent.ChatMetrics, ChatStreamEvent.ChatDone, ChatStreamEvent.ChatError,
+        ChatStreamEvent.ChatBusy {
 
     String type();
 
@@ -125,6 +126,18 @@ public sealed interface ChatStreamEvent
         /** Failure after the conversation exists, with a persisted error message. */
         public static ChatError of(long conversationId, long messageId, String requestId, String message) {
             return new ChatError(ChatStreamEvents.CHAT_ERROR, conversationId, messageId, requestId, message);
+        }
+    }
+
+    /**
+     * {@code chat.busy} — the turn was rejected because a different model is currently generating, so
+     * the server refused to swap it out. Nothing is persisted (the rejection happens before any DB
+     * write); the frontend shows a toast only and does not add it to the conversation history.
+     * {@code requestId} ties it to the server logs.
+     */
+    record ChatBusy(String type, String requestId, String message) implements ChatStreamEvent {
+        public static ChatBusy of(String requestId, String message) {
+            return new ChatBusy(ChatStreamEvents.CHAT_BUSY, requestId, message);
         }
     }
 }

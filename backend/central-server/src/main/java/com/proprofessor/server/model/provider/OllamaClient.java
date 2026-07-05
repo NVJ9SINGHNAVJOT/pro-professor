@@ -49,6 +49,25 @@ public class OllamaClient {
     }
 
     /**
+     * Frees a resident Ollama model by asking it to unload immediately: a {@code /api/generate} call
+     * with {@code keep_alive: 0} and no prompt evicts the model from memory now instead of waiting for
+     * its keep-alive window to lapse. Best-effort — a failure is logged and swallowed so it never blocks
+     * the model switch that requested it.
+     */
+    public void unload(String name) {
+        try {
+            restClient.post()
+                    .uri("/api/generate")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("model", name, "keep_alive", 0))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.warn("Failed to unload Ollama model '{}': {}", name, e.getMessage());
+        }
+    }
+
+    /**
      * Calls {@code POST /api/show} for a single model to retrieve its capabilities
      * and {@code model_info} (used for the context window). Returns {@code null} on
      * any error so one bad model doesn't block the entire list.
