@@ -164,7 +164,6 @@ const MetricsLine = ({ metrics }: { metrics: ChatMetricsData }) => {
   );
 };
 
-
 /** Context-window usage meter: how much of the model's context the conversation currently occupies. */
 const ContextMeter = ({ used, max }: { used: number | null; max: number | null }) => {
   if (used == null || used === 0) return null;
@@ -1005,7 +1004,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                       inputDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:scale-105",
                     )}
                   >
-                    <WaveformIcon className="size-6" />
+                    <WaveformIcon className="size-5" />
                   </button>
                 )}
               </div>
