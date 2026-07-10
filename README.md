@@ -28,14 +28,14 @@ A fully local AI chat app — every model runs on your own machine, nothing leav
 pro-professor/
 ├── frontend/                 # React 19 + Vite + TypeScript SPA (the web client)
 ├── backend/
-│   ├── central-server/       # Spring Boot 3.3 (Java 21) — main backend / orchestrator
+│   ├── central-server/       # Spring Boot 3.5 (Java 25) — main backend / orchestrator
 │   ├── ai-service/           # Python / FastAPI — local MLX LLM inference (git submodule)
 │   └── storage-service/      # Go 1.25 — file upload/storage service (git submodule)
 └── docs/                     # design / planning notes
 ```
 
 The **central-server** is the hub: the frontend talks to it over REST (`/api/v1`) and
-WebSocket (`/ws`), and it coordinates PostgreSQL, Redis, Kafka, the **ai-service** (via an
+WebSocket (`/ws`), and it coordinates PostgreSQL, the **ai-service** (via an
 OpenAI-compatible API), and the **storage-service**.
 
 ## Services
@@ -43,7 +43,7 @@ OpenAI-compatible API), and the **storage-service**.
 | Service           | Stack                                  | Default URL             | Role                                                                    |
 | ----------------- | -------------------------------------- | ----------------------- | ----------------------------------------------------------------------- |
 | `frontend`        | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client / chat UI                                                    |
-| `central-server`  | Spring Boot 3.3, Java 21, jOOQ, Flyway | `http://localhost:4000` | Orchestrator; REST + WebSocket API, PostgreSQL/Redis/Kafka              |
+| `central-server`  | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | Orchestrator; REST + WebSocket API, PostgreSQL                          |
 | `ai-service`      | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + audio (Apple Silicon); OpenAI-compatible endpoint |
 | `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload, retrieval, and serving                                     |
 
@@ -57,10 +57,9 @@ WebSocket.
 ### central-server
 
 The Spring Boot orchestrator and source of truth. Exposes the REST (`/api/v1`) and
-WebSocket (`/ws`) APIs the frontend consumes, persists data in PostgreSQL (migrations via
-Flyway, queries via jOOQ), caches with Redis, and uses Kafka for messaging. It calls the
-ai-service through an OpenAI-compatible client (`openai-java`) for model inference and the
-storage-service for file handling.
+WebSocket (`/ws`) APIs the frontend consumes, and persists data in PostgreSQL (migrations via
+Flyway, queries via jOOQ). It calls the ai-service through an OpenAI-compatible client
+(`openai-java`) for model inference and the storage-service for file handling.
 
 ### ai-service
 
@@ -103,7 +102,7 @@ Quick start (run each in its own terminal):
 # frontend
 cd frontend && npm install && npm run dev
 
-# central-server (requires Postgres, Redis, Kafka running locally)
+# central-server (requires Postgres running locally)
 cd backend/central-server && ./mvnw spring-boot:run
 
 # ai-service (Apple Silicon)
