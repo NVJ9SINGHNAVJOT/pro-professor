@@ -1,7 +1,8 @@
 # Pro Professor
 
 An AI-powered professor / chat application. This is a monorepo containing the web client,
-the orchestrating backend, a local AI inference service, and a file storage service.
+the orchestrating backend, and a local AI inference service. File storage is provided by an
+external local service (`micro-yard`).
 
 ## Features
 
@@ -29,8 +30,7 @@ pro-professor/
 ├── frontend/                 # React 19 + Vite + TypeScript SPA (the web client)
 ├── backend/
 │   ├── central-server/       # Spring Boot 3.5 (Java 25) — main backend / orchestrator
-│   ├── ai-service/           # Python / FastAPI — local MLX LLM inference (git submodule)
-│   └── storage-service/      # Go 1.25 — file upload/storage service (git submodule)
+│   └── ai-service/           # Python / FastAPI — local MLX LLM inference (git submodule)
 └── docs/                     # design / planning notes
 ```
 
@@ -45,7 +45,7 @@ OpenAI-compatible API), and the **storage-service**.
 | `frontend`        | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client / chat UI                                                    |
 | `central-server`  | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | Orchestrator; REST + WebSocket API, PostgreSQL                          |
 | `ai-service`      | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + audio (Apple Silicon); OpenAI-compatible endpoint |
-| `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload, retrieval, and serving                                     |
+| `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload, retrieval, and serving (external; from `micro-yard`)       |
 
 ### frontend
 
@@ -73,12 +73,13 @@ Maintained in its own repository as a git submodule.
 
 A lightweight Go file storage service using only the standard library (zero external
 dependencies). Upload files over HTTP, retrieve them by ID, and serve them back — stored on
-the local filesystem with JSON metadata alongside each upload. Maintained in its own
-repository as a git submodule.
+the local filesystem with JSON metadata alongside each upload. Lives in the external
+**`micro-yard`** repo (a local multi-service monorepo) and is cloned and run separately — no
+longer vendored here.
 
 ## Clone
 
-`ai-service` and `storage-service` are git submodules, so clone with `--recurse-submodules`:
+`ai-service` is a git submodule, so clone with `--recurse-submodules`:
 
 ```bash
 git clone --recurse-submodules <repo-url>
@@ -94,7 +95,7 @@ Each service has its own README with full setup and run instructions:
 - [frontend/README.md](frontend/README.md)
 - [backend/central-server/README.md](backend/central-server/README.md)
 - [backend/ai-service/README.md](backend/ai-service/README.md)
-- [backend/storage-service/README.md](backend/storage-service/README.md)
+- `storage-service` — see the `micro-yard` repo
 
 Quick start (run each in its own terminal):
 
@@ -108,8 +109,8 @@ cd backend/central-server && ./mvnw spring-boot:run
 # ai-service (Apple Silicon)
 cd backend/ai-service && python -m app.main
 
-# storage-service
-cd backend/storage-service && task run   # or: go run ./cmd/server/
+# storage-service (run from your separate micro-yard checkout)
+cd <path-to>/micro-yard/storage-service && task run   # or: go run ./cmd/server/
 ```
 
 A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts (`task server`, `task client`).
