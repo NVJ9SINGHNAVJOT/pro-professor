@@ -8,6 +8,16 @@ tasks:
     desc: List all tasks.
     cmd: task -l
 
+  setup:
+    desc: Fetch storage-service (and its shared modules) from the external micro-yard repo
+    cmds:
+      - bash scripts/setup-storage-service.sh
+
+  storage:
+    desc: Start Go storage service (port 9000) — run `task setup` first
+    cmds:
+      - cd backend/storage-service && task run
+
   server:
     desc: Start Spring Boot central server (port 4000)
     cmds:

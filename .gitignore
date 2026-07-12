@@ -29,6 +29,9 @@
 # database migration
 **/migration
 
+# storage-service, fetched from the external micro-yard repo by `task setup`
+backend/storage-service/
+
 # docs
 docs/
 

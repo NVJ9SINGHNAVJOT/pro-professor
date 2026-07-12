@@ -74,8 +74,8 @@ Maintained in its own repository as a git submodule.
 A lightweight Go file storage service using only the standard library (zero external
 dependencies). Upload files over HTTP, retrieve them by ID, and serve them back — stored on
 the local filesystem with JSON metadata alongside each upload. Lives in the external
-**`micro-yard`** repo (a local multi-service monorepo) and is cloned and run separately — no
-longer vendored here.
+**`micro-yard`** repo (a local multi-service monorepo) — it is not vendored here, but
+`task setup` fetches it into `backend/storage-service/` (see below).
 
 ## Clone
 
@@ -88,6 +88,23 @@ git clone --recurse-submodules <repo-url>
 git submodule update --init --recursive
 ```
 
+Then pull in the storage-service:
+
+```bash
+task setup
+```
+
+This sparse-fetches the three subtrees storage-service needs out of the `micro-yard` repo —
+the service itself, the `go-shared` module it imports, and the `ui-shared` design assets its
+web dashboard embeds — and assembles them into `backend/storage-service/` (git-ignored),
+generating a `go.work` so the modules resolve in the flat layout. Re-run `task setup` any
+time to pull the latest storage-service; your `.env` and uploaded files under `storage/` are
+preserved.
+
+If the layout changes on the `micro-yard` side, update the config block at the top of
+[scripts/setup-storage-service.sh](scripts/setup-storage-service.sh) — the script fails with
+an explicit message when a subtree it expects is gone.
+
 ## Getting started
 
 Each service has its own README with full setup and run instructions:
@@ -95,7 +112,7 @@ Each service has its own README with full setup and run instructions:
 - [frontend/README.md](frontend/README.md)
 - [backend/central-server/README.md](backend/central-server/README.md)
 - [backend/ai-service/README.md](backend/ai-service/README.md)
-- `storage-service` — see the `micro-yard` repo
+- `storage-service` — run `task setup`, then see `backend/storage-service/README.md`
 
 Quick start (run each in its own terminal):
 
@@ -109,11 +126,12 @@ cd backend/central-server && ./mvnw spring-boot:run
 # ai-service (Apple Silicon)
 cd backend/ai-service && python -m app.main
 
-# storage-service (run from your separate micro-yard checkout)
-cd <path-to>/micro-yard/storage-service && task run   # or: go run ./cmd/server/
+# storage-service (after `task setup`)
+cd backend/storage-service && task run   # or: go run ./cmd/server/
 ```
 
-A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts (`task server`, `task client`).
+A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts (`task setup`, `task server`,
+`task client`, `task storage`).
 
 ## Configuration
 
