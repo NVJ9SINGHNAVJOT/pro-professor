@@ -49,12 +49,25 @@ public class AiServiceClient {
 
     /** Asks the AI service to load a model into memory (it swaps out any other loaded model). */
     public void loadModel(String name) {
-        restClient.post()
-                .uri("/api/v1/models/load")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(new LoadModelBody(name))
-                .retrieve()
-                .toBodilessEntity();
+        // Loading weights takes seconds — log the intent so a slow or hung load is visible while it is
+        // still happening, not only once it finishes.
+        log.info("Loading AI-service model '{}'...", name);
+        long start = System.currentTimeMillis();
+        try {
+            restClient.post()
+                    .uri("/api/v1/models/load")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new LoadModelBody(name))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception ex) {
+            // Names the model the boundary handler can't know about; the stack trace is logged once,
+            // there, when this propagates.
+            log.warn("Failed to load AI-service model '{}' after {}ms: {}",
+                    name, System.currentTimeMillis() - start, ex.getMessage());
+            throw ex;
+        }
+        log.info("Loaded AI-service model '{}' ({}ms)", name, System.currentTimeMillis() - start);
     }
 
     /**
@@ -63,6 +76,8 @@ public class AiServiceClient {
      * and swallowed so it never blocks the model switch that requested it.
      */
     public void unload() {
+        log.info("Unloading AI-service model...");
+        long start = System.currentTimeMillis();
         try {
             restClient.post()
                     .uri("/api/v1/models/unload")
@@ -70,6 +85,7 @@ public class AiServiceClient {
                     .body(Map.of())
                     .retrieve()
                     .toBodilessEntity();
+            log.info("Unloaded AI-service model ({}ms)", System.currentTimeMillis() - start);
         } catch (Exception ex) {
             log.warn("Failed to unload AI-service model: {}", ex.getMessage());
         }

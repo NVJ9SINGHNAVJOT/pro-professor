@@ -55,6 +55,8 @@ public class OllamaClient {
      * the model switch that requested it.
      */
     public void unload(String name) {
+        log.info("Unloading Ollama model '{}'...", name);
+        long start = System.currentTimeMillis();
         try {
             restClient.post()
                     .uri("/api/generate")
@@ -62,6 +64,7 @@ public class OllamaClient {
                     .body(Map.of("model", name, "keep_alive", 0))
                     .retrieve()
                     .toBodilessEntity();
+            log.info("Unloaded Ollama model '{}' ({}ms)", name, System.currentTimeMillis() - start);
         } catch (Exception e) {
             log.warn("Failed to unload Ollama model '{}': {}", name, e.getMessage());
         }

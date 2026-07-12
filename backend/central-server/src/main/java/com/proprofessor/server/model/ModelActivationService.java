@@ -90,6 +90,11 @@ public class ModelActivationService {
     @PreDestroy
     public void unloadResident() {
         synchronized (lock) {
+            if (active == null && residentOllamaModel == null) {
+                return;
+            }
+            log.info("Shutting down — unloading resident model{}",
+                    active == null ? "" : " '" + active.name() + "'");
             if (active != null && active.provider() == ModelProvider.AI_SERVICE) {
                 aiServiceClient.unload();
             }

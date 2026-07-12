@@ -4,6 +4,8 @@ import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
 import com.proprofessor.server.media.dto.MediaResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class MediaService {
 
+    private static final Logger log = LoggerFactory.getLogger(MediaService.class);
+
     private final StorageClient storageClient;
     private final MediaRepository mediaRepository;
 
@@ -26,16 +30,33 @@ public class MediaService {
 
     /** Uploads bytes to the storage-service and persists a reference row. */
     public MediaResponse upload(byte[] bytes, String filename) {
-        StorageClient.StorageMedia stored = storageClient.upload(bytes, filename);
+        // The request log only shows a multipart summary (the bytes are never logged), so these lines are
+        // the only record of what was actually uploaded and where it landed.
+        log.info("Uploading file '{}' ({} bytes) to storage-service...", filename, bytes.length);
+        long start = System.currentTimeMillis();
+
+        StorageClient.StorageMedia stored;
+        try {
+            stored = storageClient.upload(bytes, filename);
+        } catch (Exception ex) {
+            log.warn("Failed to upload file '{}' after {}ms: {}",
+                    filename, System.currentTimeMillis() - start, ex.getMessage());
+            throw ex;
+        }
         if (stored == null || stored.id() == null) {
+            log.warn("Failed to upload file '{}': storage-service returned no media id", filename);
             throw new AppException(HttpStatus.BAD_GATEWAY, "Storage service did not return a media id.");
         }
+
         MediaRow row = mediaRepository.insert(
                 stored.id(),
                 stored.originalFilename(),
                 stored.mimeType(),
                 stored.size(),
                 stored.category());
+        log.info("Uploaded file '{}' ({}ms): mediaId={} storageId={} mimeType={} size={}",
+                filename, System.currentTimeMillis() - start,
+                row.id(), row.storageId(), row.mimeType(), row.size());
         return toResponse(row);
     }
 
@@ -43,6 +64,8 @@ public class MediaService {
     public ResponseEntity<byte[]> download(long id) {
         MediaRow row = mediaRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Media not found: " + id));
+        log.info("Downloading media {} from storage-service: storageId={} filename='{}'",
+                id, row.storageId(), row.originalFilename());
         return storageClient.download(row.storageId());
     }
 
