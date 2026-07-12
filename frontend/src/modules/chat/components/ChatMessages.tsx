@@ -360,11 +360,23 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const findSupportsThinking = (provider: ModelProvider, model: string): boolean =>
     models.find((m) => m.provider === provider && m.name === model)?.supportsThinking ?? false;
 
+  // Abort the in-flight generation and settle the UI. Safe to call unconditionally:
+  // .abort() on a null/already-settled controller is a no-op. Backing out of a chat
+  // (switch, unmount, tab close) closes the SSE connection, which the backend detects
+  // and uses to stop generation and release the single-model busy lock.
+  const abortActiveStream = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    finalizeRef.current?.();
+    setStreaming(false);
+  };
+
   // load (or reset) conversation when the route param changes
   useEffect(() => {
     autoScrollRef.current = true;
 
     if (!chatId) {
+      abortActiveStream();
       setMessages([]);
       setSelected(null);
       setAttachments([]);
@@ -378,8 +390,14 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
 
     const id = Number(chatId);
-    // already loaded (or currently streaming this one) — don't clobber live messages
+    // already loaded (or currently streaming this one) — don't clobber live messages.
+    // This guard also short-circuits the new-chat self-navigation (/chat → /chat/:id),
+    // so the abort below only fires on a real switch to a different conversation.
     if (loadedRef.current === id) return;
+
+    // Switching to a different chat while one is streaming: cancel the old generation
+    // (per the abort-and-discard behavior) before loading the new conversation.
+    abortActiveStream();
 
     isNewChatRef.current = false;
     (async () => {
@@ -437,12 +455,22 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT_PX)}px`;
   }, [input]);
 
-  // stop any in-flight playback and the reveal loop when the component unmounts
+  // stop any in-flight playback, the reveal loop, and the generation when the component
+  // unmounts (e.g. leaving chat for Home/Settings)
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      abortRef.current?.abort();
     };
+  }, []);
+
+  // abort the generation on tab/window close. pagehide (not beforeunload — no confirm
+  // prompt; not visibilitychange — that also fires on plain tab-switching).
+  useEffect(() => {
+    const onHide = () => abortRef.current?.abort();
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
   }, []);
 
   const handleScroll = () => {
@@ -735,13 +763,10 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     abortRef.current = controller;
   };
 
-  // Real stop: aborts the fetch, backend catches disconnect and stops generation
+  // Real stop: aborts the fetch, backend catches disconnect and stops generation.
+  // Reveals whatever was received and halts the reveal loop (also clears `streaming`).
   const handleStop = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    // Reveal whatever was received and halt the reveal loop (also clears `streaming`).
-    finalizeRef.current?.();
-    setStreaming(false);
+    abortActiveStream();
   };
 
   const handleStopPlayback = () => {
