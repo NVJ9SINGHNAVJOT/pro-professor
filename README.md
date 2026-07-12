@@ -1,139 +1,271 @@
 # Pro Professor
 
-An AI-powered professor / chat application. This is a monorepo containing the web client,
-the orchestrating backend, and a local AI inference service. File storage is provided by an
-external local service (`micro-yard`).
+**A fully local, multimodal AI chat platform.** Text, voice, and file-attachment conversations
+with open-source LLMs running entirely on your own machine — no cloud provider, no API keys, no
+data leaving the device.
 
-## Features
+Pro Professor is a polyglot monorepo: a React 19 SPA, a Spring Boot (Java 25) orchestration
+gateway, and a Python/FastAPI inference service running MLX models on Apple Silicon, backed by
+PostgreSQL and a standalone Go file-storage service. The browser talks to exactly one backend;
+the gateway fans out to everything else.
 
-A fully local AI chat app — every model runs on your own machine, nothing leaves the device.
+---
 
-- **Chat with local models** — open-source models via **Ollama** and MLX models via the local
-  **ai-service**, all in one chat UI. ai-service models are loaded into memory on demand.
-- **Streaming replies** — responses stream token-by-token over Server-Sent Events, with a live
-  view of the model's reasoning ("thinking") and optional per-response metrics.
-- **Voice chat** — push-to-talk speech is transcribed locally (Whisper/MLX); for audio-capable
-  models the clip is sent to the model directly. Replies are spoken back with local
-  text-to-speech and a live waveform.
-- **Attachments** — upload files with a message; the bytes live in the storage service and the
-  chat keeps only a reference.
-- **Per-conversation settings** — sampling params (max tokens, temperature, top-p, repetition
-  penalty) and display toggles are saved per conversation and restored on reopen; mid-chat
-  changes are marked inline.
-- **Conversation management** — chats are persisted in PostgreSQL with auto-derived titles;
-  list, open, and delete them.
+## Highlights
 
-## Architecture
+- **Token-by-token streaming** over Server-Sent Events, including live model reasoning
+  ("thinking") and per-response performance metrics (tokens/sec, context usage).
+- **Two inference backends, one interface** — Ollama (open-source models) and a local MLX
+  service are both driven through a single OpenAI-compatible client; the gateway swaps only the
+  base URL, so adding a provider is configuration, not code.
+- **Voice chat with local STT/TTS** — push-to-talk capture, local Whisper/MLX transcription,
+  local speech synthesis, and a live mic-reactive waveform. Zero network round-trips.
+- **Native multimodal input** — for audio-capable models the raw clip is passed straight to the
+  model as an OpenAI `input_audio` content part, skipping transcription entirely.
+- **Attachment pipeline** — uploads stream through the gateway to a dedicated storage service;
+  PostgreSQL holds only a reference row, never the bytes.
+- **Per-conversation inference settings** — sampling parameters are persisted per chat, restored
+  on reopen, and mid-conversation changes are diffed and rendered as inline markers in the
+  transcript.
+- **Production-minded gateway** — request-ID correlation across logs (MDC), clean mid-stream
+  abort handling, actuator health checks, Flyway migrations, and compile-time-safe SQL via jOOQ.
+
+---
+
+## Tech Stack
+
+| Layer     | Technologies                                                                        |
+| --------- | ----------------------------------------------------------------------------------- |
+| Frontend  | React 19, TypeScript, Vite, Redux Toolkit, React Router, Tailwind 4, Radix / shadcn |
+| Gateway   | Java 25, Spring Boot 3.5, jOOQ, Flyway, OpenAI Java SDK, SSE, WebSocket, Actuator   |
+| Inference | Python, FastAPI, MLX-LM / MLX-VLM, Whisper (STT), MLX TTS                           |
+| Storage   | Go 1.25 (standard library only, zero dependencies)                                  |
+| Data      | PostgreSQL                                                                          |
+| Tooling   | Maven, npm, Taskfile, ESLint, Prettier, OWASP Dependency-Check                      |
+
+---
+
+## System Design
+
+### Topology
+
+The browser has exactly one dependency: the central server. Every other service is private to the
+backend, which keeps auth, validation, and persistence in a single enforceable choke point and
+lets inference or storage be swapped without touching the client.
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Browser — React 19 SPA (:5173)                                              │
+│  chat UI · streaming renderer · voice recorder/player · settings panel       │
+└───────────────┬──────────────────────────────────────────────┬───────────────┘
+                │ REST /api/v1  +  SSE (chat stream)           │ WS /ws
+                ▼                                              ▼ (notifications)
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Central Server — Spring Boot 3.5 / Java 25 (:4000)          ← API GATEWAY   │
+│                                                                              │
+│   ChatService   ModelService   MediaService   AudioService                   │
+│   • conversation lifecycle & title derivation                                │
+│   • history assembly + multimodal message construction                       │
+│   • provider routing (Ollama ⇄ AI Service)                                   │
+│   • SSE fan-out on a dedicated executor pool                                 │
+│   • request-ID correlation (MDC), error persistence, abort handling          │
+└───────┬──────────────────────┬──────────────────────┬────────────────────────┘
+        │ jOOQ / JDBC          │ OpenAI-compatible    │ HTTP
+        ▼                      ▼ /v1/chat/completions ▼
+┌───────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
+│ PostgreSQL    │   │ AI Service (:8000)   │   │ Storage Service      │
+│               │   │ FastAPI · MLX-LM     │   │ (:9000) Go, stdlib   │
+│ conversations │   │ MLX-VLM · Whisper    │   │                      │
+│ messages      │   │ STT/TTS · model mgmt │   │ file bytes on disk   │
+│ media refs    │   └──────────────────────┘   │ + JSON metadata      │
+│ models        │   ┌──────────────────────┐   └──────────────────────┘
+│ attachments   │   │ Ollama (:11434)      │
+└───────────────┘   │ open-source models   │
+                    └──────────────────────┘
+```
+
+### Key design decisions
+
+**SSE for generation, not WebSocket.** Token streaming is strictly server→client and
+request-scoped, which is exactly SSE's shape. It rides on plain HTTP (no upgrade handshake, no
+custom framing, no reconnect state machine) and each stream is naturally tied to one request's
+lifecycle — so a client abort surfaces as a broken pipe the server can act on immediately. The
+WebSocket at `/ws` is kept for the one case SSE can't serve: unsolicited server-push
+notifications outside any request.
+
+**A single provider abstraction over two very different engines.** Ollama and the MLX service
+both expose OpenAI-compatible `/v1/chat/completions`, so `ChatCompletionClient` drives both
+through the OpenAI Java SDK and switches only the base URL by provider enum. Provider-specific
+quirks are isolated at the edges — Ollama doesn't report input modalities, so the client injects
+a `["text"]` default, letting the rest of the system treat modality as a first-class, uniform
+field.
+
+**Typed, discriminated stream frames.** Every SSE event carries a `type`, so one channel
+multiplexes the whole turn without out-of-band coordination:
+
+| Frame            | Payload                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| `chat.start`     | conversation + message ids (client swaps optimistic ids)       |
+| `chat.chunk`     | a token delta of the reply                                     |
+| `chat.thinking`  | a token delta of the model's reasoning trace                   |
+| `chat.settings`  | mid-conversation sampling-parameter change marker              |
+| `chat.metrics`   | tokens/sec, token counts, context usage                        |
+| `chat.title`     | auto-derived conversation title                                |
+| `chat.transcript`| STT result for a spoken turn                                   |
+| `chat.done`      | terminal success                                               |
+| `chat.error`     | user-facing message + `requestId` for log correlation          |
+
+**Bytes and references are stored separately.** Uploads are proxied to the storage service, which
+returns a UUID; PostgreSQL persists only a `media` reference row plus a `message_attachments` link.
+Downloads are proxied back through `GET /api/v1/media/{id}/file`, so the browser never addresses
+the storage service directly and the blob layer stays swappable (local disk today, object storage
+tomorrow) behind a stable API.
+
+**Multimodal input without a new wire format.** An audio-capable model receives the spoken clip
+directly rather than a transcript. The clip travels the ordinary media-upload path; at send time
+the gateway detects `audio/*` attachments on the *current* turn, fetches the bytes, base64-encodes
+them, and rebuilds that message as a multimodal OpenAI content array. Earlier turns stay text-only
+— matching MLX-VLM's "most recent media only" contract — and the forwarding is provider-gated so a
+stray clip can never reach a text-only engine.
+
+**Non-model message roles.** `error` and `settings` rows live in the `messages` table so the UI can
+replay a faithful transcript on reload, but they're excluded from the roles sent to the model. The
+transcript and the model's context are deliberately different views of the same table.
+
+**jOOQ over JPA.** Queries are hand-written, type-safe SQL generated from the live schema at build
+time — no lazy-loading surprises, no N+1s hidden behind an ORM, and schema drift becomes a
+compile error rather than a runtime one.
+
+### Chat request lifecycle
+
+```text
+User submits prompt
+  │
+  ├─▶ POST /api/v1/chats/send ──▶ ChatController returns SseEmitter immediately,
+  │                               hands generation to chatStreamExecutor
+  │
+  ├─▶ ChatService
+  │     1. resolve or create conversation (derive title from first message)
+  │     2. persist user message; link attachment ids
+  │     3. diff sampling params vs. stored → on change: update row,
+  │        insert `settings` marker, emit chat.settings
+  │     4. load history (model-visible roles only)
+  │     5. AI Service model? → ensure it's loaded into VRAM (lazy, just-in-time)
+  │     6. attach current-turn audio as input_audio parts (AI Service only)
+  │
+  ├─▶ ChatCompletionClient ──▶ Ollama | AI Service  (OpenAI-compatible, streaming)
+  │         │
+  │         └─▶ deltas ──▶ chat.chunk / chat.thinking frames ──▶ browser renders live
+  │
+  ├─▶ persist assembled assistant reply
+  └─▶ chat.metrics → chat.done
+
+  Client aborts mid-stream (Stop / chat switch / unmount)
+      └─▶ ClientDisconnectedException → generation cancelled, no orphaned reply row
+  Generation fails
+      └─▶ `error` row persisted + chat.error frame carrying requestId (MDC-correlated)
+```
+
+### Data model
+
+```text
+models ──< conversations ──< messages ──< message_attachments >── media
+```
+
+- **`models`** — one row per `(provider, name)`; conversations point at it, so the model used for
+  any chat is always known.
+- **`conversations`** — title, mode, and the current inference settings (`max_tokens`,
+  `temperature`, `top_p`, `repetition_penalty`) plus display toggles, restored on reopen.
+- **`messages`** — `user` / `assistant` / `system` / `error` / `settings`, CHECK-constrained;
+  cascade-deleted with the conversation.
+- **`media`** — storage UUID, filename, MIME type, size, category. Bytes never touch Postgres.
+- **`message_attachments`** — many-to-many link between messages and media.
+
+Schema is versioned with **Flyway** and mirrored into type-safe **jOOQ** sources at build time.
+
+### API surface
+
+| Method   | Endpoint                        | Purpose                                  |
+| -------- | ------------------------------- | ---------------------------------------- |
+| `POST`   | `/api/v1/chats/send`            | Send a message; returns an SSE stream    |
+| `GET`    | `/api/v1/chats`                 | List conversations                       |
+| `GET`    | `/api/v1/chats/{id}`            | Open a conversation with full transcript |
+| `DELETE` | `/api/v1/chats/{id}`            | Delete a conversation                    |
+| `GET`    | `/api/v1/models/all`            | Aggregated models (Ollama + AI Service)  |
+| `POST`   | `/api/v1/models/load`           | Load an MLX model into memory            |
+| `POST`   | `/api/v1/media/upload`          | Upload an attachment                     |
+| `GET`    | `/api/v1/media/{id}/file`       | Download an attachment (proxied)         |
+| `POST`   | `/api/v1/audio/transcriptions`  | Speech → text (local Whisper/MLX)        |
+| `POST`   | `/api/v1/audio/speech`          | Text → speech (local TTS, WAV)           |
+| `GET`    | `/api/v1/health`                | Service health                           |
+| `WS`     | `/ws`                           | Server→client notifications              |
+
+---
+
+## Repository Layout
 
 ```text
 pro-professor/
-├── frontend/                 # React 19 + Vite + TypeScript SPA (the web client)
+├── frontend/                 # React 19 + Vite + TypeScript SPA
 ├── backend/
-│   ├── central-server/       # Spring Boot 3.5 (Java 25) — main backend / orchestrator
-│   └── ai-service/           # Python / FastAPI — local MLX LLM inference (git submodule)
-└── docs/                     # design / planning notes
+│   ├── central-server/       # Spring Boot 3.5 (Java 25) — API gateway / orchestrator
+│   └── ai-service/           # Python + FastAPI — local MLX inference (git submodule)
+├── scripts/                  # storage-service bootstrap
+└── docs/                     # design & planning notes
 ```
 
-The **central-server** is the hub: the frontend talks to it over REST (`/api/v1`) and
-WebSocket (`/ws`), and it coordinates PostgreSQL, the **ai-service** (via an
-OpenAI-compatible API), and the **storage-service**.
+| Service           | Stack                                  | Default URL             | Role                                                     |
+| ----------------- | -------------------------------------- | ----------------------- | -------------------------------------------------------- |
+| `frontend`        | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client / chat UI                                     |
+| `central-server`  | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | API gateway; REST + SSE + WebSocket, PostgreSQL          |
+| `ai-service`      | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + STT/TTS (Apple Silicon)            |
+| `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload / retrieval (external; from `micro-yard`)    |
 
-## Services
+**`ai-service`** is a git submodule maintained in its own repository. **`storage-service`** lives in
+the external **`micro-yard`** monorepo and is fetched into `backend/storage-service/` (git-ignored)
+by `task setup`.
 
-| Service           | Stack                                  | Default URL             | Role                                                                    |
-| ----------------- | -------------------------------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `frontend`        | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client / chat UI                                                    |
-| `central-server`  | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | Orchestrator; REST + WebSocket API, PostgreSQL                          |
-| `ai-service`      | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + audio (Apple Silicon); OpenAI-compatible endpoint |
-| `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload, retrieval, and serving (external; from `micro-yard`)       |
+---
 
-### frontend
+## Getting Started
 
-React 19 single-page app built with Vite. Uses Redux Toolkit for state, React Router for
-routing, Tailwind 4 + shadcn/Radix UI for styling, and `react-markdown` for rendering chat
-responses (with streaming/reasoning support). Talks to the central-server over REST and
-WebSocket.
-
-### central-server
-
-The Spring Boot orchestrator and source of truth. Exposes the REST (`/api/v1`) and
-WebSocket (`/ws`) APIs the frontend consumes, and persists data in PostgreSQL (migrations via
-Flyway, queries via jOOQ). It calls the ai-service through an OpenAI-compatible client
-(`openai-java`) for model inference and the storage-service for file handling.
-
-### ai-service
-
-A Python / FastAPI service for running MLX-compatible LLMs locally on Apple Silicon Macs
-(built on MLX-LM). Provides model management, an OpenAI-compatible chat endpoint (full and
-streaming responses), audio routes, and a CLI to download/list/update/delete/chat with
-models. Single machine, one model loaded at a time, local filesystem model storage.
-Maintained in its own repository as a git submodule.
-
-### storage-service
-
-A lightweight Go file storage service using only the standard library (zero external
-dependencies). Upload files over HTTP, retrieve them by ID, and serve them back — stored on
-the local filesystem with JSON metadata alongside each upload. Lives in the external
-**`micro-yard`** repo (a local multi-service monorepo) — it is not vendored here, but
-`task setup` fetches it into `backend/storage-service/` (see below).
-
-## Clone
-
-`ai-service` is a git submodule, so clone with `--recurse-submodules`:
+**Prerequisites:** JDK 25, Node 20+, Python 3.11+, Go 1.25, PostgreSQL, Ollama, and an Apple
+Silicon Mac (for MLX inference).
 
 ```bash
+# 1. Clone with the ai-service submodule
 git clone --recurse-submodules <repo-url>
+cd pro-professor
 
-# already cloned without it?
-git submodule update --init --recursive
-```
-
-Then pull in the storage-service:
-
-```bash
+# 2. Fetch the storage-service out of micro-yard
 task setup
+
+# 3. Configure — every service ships a .env.example
+cp .env.example .env   # repeat per service, then adjust
 ```
 
-This sparse-fetches the three subtrees storage-service needs out of the `micro-yard` repo —
-the service itself, the `go-shared` module it imports, and the `ui-shared` design assets its
-web dashboard embeds — and assembles them into `backend/storage-service/` (git-ignored),
-generating a `go.work` so the modules resolve in the flat layout. Re-run `task setup` any
-time to pull the latest storage-service; your `.env` and uploaded files under `storage/` are
-preserved.
+`task setup` sparse-fetches the three subtrees storage-service needs from `micro-yard` (the service
+itself, the `go-shared` module it imports, and the `ui-shared` assets its dashboard embeds),
+assembles them into `backend/storage-service/`, and generates a `go.work` so the modules resolve in
+the flat layout. Re-run it any time to pull the latest; your `.env` and uploaded files under
+`storage/` are preserved. If the `micro-yard` layout changes, update the config block at the top of
+[scripts/setup-storage-service.sh](scripts/setup-storage-service.sh) — the script fails loudly when
+a subtree it expects is gone.
 
-If the layout changes on the `micro-yard` side, update the config block at the top of
-[scripts/setup-storage-service.sh](scripts/setup-storage-service.sh) — the script fails with
-an explicit message when a subtree it expects is gone.
-
-## Getting started
-
-Each service has its own README with full setup and run instructions:
-
-- [frontend/README.md](frontend/README.md)
-- [backend/central-server/README.md](backend/central-server/README.md)
-- [backend/ai-service/README.md](backend/ai-service/README.md)
-- `storage-service` — run `task setup`, then see `backend/storage-service/README.md`
-
-Quick start (run each in its own terminal):
+### Run (each in its own terminal)
 
 ```bash
-# frontend
-cd frontend && npm install && npm run dev
-
-# central-server (requires Postgres running locally)
-cd backend/central-server && ./mvnw spring-boot:run
-
-# ai-service (Apple Silicon)
-cd backend/ai-service && python -m app.main
-
-# storage-service (after `task setup`)
-cd backend/storage-service && task run   # or: go run ./cmd/server/
+cd frontend               && npm install && npm run dev
+cd backend/central-server && ./mvnw spring-boot:run      # requires Postgres
+cd backend/ai-service     && python -m app.main          # Apple Silicon
+cd backend/storage-service && task run
 ```
 
-A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts (`task setup`, `task server`,
-`task client`, `task storage`).
+A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts: `task setup`, `task server`,
+`task client`, `task storage`, plus `task migrate` / `task codegen` for Flyway + jOOQ.
 
-## Configuration
-
-Every service ships a `.env.example`. Copy it to `.env` and adjust for your environment.
-`.env` files are git-ignored; `.env.example` files are committed.
+Per-service setup details:
+[frontend](frontend/README.md) ·
+[central-server](backend/central-server/README.md) ·
+[ai-service](backend/ai-service/README.md) ·
+`storage-service` (see its README after `task setup`)
