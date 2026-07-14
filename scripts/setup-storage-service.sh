@@ -100,14 +100,14 @@ for path in "${KEEP_PATHS[@]}"; do
     fi
 done
 
-# The server reads PORT from .env and otherwise falls back to 8080, but central-server
-# calls it on 9000 (STORAGE_SERVICE_BASE_URL) — .env.example already has the right values.
+# The server reads PORT from .env and otherwise falls back to 9000, which is also where
+# central-server calls it (STORAGE_SERVICE_BASE_URL) — .env.example already matches.
 if [ -f "$DEST/.env" ]; then
     loginf "'$DEST/.env' already exists, leaving it as is."
 elif ! cp "$DEST/.env.example" "$DEST/.env"; then
     die "Failed to create '$DEST/.env' from .env.example."
 else
-    loginf "Created '$DEST/.env' from .env.example (PORT=9000)."
+    loginf "Created '$DEST/.env' from .env.example."
 fi
 
 # sync-shared copies the design assets out of ui-shared/, which sits next to the service in
