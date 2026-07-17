@@ -8,7 +8,6 @@ import com.proprofessor.server.common.web.LogFormat;
 import com.proprofessor.server.common.web.RequestIdFilter;
 import com.proprofessor.server.common.web.ResponseLoggingAdvice;
 import com.proprofessor.server.notes.ai.dto.NoteAiRequest;
-import com.proprofessor.server.notes.ai.dto.NoteAiStatus;
 import com.proprofessor.server.notes.ai.dto.NoteStreamEvent;
 import com.proprofessor.server.notes.dto.NoteDetail;
 import com.proprofessor.server.notes.dto.NoteRevisionListResponse;
@@ -44,23 +43,15 @@ public class NotesAiController {
     private static final long STREAM_TIMEOUT_MS = 10 * 60 * 1000L;
 
     private final NotesAiService notesAiService;
-    private final AnthropicClient anthropicClient;
     private final ThreadPoolTaskExecutor chatStreamExecutor;
     private final LogFormat logFormat;
 
     public NotesAiController(
-            NotesAiService notesAiService, AnthropicClient anthropicClient,
+            NotesAiService notesAiService,
             ThreadPoolTaskExecutor chatStreamExecutor, LogFormat logFormat) {
         this.notesAiService = notesAiService;
-        this.anthropicClient = anthropicClient;
         this.chatStreamExecutor = chatStreamExecutor;
         this.logFormat = logFormat;
-    }
-
-    /** Whether the Claude provider is usable (API key configured) and which model it runs. */
-    @GetMapping("/ai/status")
-    public ApiResponse<NoteAiStatus> aiStatus() {
-        return ApiResponse.ok(new NoteAiStatus(anthropicClient.isConfigured(), anthropicClient.model()));
     }
 
     /** Rewrites the note per the request's instruction, streaming the new content. */

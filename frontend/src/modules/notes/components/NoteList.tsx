@@ -114,10 +114,7 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
       key={note.id}
       to={ROUTES.NOTES_DETAIL(note.id)}
       className={({ isActive }) =>
-        cn(
-          "group flex flex-col gap-y-1 rounded-lg px-2 py-1.5 hover:bg-neutral-800",
-          isActive && "bg-neutral-800",
-        )
+        cn("group flex flex-col gap-y-1 rounded-lg px-2 py-1.5 hover:bg-neutral-800", isActive && "bg-neutral-800")
       }
     >
       <div className="flex items-center justify-between gap-x-1">
@@ -149,7 +146,7 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
   const searching = query.trim().length > 0;
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col gap-y-2 overflow-hidden border-r border-neutral-800 bg-chat-sidebar text-white">
+    <aside className="flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden border-r border-neutral-800 bg-chat-sidebar text-white">
       {/* New note — shares the toolbar height for a uniform top band */}
       <div className="flex h-11.5 shrink-0 items-center pt-2 px-2">
         <button

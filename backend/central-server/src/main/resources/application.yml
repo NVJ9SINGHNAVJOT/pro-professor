@@ -76,7 +76,3 @@ app:
     api-key: ${OLLAMA_API_KEY:ollama}
   storage-service:
     base-url: ${STORAGE_SERVICE_BASE_URL:http://127.0.0.1:9000}
-  anthropic:
-    base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
-    api-key: ${ANTHROPIC_API_KEY:}
-    model: ${ANTHROPIC_MODEL:claude-opus-4-8}

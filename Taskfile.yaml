@@ -8,6 +8,11 @@ tasks:
     desc: List all tasks.
     cmd: task -l
 
+  init:
+    desc: Bootstrap a fresh clone (submodules + service .env files)
+    cmds:
+      - bash scripts/setup.sh
+
   setup:
     desc: Fetch storage-service (and its shared modules) from the external micro-yard repo
     cmds:

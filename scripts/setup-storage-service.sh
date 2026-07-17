@@ -22,27 +22,7 @@ SERVICE_PATH="storage-service"
 VENDOR_PATHS=("go-shared" "ui-shared")
 KEEP_PATHS=(".env" "storage")
 
-# Logging functions
-
-# Function to get the current timestamp in light black (dark grey)
-current_time() {
-    printf "\e[0;90m%s\e[0m" "$(date +"%Y-%m-%dT%H:%M:%S%z")"
-}
-
-# Function to log information messages
-loginf() {
-    printf "%s \033[1;34m[INF]\033[0m %s\n" "$(current_time)" "$1"
-}
-
-# Function to log error messages
-logerr() {
-    printf "%s \033[1;31m[ERR]\033[0m \033[0;31m%s\033[0m\n" "$(current_time)" "$1"
-}
-
-# Function to log success messages
-logsuccess() {
-    printf "%s \033[1;32m[SUCCESS]\033[0m %s\n" "$(current_time)" "$1"
-}
+source "$(dirname "$0")/logging.sh"
 
 die() {
     logerr "$1"
@@ -131,15 +111,11 @@ use (
 )
 EOF
 
-# web/embed.go embeds web/shared/, which is generated (not committed) — without this the
-# service does not compile on a fresh fetch.
-loginf "Syncing shared web assets into '$DEST'..."
-if ! (cd "$DEST" && task sync-shared); then
-    die "Failed to run 'task sync-shared' in '$DEST'."
-fi
-
-if ! (cd "$DEST" && go build ./...); then
-    die "storage-service does not build after setup."
+# task build depends on sync-shared (which embeds web/shared/, generated not committed) and
+# compiles both binaries, so this both syncs assets and verifies the service builds.
+loginf "Building storage-service in '$DEST'..."
+if ! (cd "$DEST" && task build); then
+    die "'task build' failed in '$DEST'."
 fi
 
 logsuccess "storage-service ready at '$DEST'. Run it with: task storage"

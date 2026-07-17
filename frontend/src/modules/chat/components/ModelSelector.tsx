@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import Tooltip from "@/components/common/Tooltip";
-import { FileText, ImageIcon, Mic, Video } from "lucide-react";
+import { ModelOptionLabel } from "@/components/common/ModelOptionLabel";
 import {
   Select,
   SelectContent,
@@ -22,16 +22,6 @@ interface ModelSelectorProps {
 }
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
-
-const MODALITY_META: Record<
-  string,
-  { icon: React.ComponentType<{ size?: number }>; label: string; className: string }
-> = {
-  text: { icon: FileText, label: "Text", className: "bg-neutral-700 text-neutral-300" },
-  image: { icon: ImageIcon, label: "Image", className: "bg-violet-900/60 text-violet-300" },
-  audio: { icon: Mic, label: "Audio", className: "bg-blue-900/60 text-blue-300" },
-  video: { icon: Video, label: "Video", className: "bg-amber-900/60 text-amber-300" },
-};
 
 const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
   const { models, loaded } = useAppSelector((state) => state.models);
@@ -68,33 +58,12 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     const provider = PROVIDER_META[m.provider];
     return (
       <SelectItem key={encode(m.provider, m.name)} value={encode(m.provider, m.name)}>
-        <span className="flex items-center gap-2">
-          {provider && (
-            <span
-              className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${provider.className}`}
-            >
-              {provider.label}
-            </span>
-          )}
-          <span>{m.name}</span>
-          <span className="flex items-center gap-1" aria-label="Supported input types">
-            {(m.inputModalities ?? ["text"]).map((mod) => {
-              const meta = MODALITY_META[mod];
-              if (!meta) return null;
-              const Icon = meta.icon;
-              return (
-                <span
-                  key={mod}
-                  title={meta.label}
-                  className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${meta.className}`}
-                >
-                  <Icon size={10} />
-                  {meta.label}
-                </span>
-              );
-            })}
-          </span>
-        </span>
+        <ModelOptionLabel
+          name={m.name}
+          modalities={m.inputModalities ?? ["text"]}
+          providerLabel={provider?.label}
+          providerClassName={provider?.className}
+        />
       </SelectItem>
     );
   };
@@ -108,32 +77,17 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
 
     const display = (
       <div className="flex items-center gap-1.5 rounded-md px-2 py-1 para-small-medium cursor-not-allowed select-none text-neutral-400">
-        {providerMeta && (
-          <span
-            className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${
-              isAvailable ? providerMeta.className : "bg-neutral-800 text-neutral-400"
-            }`}
-          >
-            {providerMeta.label}
-          </span>
+        {providerMeta ? (
+          <ModelOptionLabel
+            name={value.model}
+            nameClassName={isAvailable ? "text-neutral-300" : "text-neutral-400"}
+            modalities={isAvailable ? modalities : []}
+            providerLabel={providerMeta.label}
+            providerClassName={isAvailable ? providerMeta.className : "bg-neutral-800 text-neutral-400"}
+          />
+        ) : (
+          <span className={isAvailable ? "text-neutral-300" : "text-neutral-400"}>{value.model}</span>
         )}
-        <span className={isAvailable ? "text-neutral-300" : "text-neutral-400"}>{value.model}</span>
-        {isAvailable &&
-          modalities.map((mod) => {
-            const meta = MODALITY_META[mod];
-            if (!meta) return null;
-            const Icon = meta.icon;
-            return (
-              <span
-                key={mod}
-                title={meta.label}
-                className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${meta.className}`}
-              >
-                <Icon size={10} />
-                {meta.label}
-              </span>
-            );
-          })}
       </div>
     );
 

@@ -9,7 +9,6 @@ const notesEndPoints = {
   DELETE_ONE: (id: number) => `${BASE_URL_SERVER}/notes/${id}`,
   SEARCH: `${BASE_URL_SERVER}/notes/search`,
   LINKS: `${BASE_URL_SERVER}/notes/links`,
-  AI_STATUS: `${BASE_URL_SERVER}/notes/ai/status`,
   REVISIONS: (id: number) => `${BASE_URL_SERVER}/notes/${id}/revisions`,
   RESTORE: (id: number, revisionId: number) => `${BASE_URL_SERVER}/notes/${id}/revisions/${revisionId}/restore`,
   BACKLINKS: (id: number) => `${BASE_URL_SERVER}/notes/${id}/backlinks`,
@@ -36,11 +35,6 @@ export interface NoteSavePayload {
   title?: string;
   content: string;
 }
-
-export type GetAiStatusResponse = {
-  message: string;
-  data: { claudeConfigured: boolean; claudeModel: string };
-};
 
 export interface NoteRevision {
   id: number;
@@ -115,11 +109,6 @@ export const notesRoute = {
   getLinks: createRoute<[], GetNoteLinksResponse>(() => ({
     method: "GET",
     url: notesEndPoints.LINKS,
-  })),
-
-  getAiStatus: createRoute<[], GetAiStatusResponse>(() => ({
-    method: "GET",
-    url: notesEndPoints.AI_STATUS,
   })),
 
   getRevisions: createRoute<[id: number], GetRevisionsResponse>((id) => ({

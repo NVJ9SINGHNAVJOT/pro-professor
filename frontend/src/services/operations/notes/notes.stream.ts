@@ -8,9 +8,9 @@ export type NoteAiAction = "ai-update" | "summarize" | "continue";
 export interface NoteAiPayload {
   /** Required for "ai-update"; ignored by the other actions. */
   instruction?: string;
-  /** "claude" (Anthropic API), "ollama", or "ai-service". */
+  /** "ollama" or "ai-service". */
   provider: string;
-  /** Provider model id — required for the local providers. */
+  /** Provider model id — required. */
   model?: string;
 }
 

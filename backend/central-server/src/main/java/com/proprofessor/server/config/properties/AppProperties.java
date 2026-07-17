@@ -16,15 +16,13 @@ import java.util.List;
  * @param aiService      connection details for the Python AI service
  * @param ollama         connection details for the local Ollama service
  * @param storageService connection details for the Go storage service
- * @param anthropic      Anthropic Messages API access (notes AI actions via Claude)
  */
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
         Cors cors,
         AiService aiService,
         Ollama ollama,
-        StorageService storageService,
-        Anthropic anthropic
+        StorageService storageService
 ) {
 
     /**
@@ -60,18 +58,6 @@ public record AppProperties(
      */
     public record StorageService(
             String baseUrl
-    ) {
-    }
-
-    /**
-     * @param baseUrl base URL of the Anthropic API
-     * @param apiKey  Anthropic API key; blank disables the Claude provider for notes AI actions
-     * @param model   Claude model id used for notes AI actions
-     */
-    public record Anthropic(
-            String baseUrl,
-            String apiKey,
-            String model
     ) {
     }
 }

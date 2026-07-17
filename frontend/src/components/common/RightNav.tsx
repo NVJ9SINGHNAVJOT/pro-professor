@@ -27,7 +27,7 @@ const RightNav = () => {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="flex h-full w-16 shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
+        className="flex h-full w-[52px] shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
       >
         <img
           alt="Logo"

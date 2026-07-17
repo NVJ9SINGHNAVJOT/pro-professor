@@ -24,10 +24,10 @@ import java.util.regex.Pattern;
 
 /**
  * AI note actions: rewrite/summarize/continue a note via a local model
- * (Ollama / AI service through the OpenAI-compatible chat path) or Claude
- * (Anthropic Messages API). The model always returns the complete updated
- * Markdown note; the prior content is snapshotted into {@code note_revisions}
- * before it is overwritten, so every AI edit is reversible.
+ * (Ollama / AI service through the OpenAI-compatible chat path). The model
+ * always returns the complete updated Markdown note; the prior content is
+ * snapshotted into {@code note_revisions} before it is overwritten, so every
+ * AI edit is reversible.
  */
 @Service
 public class NotesAiService {
@@ -61,19 +61,16 @@ public class NotesAiService {
     private final NotesRepository notesRepository;
     private final NotesService notesService;
     private final ChatCompletionClient chatCompletionClient;
-    private final AnthropicClient anthropicClient;
     private final ModelActivationService modelActivationService;
 
     public NotesAiService(
             NotesRepository notesRepository,
             NotesService notesService,
             ChatCompletionClient chatCompletionClient,
-            AnthropicClient anthropicClient,
             ModelActivationService modelActivationService) {
         this.notesRepository = notesRepository;
         this.notesService = notesService;
         this.chatCompletionClient = chatCompletionClient;
-        this.anthropicClient = anthropicClient;
         this.modelActivationService = modelActivationService;
     }
 
@@ -88,9 +85,7 @@ public class NotesAiService {
         String userPrompt = buildPrompt(action, request, note.content());
 
         listener.onStart(noteId);
-        String reply = "claude".equalsIgnoreCase(request.provider())
-                ? anthropicClient.streamMessage(SYSTEM_PROMPT, userPrompt, listener::onToken)
-                : streamFromLocalModel(request, userPrompt, listener);
+        String reply = streamFromLocalModel(request, userPrompt, listener);
 
         String updated = stripWrappingFence(reply).trim();
         if (updated.isEmpty()) {
@@ -145,7 +140,7 @@ public class NotesAiService {
 
     private static ModelProvider resolveLocalProvider(String provider) {
         if (provider == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "A provider is required (claude, ollama, or ai-service).");
+            throw new AppException(HttpStatus.BAD_REQUEST, "A provider is required (ollama or ai-service).");
         }
         return switch (provider.toLowerCase().replace('_', '-')) {
             case "ollama" -> ModelProvider.OLLAMA;
