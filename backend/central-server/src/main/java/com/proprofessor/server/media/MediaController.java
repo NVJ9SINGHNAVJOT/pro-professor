@@ -51,4 +51,10 @@ public class MediaController {
     public ResponseEntity<byte[]> file(@PathVariable long id) {
         return mediaService.download(id);
     }
+
+    /** Streams the newest upload with this original filename — used by note {@code ![[image.png]]} embeds. */
+    @GetMapping("/by-filename/{filename}/file")
+    public ResponseEntity<byte[]> fileByName(@PathVariable String filename) {
+        return mediaService.downloadByFilename(filename);
+    }
 }

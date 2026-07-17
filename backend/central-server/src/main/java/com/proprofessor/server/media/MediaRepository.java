@@ -40,6 +40,15 @@ public class MediaRepository {
                 .fetchOptional(this::toRow);
     }
 
+    /** Newest media with the given original filename — resolves note {@code ![[image.png]]} embeds. */
+    public Optional<MediaRow> findLatestByFilename(String filename) {
+        return dsl.selectFrom(MEDIA)
+                .where(MEDIA.ORIGINAL_FILENAME.equalIgnoreCase(filename))
+                .orderBy(MEDIA.CREATED_AT.desc())
+                .limit(1)
+                .fetchOptional(this::toRow);
+    }
+
     public List<MediaRow> findByIds(Collection<Long> ids) {
         if (ids.isEmpty()) {
             return List.of();

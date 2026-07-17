@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
-import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, SettingsIcon } from "lucide-react";
+import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, NotebookPenIcon, SettingsIcon } from "lucide-react";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ const name = import.meta.env.VITE_PROFESSOR_NAME;
 const menuItems = [
   { label: "Home", path: ROUTES.HOME, icon: HomeIcon },
   { label: "Chat", path: ROUTES.CHAT, icon: MessageSquareIcon },
+  { label: "Notes", path: ROUTES.NOTES, icon: NotebookPenIcon },
   { label: "Settings", path: ROUTES.SETTINGS, icon: SettingsIcon },
   { label: "Dashboard", path: ROUTES.DASHBOARD, icon: LayoutDashboardIcon },
 ] as const;

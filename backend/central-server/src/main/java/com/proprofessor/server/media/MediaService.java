@@ -69,6 +69,15 @@ public class MediaService {
         return storageClient.download(row.storageId());
     }
 
+    /** Streams the newest stored file with this original filename — resolves note {@code ![[image.png]]} embeds. */
+    public ResponseEntity<byte[]> downloadByFilename(String filename) {
+        MediaRow row = mediaRepository.findLatestByFilename(filename)
+                .orElseThrow(() -> new ResourceNotFoundException("Media not found: " + filename));
+        log.info("Downloading media by filename '{}' from storage-service: mediaId={} storageId={}",
+                filename, row.id(), row.storageId());
+        return storageClient.download(row.storageId());
+    }
+
     /** Raw stored bytes for a known media row — used to forward audio clips to the model. */
     public byte[] bytes(MediaRow row) {
         return storageClient.download(row.storageId()).getBody();

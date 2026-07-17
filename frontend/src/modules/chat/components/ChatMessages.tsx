@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "@/components/common/toast";
 import {
@@ -16,11 +16,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import Markdown from "@/components/common/Markdown";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
 import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";
@@ -70,17 +66,6 @@ const WaveformIcon = ({ className }: { className?: string }) => (
     <line x1="20" y1="10" x2="20" y2="14" />
   </svg>
 );
-
-/**
- * Markdown + GitHub-flavored + KaTeX, memoized on its source so a token that doesn't change
- * the rendered string (e.g. while an unclosed math token is being withheld) skips re-parsing.
- */
-const Markdown = memo(({ children }: { children: string }) => (
-  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-    {children}
-  </ReactMarkdown>
-));
-Markdown.displayName = "Markdown";
 
 /** Collapsible panel showing a model's streamed reasoning. */
 const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreaming: boolean }) => {

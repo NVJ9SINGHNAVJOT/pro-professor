@@ -8,6 +8,7 @@ import { ROUTES } from "@/constants/routes";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import HomePage from "@/pages/index";
 import ChatPage from "@/pages/chat/index";
+import NotesPage from "@/pages/notes/index";
 import SettingsPage from "@/pages/settings/index";
 import DashboardPage from "@/pages/dashboard/index";
 import ErrorPage from "@/pages/error/index";
@@ -32,6 +33,14 @@ const router = createBrowserRouter([
       {
         path: "chat/:chatId",
         element: <ChatPage />,
+      },
+      {
+        path: "notes",
+        element: <NotesPage />,
+      },
+      {
+        path: "notes/:noteId",
+        element: <NotesPage />,
       },
       {
         path: "settings",

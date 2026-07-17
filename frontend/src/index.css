@@ -390,6 +390,64 @@ input[type="number"]::-webkit-outer-spin-button {
     border-color: #404040;
     margin: 1rem 0;
   }
+
+  /* Mermaid diagrams replace their fenced code block — drop the code-block chrome */
+  .chat-markdown pre:has(.mermaid-block) {
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  /* Obsidian-style callouts (`> [!note] Title`), emitted by the shared Markdown component */
+  .chat-markdown blockquote.callout {
+    --callout-color: #93c5fd; /* default/info/note — blue */
+    border-left: 3px solid var(--callout-color);
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--callout-color) 8%, transparent);
+    padding: 0.625rem 1rem;
+    color: inherit;
+  }
+  .chat-markdown .callout-title {
+    color: var(--callout-color);
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+  }
+  .chat-markdown .callout p {
+    margin: 0.25rem 0;
+  }
+  .chat-markdown .callout-tip,
+  .chat-markdown .callout-hint,
+  .chat-markdown .callout-important {
+    --callout-color: #5eead4; /* teal */
+  }
+  .chat-markdown .callout-success,
+  .chat-markdown .callout-check,
+  .chat-markdown .callout-done {
+    --callout-color: #86efac; /* green */
+  }
+  .chat-markdown .callout-warning,
+  .chat-markdown .callout-caution,
+  .chat-markdown .callout-attention {
+    --callout-color: #fbbf24; /* amber */
+  }
+  .chat-markdown .callout-danger,
+  .chat-markdown .callout-error,
+  .chat-markdown .callout-bug,
+  .chat-markdown .callout-failure {
+    --callout-color: #f87171; /* red */
+  }
+  .chat-markdown .callout-question,
+  .chat-markdown .callout-help,
+  .chat-markdown .callout-faq {
+    --callout-color: #fde047; /* yellow */
+  }
+  .chat-markdown .callout-example {
+    --callout-color: #c4b5fd; /* purple */
+  }
+  .chat-markdown .callout-quote,
+  .chat-markdown .callout-cite {
+    --callout-color: #a3a3a3; /* grey */
+  }
 }
 
 @theme inline {

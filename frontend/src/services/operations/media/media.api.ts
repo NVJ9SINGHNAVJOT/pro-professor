@@ -18,6 +18,11 @@ function fileUrl(id: number): string {
   return `${BASE_URL_SERVER}/media/${id}/file`;
 }
 
+/** Absolute URL for the newest upload with this original filename (note `![[image.png]]` embeds). */
+function fileByNameUrl(filename: string): string {
+  return `${BASE_URL_SERVER}/media/by-filename/${encodeURIComponent(filename)}/file`;
+}
+
 /** Upload a single file and return its stored reference. */
 async function upload(file: File, signal?: AbortSignal): Promise<MediaAttachment> {
   const form = new FormData();
@@ -33,4 +38,4 @@ async function upload(file: File, signal?: AbortSignal): Promise<MediaAttachment
   return json.data as MediaAttachment;
 }
 
-export const mediaApi = { fileUrl, upload };
+export const mediaApi = { fileUrl, fileByNameUrl, upload };
