@@ -2,9 +2,9 @@
 
 # Logging functions
 
-# Function to get the current timestamp in light black, including seconds and milliseconds (3 decimal places)
+# Function to get the current timestamp in light black (dark grey)
 current_time() {
-    printf "\e[0;90m$(date +"%Y-%m-%dT%H:%M:%S.%3N%z")\e[0m"  # Print in light black (dark grey)
+    printf "\e[0;90m%s\e[0m" "$(date +"%Y-%m-%dT%H:%M:%S%z")"
 }
 
 # Function to log information messages
