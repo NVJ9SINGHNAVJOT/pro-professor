@@ -1,21 +1,27 @@
 ---
 version: "3"
 
-dotenv:
-  - .env
-
 tasks:
   default:
     desc: List all tasks.
     cmd: task -l
 
+  dev:
+    desc: Run the Spring Boot server in dev mode (hot reload via spring-boot:run)
+    cmds:
+      - ./mvnw spring-boot:run
+
   codegen:
     desc: Generate jOOQ classes from the current Postgres schema
+    dotenv:
+      - .env
     cmds:
       - ./mvnw org.jooq:jooq-codegen-maven:generate
 
   migrate:
     desc: Run pending Flyway migrations against the database
+    dotenv:
+      - .env
     cmds:
       - ./mvnw flyway:migrate -Dflyway.url=jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} -Dflyway.user=${POSTGRES_USER} -Dflyway.password=${POSTGRES_PASSWORD}
 

@@ -3,32 +3,28 @@ version: "3"
 
 interval: 500ms
 
+includes:
+  backend: backend/central-server/Taskfile.yaml
+  storage: backend/storage-service/Taskfile.yml
+  ai: backend/ai-service/Taskfile.yaml
+  frontend: frontend/Taskfile.yaml
+
 tasks:
   default:
     desc: List all tasks.
     cmd: task -l
 
   init:
-    desc: Bootstrap a fresh clone (submodules + service .env files)
+    desc: Bootstrap a fresh clone (ai-service, storage-service, frontend, backend — deps + .env files)
     cmds:
       - bash scripts/setup.sh
 
-  setup:
+  setup:storage:
     desc: Fetch storage-service (and its shared modules) from the external micro-yard repo
     cmds:
       - bash scripts/setup-storage-service.sh
 
-  storage:
-    desc: Start Go storage service (port 9000) — run `task setup` first
+  setup:ai:
+    desc: Set up ai-service (submodule, venv, dependencies, .env)
     cmds:
-      - cd backend/storage-service && task run
-
-  server:
-    desc: Start Spring Boot central server (port 4000)
-    cmds:
-      - cd backend/central-server && ./mvnw spring-boot:run
-
-  client:
-    desc: Start Vite frontend dev server (port 5173)
-    cmds:
-      - cd frontend && npm run dev
+      - bash scripts/setup-ai-service.sh
