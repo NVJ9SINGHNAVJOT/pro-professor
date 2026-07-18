@@ -15,6 +15,7 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeNote, setNotes, type NoteListItem } from "@/redux/slices/notesSlice";
 import { useApi } from "@/hooks/useApi";
 import { notesRoute, type NoteSummary } from "@/services/operations/notes/notes.route";
+import { SEARCH_DEBOUNCE_MS } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,7 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
     const timer = setTimeout(async () => {
       const res = await searchNotes(q);
       if (!res.error) setSearchResults(res.response.data.notes);
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);

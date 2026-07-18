@@ -8,9 +8,8 @@ import { upsertNote } from "@/redux/slices/notesSlice";
 import { notesRoute } from "@/services/operations/notes/notes.route";
 import NoteEmbed from "@/modules/notes/components/NoteEmbed";
 import DiagramEmbed from "@/modules/diagram/components/DiagramEmbed";
+import { DIAGRAM_SUFFIX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
-
-const DIAGRAM_SUFFIX = ".diagram";
 
 /** Navigation + existence checks for wiki-links; clicking a missing link creates the note. */
 function useWikiBase(): WikiHandlers {

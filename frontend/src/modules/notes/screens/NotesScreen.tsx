@@ -36,18 +36,9 @@ import CommandPalette, { type PaletteCommand } from "@/modules/notes/components/
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteViewMode } from "@/modules/notes/types";
+import { HEADING_SCROLL_DELAY_MS, MERMAID_TEMPLATE, REACTFLOW_TEMPLATE, VIEW_MODES } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
-
-const MERMAID_TEMPLATE = "\n```mermaid\ngraph TD\n  A[Start] --> B[Next]\n```\n";
-const REACTFLOW_TEMPLATE =
-  '\n```reactflow-json\n{\n  "nodes": [\n    { "id": "a", "label": "Start", "position": { "x": 0, "y": 0 } },\n    { "id": "b", "label": "Next", "position": { "x": 200, "y": 100 } }\n  ],\n  "edges": [{ "source": "a", "target": "b" }]\n}\n```\n';
-
-const VIEW_MODES: { mode: NoteViewMode; label: string; icon: typeof CodeIcon }[] = [
-  { mode: "source", label: "Source only", icon: CodeIcon },
-  { mode: "split", label: "Split view", icon: ColumnsIcon },
-  { mode: "preview", label: "Preview only", icon: EyeIcon },
-];
 
 /** Obsidian-like three-pane workspace: explorer | editor⟷preview | outline/tags. */
 const NotesScreen = () => {
@@ -178,7 +169,7 @@ const NotesScreen = () => {
           break;
         }
       }
-    }, 150);
+    }, HEADING_SCROLL_DELAY_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, note?.id, savedContent]);

@@ -1,16 +1,10 @@
 import type { OutlineItem } from "@/modules/notes/types";
-
-const FRONTMATTER_BLOCK = /^---\s*\n[\s\S]*?\n---\s*\n?/;
+import { FENCED_CODE, FRONTMATTER_BLOCK, HEADING_LINE, IMAGE_EXT, INLINE_CODE, WIKI_REF } from "@/modules/notes/constants";
 
 /** Removes the leading YAML frontmatter block — the preview renders only the body. */
 export function stripFrontmatter(content: string): string {
   return content.replace(FRONTMATTER_BLOCK, "");
 }
-
-const FENCED_CODE = /^(```|~~~)[\s\S]*?^\1\s*$/gm;
-const INLINE_CODE = /`[^`\n]*`/g;
-const WIKI_REF = /!?\[\[([^[\]|#]+)[^[\]]*\]\]/g;
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 /** True when a wiki-embed target is an image file rather than a note title. */
 export function isImageTarget(target: string): boolean {
@@ -44,7 +38,7 @@ export function extractSection(body: string, heading: string): string {
   for (let i = 0; i < lines.length; i++) {
     if (/^\s*(```|~~~)/.test(lines[i])) inFence = !inFence;
     if (inFence) continue;
-    const match = /^(#{1,6})\s+(.+)$/.exec(lines[i]);
+    const match = HEADING_LINE.exec(lines[i]);
     if (!match) continue;
     if (start === -1) {
       if (match[2].trim().toLowerCase() === wanted) {
@@ -68,7 +62,7 @@ export function extractOutline(content: string): OutlineItem[] {
       continue;
     }
     if (inFence) continue;
-    const match = /^(#{1,6})\s+(.+)$/.exec(line);
+    const match = HEADING_LINE.exec(line);
     if (match) outline.push({ depth: match[1].length, text: match[2].trim() });
   }
   return outline;

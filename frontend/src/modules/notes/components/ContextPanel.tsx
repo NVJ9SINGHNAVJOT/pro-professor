@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useApi } from "@/hooks/useApi";
 import { notesRoute, type NoteSummary } from "@/services/operations/notes/notes.route";
 import { extractOutline, extractWikiRefs } from "@/modules/notes/utils";
+import { OUTLINE_INDENT_PX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 
 interface ContextPanelProps {
@@ -93,13 +94,15 @@ const ContextPanel = ({ noteId, content, tags, onWikiClick }: ContextPanelProps)
         ) : (
           <ul>
             {outline.map((item, index) => (
-              <li
-                key={index}
-                style={{ paddingLeft: `${(item.depth - 1) * 12}px` }}
-                className="truncate py-0.5 para-small-medium text-neutral-300"
-                title={item.text}
-              >
-                {item.text}
+              <li key={index} style={{ paddingLeft: `${(item.depth - 1) * OUTLINE_INDENT_PX}px` }}>
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.NOTES_DETAIL(noteId), { state: { heading: item.text } })}
+                  className="w-full cursor-pointer truncate rounded px-1 py-0.5 text-left para-small-medium text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                  title={item.text}
+                >
+                  {item.text}
+                </button>
               </li>
             ))}
           </ul>
