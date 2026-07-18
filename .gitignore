@@ -33,7 +33,7 @@
 backend/storage-service/
 
 # docs
-docs/
+plans/
 
 # draw.io files
 *.drawio.*

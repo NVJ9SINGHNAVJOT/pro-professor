@@ -1,69 +1,74 @@
 # Central Server
 
-The main backend for Pro Professor, built with **Spring Boot 3.3 (Java 21)**. It is the
-orchestrator between the React frontend, PostgreSQL, Redis, Kafka, and the Python AI service.
-
-This is **Phase 1**: a runnable scaffold with a health endpoint, a WebSocket endpoint, and
-live connections to Postgres / Redis / Kafka. Persistence, REST CRUD, and AI streaming come
-in later phases.
+The gateway and orchestration layer of **Pro Professor**, built with **Spring Boot 3.5**
+(**Java 25**). The browser talks only to this service; it fans out to PostgreSQL, Kafka,
+**Ollama**, the Python **AI service** (MLX), and the external Go **storage-service**. Chat,
+notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOOQ** over
+**Flyway**-migrated Postgres (no JPA).
 
 ## Requirements
 
-- **JDK 21** (LTS). Check with `java -version` → should show `21.x`.
-  - Install via Homebrew: `brew install openjdk@21`
-- PostgreSQL, Redis, and Kafka running locally (the server connects on startup).
-- Maven is **not** required — use the bundled wrapper (`./mvnw`).
+- **JDK 25** — check with `java -version`.
+- **PostgreSQL** and **Kafka** running locally (the server connects on startup).
+- [Task](https://taskfile.dev) for the dev workflow (`brew install go-task`); Maven is **not**
+  required — the bundled wrapper (`./mvnw`) is used underneath.
+- Optional at runtime: Ollama and the AI service (model calls fail gracefully without them).
 
 ## Configuration
 
 Config lives in `src/main/resources/application.yml` and reads environment variables with
-sensible local defaults (`${VAR:default}`). The defaults already match a standard local
-setup, so it runs without any env vars.
+sensible local defaults (`${VAR:default}`), so it runs without any env vars. `.env.example`
+documents every variable; the `task` commands load `.env` automatically (Spring itself does
+**not** auto-load it).
 
-`.env.example` documents every variable. Spring Boot does **not** auto-load `.env`; if you
-want non-default values, export them in your shell (or your IDE run config) before starting.
-
-## Run
+## Run & build
 
 ```bash
 # from backend/central-server
-./mvnw spring-boot:run
+task dev        # run with spring-boot:run (devtools reload)
+task migrate    # apply Flyway migrations
+task codegen    # regenerate jOOQ sources from the current schema
+task build      # package the runnable jar (skips tests)
+task start      # run the packaged jar
+task audit      # dependency vulnerability check
 ```
 
 The server starts on **http://localhost:4000**.
 
+After any schema change: drop/clean the DB → `task migrate` → `task codegen` → recompile
+(details in [docs/database-rules.md](docs/database-rules.md)).
+
 ## Verify
 
 ```bash
-# App liveness (simple)
-curl http://localhost:4000/health
-
-# Dependency health — db, redis, and kafka should all be "UP"
-curl http://localhost:4000/actuator/health
-
-# WebSocket echo (needs Node's wscat: npx wscat -c ...)
-npx wscat -c ws://localhost:4000/ws
+curl http://localhost:4000/health            # app liveness
+curl http://localhost:4000/actuator/health   # db + kafka should be "UP"
 ```
 
-## Project Structure
+## Project structure
 
-```
+Package-by-feature (vertical slices) — see [docs/folder-structure.md](docs/folder-structure.md):
+
+```text
 com.proprofessor.server/
-├── Application.java        # entry point
-├── config/                # CORS, WebSocket, type-safe properties
-├── common/                # ApiResponse envelope + global exception handling
-├── health/                # /health endpoint + custom Kafka health indicator
-└── websocket/             # /ws handler (echo scaffold)
+├── Application.java   # entry point
+├── audio/             # STT/TTS pass-through to the AI service
+├── chat/              # conversations, SSE streaming, OpenAI-compatible provider client
+├── common/            # ApiResponse envelope, exceptions, logging boundary, shared db rows
+├── config/            # CORS, WebSocket, executors, type-safe properties
+├── diagram/           # diagram CRUD + AI edit route (see docs/diagram-flow.md)
+├── health/            # /health + Kafka health indicator
+├── media/             # upload/download proxy to the storage-service
+├── model/             # model discovery/activation across Ollama + AI service
+├── notes/             # notes CRUD, links/tags/search + AI note actions
+└── websocket/         # /ws notification channel
 ```
 
-Each future feature (chat, model, ...) becomes its own package with a controller, service,
-repository, `dto/`, `entity/`, `mapper/`, and `provider/` — see the project plan for the
-layer-responsibility rules this codebase follows.
+## Docs
 
-## Build
-
-```bash
-./mvnw clean compile     # compile
-./mvnw clean package     # build runnable jar into target/
-./mvnw test              # run tests
-```
+- [docs/folder-structure.md](docs/folder-structure.md) — package conventions + jOOQ persistence rules.
+- [docs/logging-rules.md](docs/logging-rules.md) — the request/response logging contract (read
+  before adding endpoints; boundary logging is already built).
+- [docs/database-rules.md](docs/database-rules.md) — Flyway/jOOQ workflow on the disposable dev DB.
+- System flows: [project-flow.md](../../docs/project-flow.md),
+  [notes-flow.md](../../docs/notes-flow.md), [diagram-flow.md](../../docs/diagram-flow.md).
