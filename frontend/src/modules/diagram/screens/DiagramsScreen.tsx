@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Plus, Trash2 } from "lucide-react";
+import { ClipboardPaste, Plus, Trash2 } from "lucide-react";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { ROUTES } from "@/constants/routes";
@@ -12,6 +12,8 @@ import { makeSampleBundle } from "@/modules/diagram/schema/sampleBundle";
 import { diagramClosed } from "@/modules/diagram/model/actions";
 import { selectDiagramDoc } from "@/modules/diagram/model/selectors";
 import DiagramAiBar from "@/modules/diagram/components/DiagramAiBar";
+import ImportDiagramDialog from "@/modules/diagram/components/ImportDiagramDialog";
+import type { DiagramBundle } from "@/modules/diagram/types";
 import { cn } from "@/lib/utils";
 
 // Lazy like FlowBlock: the canvas carries the React Flow runtime + styles.
@@ -24,6 +26,7 @@ const DiagramsScreen = () => {
   const { diagramId } = useParams();
   const doc = useAppSelector(selectDiagramDoc);
   const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { execute: fetchDiagrams } = useApi(diagramsRoute.getDiagrams);
   const { execute: fetchDiagram } = useApi(diagramsRoute.getDiagram);
@@ -76,6 +79,16 @@ const DiagramsScreen = () => {
     navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
   };
 
+  /** Import-dialog callback: the bundle is already ajv-validated; persist and open it. */
+  const importDiagram = async (title: string, bundle: DiagramBundle): Promise<string | null> => {
+    const res = await createDiagram({ title, content: bundle });
+    if (res.error) return "Failed to create diagram";
+    await refreshList();
+    setImportOpen(false);
+    navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
+    return null;
+  };
+
   const save = async (snapshot = false) => {
     if (doc.id === null) return;
     const built = buildSavePayload(store.getState());
@@ -109,14 +122,25 @@ const DiagramsScreen = () => {
         <LeftNav />
         <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
           <span className="caption-small-medium text-neutral-300">Diagrams</span>
-          <button
-            type="button"
-            onClick={create}
-            aria-label="New diagram"
-            className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-          >
-            <Plus size={16} />
-          </button>
+          <span className="flex items-center gap-x-1">
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              aria-label="Import diagram"
+              title="Import a .diagram JSON"
+              className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            >
+              <ClipboardPaste size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={create}
+              aria-label="New diagram"
+              className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            >
+              <Plus size={16} />
+            </button>
+          </span>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto py-1">
           {diagrams.map((diagram) => (
@@ -178,6 +202,8 @@ const DiagramsScreen = () => {
           </div>
         )}
       </main>
+
+      <ImportDiagramDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={importDiagram} />
     </div>
   );
 };

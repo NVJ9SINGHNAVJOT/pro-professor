@@ -198,65 +198,76 @@ input[type="number"]::-webkit-outer-spin-button {
 
   @keyframes ct-music-drop {
     0% {
-      transform: translateY(-30px) rotate(0deg);
+      transform: translateX(-24px) translateY(0) rotate(0deg);
       opacity: 0;
     }
     15% {
+      transform: translateX(22px) translateY(-6px) rotate(4deg);
       opacity: 0.9;
     }
+    35% {
+      transform: translateX(82px) translateY(5px) rotate(9deg);
+    }
+    50% {
+      transform: translateX(128px) translateY(-7px) rotate(12deg);
+    }
+    65% {
+      transform: translateX(174px) translateY(4px) rotate(15deg);
+    }
     85% {
+      transform: translateX(234px) translateY(-5px) rotate(18deg);
       opacity: 0.9;
     }
     100% {
-      transform: translateY(110vh) rotate(20deg);
+      transform: translateX(280px) translateY(0) rotate(20deg);
       opacity: 0;
     }
   }
 
-  /* Falling musical notes in the nav rail — per-note position/timing via nth-child */
+  /* Musical notes drifting left-to-right in the nav rail — per-note position/timing via nth-child */
   .ct-note {
     position: absolute;
-    top: 0;
+    left: 0;
     animation: ct-music-drop linear infinite;
   }
   .ct-note:nth-child(1) {
-    left: 22%;
+    top: 15%;
     font-size: 0.95rem;
     animation-duration: 10s;
     animation-delay: 0s;
   }
   .ct-note:nth-child(2) {
-    left: 55%;
+    top: 60%;
     font-size: 1.15rem;
     animation-duration: 13s;
     animation-delay: -4s;
   }
   .ct-note:nth-child(3) {
-    left: 32%;
+    top: 30%;
     font-size: 1.05rem;
     animation-duration: 11s;
     animation-delay: -8s;
   }
   .ct-note:nth-child(4) {
-    left: 62%;
+    top: 70%;
     font-size: 0.85rem;
     animation-duration: 14s;
     animation-delay: -2s;
   }
   .ct-note:nth-child(5) {
-    left: 18%;
+    top: 10%;
     font-size: 0.8rem;
     animation-duration: 12s;
     animation-delay: -7s;
   }
   .ct-note:nth-child(6) {
-    left: 48%;
+    top: 45%;
     font-size: 0.9rem;
     animation-duration: 11.5s;
     animation-delay: -10s;
   }
   .ct-note:nth-child(7) {
-    left: 40%;
+    top: 75%;
     font-size: 0.85rem;
     animation-duration: 12.5s;
     animation-delay: -5s;

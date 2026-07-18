@@ -36,8 +36,9 @@ interface LeftNavProps {
 
 /**
  * The app menu. The logo lives at the top-left — as the header band of each
- * module sidebar (chat/notes/diagrams), with the musical notes floating behind
- * it — and clicking it slides the navigation drawer in from the left.
+ * module sidebar (chat/notes/diagrams), with the musical notes drifting left
+ * to right behind it — and clicking it slides the navigation drawer in from
+ * the left.
  */
 const LeftNav = ({ floating }: LeftNavProps) => {
   const [open, setOpen] = useState(false);
@@ -64,7 +65,7 @@ const LeftNav = ({ floating }: LeftNavProps) => {
           aria-label="Open menu"
           className="relative flex h-16 w-full shrink-0 cursor-pointer items-center border-b border-neutral-800 px-3 text-white transition-colors hover:bg-neutral-900"
         >
-          {/* Falling musical notes drift behind the logo */}
+          {/* Musical notes drift left to right behind the logo */}
           <div aria-hidden className="absolute inset-0 overflow-hidden">
             {notes.map((note, index) => (
               <span key={index} className="ct-note text-neutral-100 drop-shadow-[0_0_5px_rgba(255,255,255,0.35)]">
