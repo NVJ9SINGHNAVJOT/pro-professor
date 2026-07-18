@@ -131,10 +131,6 @@ runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` 
 The AiBar's model picker lists the locally activated models and defaults to the active one; the
 frontend streams tokens straight into the editor and refetches the note on `note.done`.
 
-> **History:** a Claude/Anthropic provider (raw Messages API `AnthropicClient`, `app.anthropic.*`
-> config, `GET /notes/ai/status`) was removed on 2026-07-18 — Claude isn't OpenAI-module
-> compatible, so notes AI now runs only through local models.
-
 ## 7. Not implemented (by decision)
 
 Phase 5 semantic RAG (`pgvector`, `mlx-embeddings` in ai-service, hybrid search, `/notes/ask`) —
