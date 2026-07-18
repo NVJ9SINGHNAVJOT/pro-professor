@@ -1,13 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
-import {
-  LayoutDashboardIcon,
-  HomeIcon,
-  MessageSquareIcon,
-  NotebookPenIcon,
-  SettingsIcon,
-  WorkflowIcon,
-} from "lucide-react";
+import { HomeIcon, MessageSquareIcon, NotebookPenIcon, SettingsIcon, WorkflowIcon } from "lucide-react";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +12,6 @@ const menuItems = [
   { label: "Notes", path: ROUTES.NOTES, icon: NotebookPenIcon },
   { label: "Diagrams", path: ROUTES.DIAGRAMS, icon: WorkflowIcon },
   { label: "Settings", path: ROUTES.SETTINGS, icon: SettingsIcon },
-  { label: "Dashboard", path: ROUTES.DASHBOARD, icon: LayoutDashboardIcon },
 ] as const;
 
 // Continuous stream of musical notes raining behind the logo (position/timing in index.css).
@@ -28,7 +20,7 @@ const notes = ["♪", "♫", "♬", "♩", "♭", "♯", "♮"] as const;
 interface LeftNavProps {
   /**
    * Floating mode: a small fixed logo button at the top-left, for screens that
-   * have no sidebar of their own (home/settings/dashboard). Default mode is the
+   * have no sidebar of their own (home/settings). Default mode is the
    * sidebar header block the module sidebars mount at their top.
    */
   floating?: boolean;

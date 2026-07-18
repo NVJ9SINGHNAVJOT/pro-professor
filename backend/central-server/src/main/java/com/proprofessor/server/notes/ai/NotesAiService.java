@@ -15,6 +15,7 @@ import com.proprofessor.server.notes.dto.NoteDetail;
 import com.proprofessor.server.notes.dto.NoteRevisionSummary;
 import com.proprofessor.server.notes.dto.NoteUpdateRequest;
 import com.proprofessor.server.notes.repository.NotesRepository;
+import com.proprofessor.server.settings.SettingsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -62,16 +63,19 @@ public class NotesAiService {
     private final NotesService notesService;
     private final ChatCompletionClient chatCompletionClient;
     private final ModelActivationService modelActivationService;
+    private final SettingsService settingsService;
 
     public NotesAiService(
             NotesRepository notesRepository,
             NotesService notesService,
             ChatCompletionClient chatCompletionClient,
-            ModelActivationService modelActivationService) {
+            ModelActivationService modelActivationService,
+            SettingsService settingsService) {
         this.notesRepository = notesRepository;
         this.notesService = notesService;
         this.chatCompletionClient = chatCompletionClient;
         this.modelActivationService = modelActivationService;
+        this.settingsService = settingsService;
     }
 
     /**
@@ -120,7 +124,7 @@ public class NotesAiService {
         List<ChatMessage> messages = List.of(
                 new ChatMessage("system", SYSTEM_PROMPT),
                 new ChatMessage("user", userPrompt));
-        InferenceOptions options = new InferenceOptions(null, null, null, null, false, false);
+        InferenceOptions options = settingsService.notesInferenceOptions();
 
         modelActivationService.acquireForChat(provider, request.model());
         try {

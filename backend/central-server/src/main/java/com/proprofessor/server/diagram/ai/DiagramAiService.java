@@ -9,6 +9,7 @@ import com.proprofessor.server.diagram.ai.dto.DiagramAiRequest;
 import com.proprofessor.server.diagram.repository.DiagramRepository;
 import com.proprofessor.server.model.ModelActivationService;
 import com.proprofessor.server.model.dto.ModelProvider;
+import com.proprofessor.server.settings.SettingsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -55,14 +56,17 @@ public class DiagramAiService {
     private final DiagramRepository diagramRepository;
     private final ChatCompletionClient chatCompletionClient;
     private final ModelActivationService modelActivationService;
+    private final SettingsService settingsService;
 
     public DiagramAiService(
             DiagramRepository diagramRepository,
             ChatCompletionClient chatCompletionClient,
-            ModelActivationService modelActivationService) {
+            ModelActivationService modelActivationService,
+            SettingsService settingsService) {
         this.diagramRepository = diagramRepository;
         this.chatCompletionClient = chatCompletionClient;
         this.modelActivationService = modelActivationService;
+        this.settingsService = settingsService;
     }
 
     /**
@@ -90,7 +94,7 @@ public class DiagramAiService {
         if (request.model() == null || request.model().isBlank()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "A model is required for the local provider.");
         }
-        InferenceOptions options = new InferenceOptions(null, null, null, null, false, false);
+        InferenceOptions options = settingsService.diagramInferenceOptions();
 
         modelActivationService.acquireForChat(provider, request.model());
         try {

@@ -11,7 +11,6 @@ import ChatPage from "@/pages/chat/index";
 import NotesPage from "@/pages/notes/index";
 import DiagramsPage from "@/pages/diagrams/index";
 import SettingsPage from "@/pages/settings/index";
-import DashboardPage from "@/pages/dashboard/index";
 import ErrorPage from "@/pages/error/index";
 
 const router = createBrowserRouter([
@@ -55,11 +54,6 @@ const router = createBrowserRouter([
         path: "settings",
         element: <SettingsPage />,
       },
-      {
-        path: "dashboard",
-        element: <DashboardPage />,
-      },
-
       {
         path: "error",
         element: <ErrorPage />,

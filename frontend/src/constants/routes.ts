@@ -8,6 +8,5 @@ export const ROUTES = {
   DIAGRAMS: "/diagrams",
   DIAGRAMS_DETAIL: (diagramId: number | string) => `/diagrams/${diagramId}`,
   SETTINGS: "/settings",
-  DASHBOARD: "/dashboard",
   ERROR: "/error",
 } as const;
