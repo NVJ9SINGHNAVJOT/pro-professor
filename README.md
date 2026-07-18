@@ -1,8 +1,8 @@
 # Pro Professor
 
-**A fully local, multimodal AI chat platform.** Text, voice, and file-attachment conversations
-with open-source LLMs running entirely on your own machine — no cloud provider, no API keys, no
-data leaving the device.
+**A fully local, multimodal AI workspace.** Chat, Obsidian-style notes, and an AI-native diagram
+editor — text, voice, and file-attachment conversations with open-source LLMs running entirely on
+your own machine, no cloud provider, no API keys, no data leaving the device.
 
 Pro Professor is a polyglot monorepo: a React 19 SPA, a Spring Boot (Java 25) orchestration
 gateway, and a Python/FastAPI inference service running MLX models on Apple Silicon, backed by
@@ -29,19 +29,26 @@ the gateway fans out to everything else.
   transcript.
 - **Production-minded gateway** — request-ID correlation across logs (MDC), clean mid-stream
   abort handling, actuator health checks, Flyway migrations, and compile-time-safe SQL via jOOQ.
+- **Obsidian-style notes** — `[[wiki-links]]`, `![[embeds]]`, backlinks, tags, full-text search,
+  a Mermaid-rendered graph view, and revision history; AI actions (rewrite / summarize /
+  continue) stream into the editor over the same SSE pipeline as chat.
+- **AI-native diagram editor** — a `.diagram` document format that separates AI-owned semantics
+  (nodes/edges) from user-owned layout (positions), so an AI edit can add to a diagram but never
+  move a node you've placed by hand. Every change, manual or AI, is an invertible command, giving
+  free undo/redo.
 
 ---
 
 ## Tech Stack
 
-| Layer     | Technologies                                                                        |
-| --------- | ----------------------------------------------------------------------------------- |
-| Frontend  | React 19, TypeScript, Vite, Redux Toolkit, React Router, Tailwind 4, Radix / shadcn |
-| Gateway   | Java 25, Spring Boot 3.5, jOOQ, Flyway, OpenAI Java SDK, SSE, WebSocket, Actuator   |
-| Inference | Python, FastAPI, MLX-LM / MLX-VLM, Whisper (STT), MLX TTS                           |
-| Storage   | Go 1.25 (standard library only, zero dependencies)                                  |
-| Data      | PostgreSQL                                                                          |
-| Tooling   | Maven, npm, Taskfile, ESLint, Prettier, OWASP Dependency-Check                      |
+| Layer     | Technologies                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------------- |
+| Frontend  | React 19, TypeScript, Vite, Redux Toolkit, React Router, Tailwind 4, Radix / shadcn, Mermaid, React Flow, ajv, Vitest |
+| Gateway   | Java 25, Spring Boot 3.5, jOOQ, Flyway, OpenAI Java SDK, SSE, WebSocket, Actuator                                     |
+| Inference | Python, FastAPI, MLX-LM / MLX-VLM, Whisper (STT), MLX TTS                                                             |
+| Storage   | Go 1.25 (standard library only, zero dependencies)                                                                    |
+| Data      | PostgreSQL                                                                                                            |
+| Tooling   | Maven, npm, Taskfile, ESLint, Prettier, OWASP Dependency-Check                                                        |
 
 ---
 
@@ -210,8 +217,10 @@ pro-professor/
 ├── backend/
 │   ├── central-server/       # Spring Boot 3.5 (Java 25) — API gateway / orchestrator
 │   └── ai-service/           # Python + FastAPI — local MLX inference (git submodule)
-├── scripts/                  # storage-service bootstrap
-└── docs/                     # design & planning notes
+├── docs/                     # system architecture + notes/diagram flow docs
+├── skills/                   # paste-ready authoring packs for external AI models
+├── scripts/                  # setup + storage-service bootstrap
+└── AGENTS.md                 # orientation pointer table for AI coding tools
 ```
 
 | Service           | Stack                                  | Default URL             | Role                                                     |
