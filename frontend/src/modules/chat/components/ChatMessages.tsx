@@ -24,7 +24,7 @@ import { useApi } from "@/hooks/useApi";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { addConversation, renameConversation } from "@/redux/slices/chatSlice";
-import ModelSelector from "@/modules/chat/components/ModelSelector";
+import ModelSelector from "@/components/common/ModelSelector";
 import ChatSettings from "@/modules/chat/components/ChatSettings";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import AudioPlayer from "@/modules/chat/components/AudioPlayer";

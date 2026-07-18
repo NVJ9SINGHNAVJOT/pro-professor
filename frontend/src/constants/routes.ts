@@ -5,6 +5,8 @@ export const ROUTES = {
   CHAT_DETAIL: (chatId: number | string) => `/chat/${chatId}`,
   NOTES: "/notes",
   NOTES_DETAIL: (noteId: number | string) => `/notes/${noteId}`,
+  DIAGRAMS: "/diagrams",
+  DIAGRAMS_DETAIL: (diagramId: number | string) => `/diagrams/${diagramId}`,
   SETTINGS: "/settings",
   DASHBOARD: "/dashboard",
   ERROR: "/error",

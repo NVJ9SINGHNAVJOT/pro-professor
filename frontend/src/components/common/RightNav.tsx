@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
-import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, NotebookPenIcon, SettingsIcon } from "lucide-react";
+import { LayoutDashboardIcon, HomeIcon, MessageSquareIcon, NotebookPenIcon, SettingsIcon, WorkflowIcon } from "lucide-react";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const menuItems = [
   { label: "Home", path: ROUTES.HOME, icon: HomeIcon },
   { label: "Chat", path: ROUTES.CHAT, icon: MessageSquareIcon },
   { label: "Notes", path: ROUTES.NOTES, icon: NotebookPenIcon },
+  { label: "Diagrams", path: ROUTES.DIAGRAMS, icon: WorkflowIcon },
   { label: "Settings", path: ROUTES.SETTINGS, icon: SettingsIcon },
   { label: "Dashboard", path: ROUTES.DASHBOARD, icon: LayoutDashboardIcon },
 ] as const;
@@ -27,7 +28,7 @@ const RightNav = () => {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="flex h-full w-[52px] shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
+        className="flex h-full w-[50px] shrink-0 cursor-pointer flex-col items-center py-3 text-white border-l border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
       >
         <img
           alt="Logo"

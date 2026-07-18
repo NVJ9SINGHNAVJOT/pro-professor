@@ -15,15 +15,21 @@ import { type ModelProvider, type ProviderModel } from "@/services/operations/mo
 import type { SelectedModel } from "@/modules/chat/types";
 import { MODEL_SEPARATOR, PROVIDER_META, PROVIDER_ORDER } from "@/modules/chat/constants";
 
+/**
+ * The one model picker, shared by chat, notes and diagrams. Reads the model
+ * list from the store, groups by provider, and reports a full {@link SelectedModel}.
+ */
 interface ModelSelectorProps {
   value: SelectedModel | null;
   onChange: (value: SelectedModel) => void;
   disabled?: boolean;
+  /** Dropdown alignment relative to the trigger — "end" for right-edge placements. */
+  align?: "start" | "end";
 }
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
 
-const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
+const ModelSelector = ({ value, onChange, disabled, align = "start" }: ModelSelectorProps) => {
   const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
@@ -68,7 +74,7 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     );
   };
 
-  // Viewing history: show static disabled display
+  // Viewing history / locked while generating: show static disabled display
   if (disabled && value) {
     const providerMeta = PROVIDER_META[value.provider];
     const matchedModel = loaded ? models.find((m) => m.provider === value.provider && m.name === value.model) : null;
@@ -101,7 +107,7 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
     return display;
   }
 
-  // New chat: no models loaded yet or none available
+  // No models loaded yet or none available
   if (!disabled && loaded && models.length === 0) {
     return (
       <div className="flex items-center rounded-md px-2 py-1 para-small-medium text-neutral-500 cursor-not-allowed select-none">
@@ -121,7 +127,7 @@ const ModelSelector = ({ value, onChange, disabled }: ModelSelectorProps) => {
       <SelectContent
         position="popper"
         side="bottom"
-        align="start"
+        align={align}
         className="border-neutral-700 bg-neutral-900 text-white [--accent-foreground:var(--color-white)] [--accent:var(--color-neutral-700)]"
       >
         {groups.map(({ provider, items }) => (

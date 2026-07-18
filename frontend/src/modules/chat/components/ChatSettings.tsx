@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   SettingsIcon,
   Scale as ScaleIcon,
@@ -20,6 +20,7 @@ const PRESET_ICONS: Record<string, ElementType> = {
 import Tooltip from "@/components/common/Tooltip";
 import { SliderInput } from "@/components/inputs/SliderInput";
 import { ToggleInput } from "@/components/inputs/ToggleInput";
+import { useOnClickOutside } from "@/hooks/useOnClickOutside";
 import { cn } from "@/lib/utils";
 import {
   MAX_TOKENS_SLIDER,
@@ -67,17 +68,10 @@ const ChatSettings = ({
   disabled,
 }: ChatSettingsProps) => {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Close the panel on an outside click.
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useOnClickOutside(rootRef, () => setOpen(false));
 
   const maxTokensCeiling = Math.min(maxContextTokens ?? MAX_TOKENS_SLIDER.max, MAX_TOKENS_SLIDER.max);
   const set = (patch: Partial<InferenceParams>) => onParamsChange({ ...params, ...patch });
@@ -229,7 +223,7 @@ const ChatSettings = ({
                           onSystemPromptChange(trimmed);
                         }
                       }}
-                      rows={8}
+                      rows={14}
                       placeholder="e.g. You are a professor of English literature."
                       className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2.5 para-small-medium text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-richblue-300"
                     />

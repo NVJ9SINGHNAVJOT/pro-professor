@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "aiPatch.schema.json",
+  "title": "DiagramAiPatch",
+  "description": "The JSON-only contract an AI edit must return: a command list mapping 1:1 onto the op layer. Layout ops (moveNode/resizeNode) are deliberately absent — AI never owns layout.",
+  "type": "object",
+  "required": ["commands"],
+  "additionalProperties": false,
+  "properties": {
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["op", "node"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "addNode" },
+              "node": {
+                "type": "object",
+                "required": ["id", "type", "label"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "type": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string" },
+                  "data": { "type": "object" }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["op", "id"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "deleteNode" },
+              "id": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["op", "id", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "renameNode" },
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["op", "source", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "connectNodes" },
+              "source": { "type": "string", "minLength": 1 },
+              "target": { "type": "string", "minLength": 1 },
+              "type": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "id": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["op", "id"],
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "deleteEdge" },
+              "id": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

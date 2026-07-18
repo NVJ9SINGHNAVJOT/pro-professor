@@ -9,6 +9,7 @@ import ErrorBoundary from "@/components/common/ErrorBoundary";
 import HomePage from "@/pages/index";
 import ChatPage from "@/pages/chat/index";
 import NotesPage from "@/pages/notes/index";
+import DiagramsPage from "@/pages/diagrams/index";
 import SettingsPage from "@/pages/settings/index";
 import DashboardPage from "@/pages/dashboard/index";
 import ErrorPage from "@/pages/error/index";
@@ -41,6 +42,14 @@ const router = createBrowserRouter([
       {
         path: "notes/:noteId",
         element: <NotesPage />,
+      },
+      {
+        path: "diagrams",
+        element: <DiagramsPage />,
+      },
+      {
+        path: "diagrams/:diagramId",
+        element: <DiagramsPage />,
       },
       {
         path: "settings",

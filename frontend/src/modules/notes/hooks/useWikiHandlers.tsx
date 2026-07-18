@@ -7,7 +7,10 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesSlice";
 import { notesRoute } from "@/services/operations/notes/notes.route";
 import NoteEmbed from "@/modules/notes/components/NoteEmbed";
+import DiagramEmbed from "@/modules/diagram/components/DiagramEmbed";
 import { ROUTES } from "@/constants/routes";
+
+const DIAGRAM_SUFFIX = ".diagram";
 
 /** Navigation + existence checks for wiki-links; clicking a missing link creates the note. */
 function useWikiBase(): WikiHandlers {
@@ -46,7 +49,16 @@ function useWikiBase(): WikiHandlers {
 export function useWikiHandlers(): WikiHandlers {
   const base = useWikiBase();
   return useMemo<WikiHandlers>(
-    () => ({ ...base, renderEmbed: (target, heading) => <NoteEmbed target={target} heading={heading} wiki={base} /> }),
+    () => ({
+      ...base,
+      renderEmbed: (target, heading) =>
+        // `![[name.diagram]]` embeds a diagram (by title); everything else stays a note/image embed
+        target.toLowerCase().endsWith(DIAGRAM_SUFFIX) ? (
+          <DiagramEmbed title={target.slice(0, -DIAGRAM_SUFFIX.length)} />
+        ) : (
+          <NoteEmbed target={target} heading={heading} wiki={base} />
+        ),
+    }),
     [base],
   );
 }

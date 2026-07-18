@@ -13,6 +13,27 @@ const loadMermaid = () => {
 
 let renderSeq = 0;
 
+/* Without a container, mermaid.render appends its measuring element to
+ * document.body — a wide/tall diagram then momentarily stretches the page and
+ * flashes both scrollbars on every keystroke while editing. A position:fixed
+ * off-screen scratch box never contributes to page scroll size, so rendering
+ * inside it can't jolt the app's layout. */
+let scratchBox: HTMLDivElement | null = null;
+const getScratchBox = () => {
+  if (!scratchBox) {
+    scratchBox = document.createElement("div");
+    scratchBox.setAttribute("aria-hidden", "true");
+    scratchBox.style.position = "fixed";
+    scratchBox.style.left = "-10000px";
+    scratchBox.style.top = "0";
+    document.body.appendChild(scratchBox);
+  }
+  return scratchBox;
+};
+
+/** Re-parsing on every keystroke is wasted work — settle briefly before rendering. */
+const RERENDER_DEBOUNCE_MS = 200;
+
 /**
  * Renders a Mermaid definition (a ```mermaid fence, or the graph view's generated
  * definition) to inline SVG. While the definition doesn't parse — e.g. mid-stream
@@ -26,23 +47,28 @@ const MermaidBlock = ({ code }: { code: string }) => {
   useEffect(() => {
     let cancelled = false;
     const renderId = `${idRef.current}-${++renderSeq}`;
-    (async () => {
+    const render = async () => {
       try {
         const mermaid = await loadMermaid();
-        const { svg: rendered } = await mermaid.render(renderId, code);
+        const { svg: rendered } = await mermaid.render(renderId, code, getScratchBox());
         if (!cancelled) {
           setSvg(rendered);
           setFailed(false);
         }
       } catch {
         if (!cancelled) setFailed(true);
-        // mermaid.render leaves an orphaned error element behind on parse failure
-        document.getElementById(`d${renderId}`)?.remove();
+      } finally {
+        // drop measuring leftovers (incl. mermaid's orphaned error element on parse failure)
+        scratchBox?.replaceChildren();
       }
-    })();
+    };
+    // first render immediately (no blank flash); re-renders wait for typing to settle
+    const timer = setTimeout(render, svg === null ? 0 : RERENDER_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   return (

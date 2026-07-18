@@ -3,9 +3,9 @@ import { type RefObject, useEffect } from "react";
 type EventHandler = (event: MouseEvent | TouchEvent) => void;
 
 export const useOnClickOutside = <T extends HTMLElement>(
-  ref: RefObject<T>,
+  ref: RefObject<T | null>,
   handler: EventHandler,
-  excludeDivRef?: RefObject<T>, // Optional reference to the specific div you want to exclude
+  excludeDivRef?: RefObject<T | null>, // Optional reference to the specific div you want to exclude
 ) => {
   useEffect(() => {
     const listener = (event: MouseEvent | TouchEvent) => {

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, ListPlusIcon, SparklesIcon, SquareIcon, WandSparklesIcon } from "lucide-react";
 import { toast } from "@/components/common/toast";
-import { ModelOptionLabel } from "@/components/common/ModelOptionLabel";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAppSelector } from "@/redux/store";
+import ModelSelector from "@/components/common/ModelSelector";
+import { useDefaultSelectedModel } from "@/hooks/useDefaultSelectedModel";
 import { notesStream, type NoteAiAction } from "@/services/operations/notes/notes.stream";
-import { PROVIDER_META } from "@/modules/chat/constants";
+import type { SelectedModel } from "@/modules/chat/types";
 import { cn } from "@/lib/utils";
 
 /** What the command palette can ask the bar to do. */
@@ -25,9 +24,8 @@ interface AiBarProps {
 
 /** AI actions over the active note: rewrite by instruction, summarize, continue writing. */
 const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, onBusyChange }: AiBarProps) => {
-  const models = useAppSelector((state) => state.models.models);
   const [instruction, setInstruction] = useState("");
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState<SelectedModel | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -37,24 +35,9 @@ const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, o
     return () => abortRef.current?.abort();
   }, [noteId]);
 
-  const providerOptions = useMemo(
-    () =>
-      models.map((model) => ({
-        value: JSON.stringify([model.provider, model.name]),
-        name: model.name,
-        modalities: model.inputModalities ?? ["text"],
-        providerLabel: PROVIDER_META[model.provider]?.label,
-        providerClassName: PROVIDER_META[model.provider]?.className,
-      })),
-    [models],
-  );
-
   // fall back to the active model (or the first available one) until the user picks one
-  const defaultValue = useMemo(() => {
-    const active = models.find((m) => m.isActive) ?? models[0];
-    return active ? JSON.stringify([active.provider, active.name]) : "";
-  }, [models]);
-  const activeSelection = selected || defaultValue;
+  const defaultModel = useDefaultSelectedModel();
+  const activeSelection = selected ?? defaultModel;
 
   const setBusyState = (value: boolean) => {
     setBusy(value);
@@ -72,7 +55,7 @@ const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, o
       toast.error("No model available — activate a model first");
       return;
     }
-    const [provider, model] = JSON.parse(activeSelection) as [string, string];
+    const { provider, model } = activeSelection;
 
     setBusyState(true);
     let full = "";
@@ -127,31 +110,6 @@ const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, o
         placeholder="Ask AI to rewrite this note… (e.g. add a mermaid diagram of the flow)"
         className="min-w-0 flex-1 bg-transparent para-small-medium outline-none placeholder:text-neutral-500 disabled:opacity-50"
       />
-      <Select value={activeSelection} onValueChange={setSelected} disabled={busy}>
-        <SelectTrigger
-          size="sm"
-          className="h-8 w-52 shrink-0 gap-1.5 rounded-lg border-neutral-700 bg-neutral-900 caption-small-regular text-white! shadow-none data-placeholder:text-neutral-500 focus-visible:border-neutral-500 focus-visible:ring-0"
-        >
-          <SelectValue placeholder="Select a model" />
-        </SelectTrigger>
-        <SelectContent
-          position="popper"
-          side="bottom"
-          align="end"
-          className="border-neutral-700 bg-neutral-900 text-white [--accent-foreground:var(--color-white)] [--accent:var(--color-neutral-700)]"
-        >
-          {providerOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <ModelOptionLabel
-                name={option.name}
-                modalities={option.modalities}
-                providerLabel={option.providerLabel}
-                providerClassName={option.providerClassName}
-              />
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       {busy ? (
         <button
           type="button"
@@ -184,6 +142,10 @@ const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, o
           />
         </div>
       )}
+      {/* model picker sits at the bar's right edge, shared with chat and diagrams */}
+      <div className="shrink-0">
+        <ModelSelector value={activeSelection} onChange={setSelected} disabled={busy} align="end" />
+      </div>
     </div>
   );
 };
