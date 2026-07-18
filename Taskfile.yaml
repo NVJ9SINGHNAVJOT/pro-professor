@@ -36,3 +36,13 @@ tasks:
     desc: Set up ai-service (submodule, venv, dependencies, .env)
     cmds:
       - bash scripts/setup-ai-service.sh
+
+  db:backup:
+    desc: Dump the central-server Postgres DB to a timestamped file in tmp/ (checks Postgres is running)
+    cmds:
+      - bash scripts/backup-db.sh
+
+  db:restore:
+    desc: Restore the central-server Postgres DB from a dump (FILE=tmp/<dump>.sql; prompts before overwriting)
+    cmds:
+      - bash scripts/restore-db.sh "{{.FILE}}"
