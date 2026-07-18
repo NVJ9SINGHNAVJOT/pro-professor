@@ -9,6 +9,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
+import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeNote, setNotes, type NoteListItem } from "@/redux/slices/notesSlice";
@@ -147,8 +148,9 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
 
   return (
     <aside className="flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden border-r border-neutral-800 bg-chat-sidebar text-white">
+      <LeftNav />
       {/* New note — shares the toolbar height for a uniform top band */}
-      <div className="flex h-11.5 shrink-0 items-center pt-2 px-2">
+      <div className="flex h-11.5 shrink-0 items-center px-2">
         <button
           type="button"
           onClick={onCreate}

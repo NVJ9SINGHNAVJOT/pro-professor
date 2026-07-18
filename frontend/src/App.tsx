@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { Outlet } from "react-router";
-import RightNav from "@/components/common/RightNav";
+import { Outlet, useLocation } from "react-router";
+import LeftNav from "@/components/common/LeftNav";
 import { Toaster } from "@/components/common/toast";
 import SocketProvider from "@/context/SocketProvider";
 import { useApi } from "@/hooks/useApi";
@@ -10,7 +10,12 @@ import { setModels } from "@/redux/slices/modelsSlice";
 
 function App() {
   const dispatch = useAppDispatch();
+  const { pathname } = useLocation();
   const { execute: fetchModels } = useApi(modelsRoute.getAllModels);
+
+  // chat/notes/diagrams mount the LeftNav header inside their own sidebar;
+  // every other screen gets the floating logo button instead
+  const hasSidebarNav = /^\/(chat|notes|diagrams)/.test(pathname);
 
   useEffect(() => {
     (async () => {
@@ -28,7 +33,7 @@ function App() {
           <Outlet />
         </main>
 
-        <RightNav />
+        {!hasSidebarNav && <LeftNav floating />}
       </div>
       <Toaster />
     </SocketProvider>

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Plus, Trash2 } from "lucide-react";
+import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
@@ -104,7 +105,8 @@ const DiagramsScreen = () => {
   return (
     <div className="flex h-full min-h-0">
       {/* ── List ── */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-neutral-800">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-chat-sidebar">
+        <LeftNav />
         <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
           <span className="caption-small-medium text-neutral-300">Diagrams</span>
           <button

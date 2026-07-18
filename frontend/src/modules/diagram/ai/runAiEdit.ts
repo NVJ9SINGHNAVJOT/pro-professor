@@ -15,7 +15,9 @@ export interface RunAiEditArgs {
   onController?: (controller: AbortController) => void;
 }
 
-export type RunAiEditResult = { ok: true; repaired: boolean } | { ok: false; error: string };
+export type RunAiEditResult =
+  | { ok: true; repaired: boolean }
+  | { ok: false; error: string; cancelled?: boolean };
 
 /**
  * The full AI-edit loop: buffer → parse → ajv-validate → apply atomically.
@@ -27,7 +29,7 @@ export async function runAiEdit(args: RunAiEditArgs): Promise<RunAiEditResult> {
   const semantic = selectSemantic(store.getState());
 
   const first = await streamOnce(args, { semantic });
-  if (!first.ok) return first;
+  if (!first.ok) return first; // includes user stop (cancelled) — never repair after a stop
   let failure = tryApply(first.raw);
   if (failure === null) return { ok: true, repaired: false };
 
@@ -50,7 +52,7 @@ function tryApply(raw: string): string[] | null {
 function streamOnce(
   args: RunAiEditArgs,
   extra: Pick<DiagramAiPayload, "semantic" | "priorReply" | "validationErrors">,
-): Promise<{ ok: true; raw: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; raw: string } | { ok: false; error: string; cancelled?: boolean }> {
   return new Promise((resolve) => {
     let accumulated = "";
     const controller = diagramsStream.run(
@@ -66,6 +68,9 @@ function streamOnce(
         onError: (message) => resolve({ ok: false, error: message }),
       },
     );
+    // Stop button: the stream client swallows the AbortError and never calls back,
+    // so settle here — otherwise this promise (and runAiEdit) would hang forever.
+    controller.signal.addEventListener("abort", () => resolve({ ok: false, error: "Stopped", cancelled: true }));
     args.onController?.(controller);
   });
 }

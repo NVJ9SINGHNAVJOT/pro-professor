@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
+import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
@@ -86,8 +87,9 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
             isOpen ? "opacity-100" : "opacity-0",
           )}
         >
+          <LeftNav />
           {/* New chat — shares the chat top bar's height for a uniform top band */}
-          <div className="flex h-11.5 shrink-0 items-center pt-2 px-2">
+          <div className="flex h-11.5 shrink-0 items-center px-2">
             <button
               type="button"
               onClick={() => navigate(ROUTES.CHAT)}

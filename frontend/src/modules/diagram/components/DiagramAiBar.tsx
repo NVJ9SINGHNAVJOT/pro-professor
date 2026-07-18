@@ -52,7 +52,7 @@ const DiagramAiBar = ({ diagramId, onApplied }: DiagramAiBarProps) => {
     });
     setBusy(false);
     if (!result.ok) {
-      toast.error(result.error);
+      if (!result.cancelled) toast.error(result.error); // a user stop is not an error
       return;
     }
     setInstruction("");
