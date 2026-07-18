@@ -240,7 +240,12 @@ const NotesScreen = () => {
           icon: WorkflowIcon,
           run: () => insertSnippet(REACTFLOW_TEMPLATE),
         },
-        { id: "ai-rewrite", label: "AI: rewrite with instruction…", icon: WandSparklesIcon, run: () => setAiCommand("focus") },
+        {
+          id: "ai-rewrite",
+          label: "AI: rewrite with instruction…",
+          icon: WandSparklesIcon,
+          run: () => setAiCommand("focus"),
+        },
         { id: "ai-summarize", label: "AI: summarize note", icon: ListPlusIcon, run: () => setAiCommand("summarize") },
         { id: "ai-continue", label: "AI: continue writing", icon: ArrowRightIcon, run: () => setAiCommand("continue") },
         { id: "ai-focus", label: "Focus AI instruction bar", icon: SparklesIcon, run: () => setAiCommand("focus") },
@@ -258,146 +263,156 @@ const NotesScreen = () => {
     return commands;
   };
 
+  const renderCenterSection = () => {
+    if (graphOpen) {
+      return (
+        <>
+          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
+            <WaypointsIcon className="size-4.5 text-neutral-400" />
+            <h1 className="para-medium-semibold">Graph view</h1>
+            <button
+              type="button"
+              onClick={() => setGraphOpen(false)}
+              aria-label="Close graph view"
+              className="ml-auto cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+            >
+              <XIcon className="size-4.5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <GraphView />
+          </div>
+        </>
+      );
+    }
+
+    if (note) {
+      return (
+        <>
+          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
+            <h1 className="min-w-0 truncate para-medium-semibold">{note.title}</h1>
+            {dirty && <span className="size-2 shrink-0 rounded-full bg-amber-400" title="Unsaved changes" />}
+            <div className="ml-auto flex shrink-0 items-center gap-x-1">
+              <button
+                type="button"
+                onClick={() => setGraphOpen(true)}
+                aria-label="Open graph view"
+                title="Graph view"
+                className="mr-1 cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+              >
+                <WaypointsIcon className="size-4.5" />
+              </button>
+              <div className="mr-2 flex items-center rounded-lg bg-neutral-900 p-0.5">
+                {VIEW_MODES.map(({ mode, label, icon: Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    aria-label={label}
+                    title={label}
+                    className={cn(
+                      "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
+                      viewMode === mode && "bg-neutral-700 text-white",
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!dirty || saving}
+                aria-label="Save note"
+                title="Save (⌘S)"
+                className={cn(
+                  "flex cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1.5 para-small-medium transition-colors",
+                  dirty && !saving
+                    ? "bg-white text-black hover:bg-neutral-200"
+                    : "cursor-not-allowed bg-neutral-800 text-neutral-500",
+                )}
+              >
+                <SaveIcon className="size-4" />
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((open) => !open)}
+                aria-label="Revision history"
+                title="Revision history"
+                className={cn(
+                  "cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800",
+                  historyOpen && "bg-neutral-800 text-white",
+                )}
+              >
+                <HistoryIcon className="size-4.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setContextOpen((open) => !open)}
+                aria-label="Toggle context panel"
+                className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+              >
+                {contextOpen ? (
+                  <PanelRightCloseIcon className="size-4.5" />
+                ) : (
+                  <PanelRightOpenIcon className="size-4.5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <AiBar
+            noteId={note.id}
+            pendingCommand={aiCommand}
+            onCommandHandled={() => setAiCommand(null)}
+            onContent={setContent}
+            onSaved={refetchAfterAi}
+            onBusyChange={setAiBusy}
+          />
+
+          <div className="relative min-h-0 flex-1">
+            {historyOpen && (
+              <RevisionList
+                noteId={note.id}
+                refreshKey={revisionRefresh}
+                onRestored={(detail) => {
+                  applyDetail(detail);
+                  setHistoryOpen(false);
+                }}
+              />
+            )}
+            {viewMode === "source" && editorPane}
+            {viewMode === "preview" && previewPane}
+            {viewMode === "split" && <SplitPane left={editorPane} right={previewPane} />}
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-y-3 text-neutral-500">
+        <NotebookPenIcon className="size-10" />
+        <p className="para-small-medium">Select a note or create a new one</p>
+        <button
+          type="button"
+          onClick={() => setGraphOpen(true)}
+          className="flex cursor-pointer items-center gap-x-2 rounded-lg border border-neutral-800 px-3 py-1.5 para-small-medium text-neutral-300 hover:bg-neutral-800"
+        >
+          <WaypointsIcon className="size-4" />
+          Graph view
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={buildPaletteCommands()} />
       <NoteList onCreate={handleCreate} creating={creating} />
 
       {/* Center — toolbar + editor⟷preview (or the graph view) */}
-      <section className="flex h-full min-w-0 flex-1 flex-col">
-        {graphOpen ? (
-          <>
-            <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
-              <WaypointsIcon className="size-4.5 text-neutral-400" />
-              <h1 className="para-medium-semibold">Graph view</h1>
-              <button
-                type="button"
-                onClick={() => setGraphOpen(false)}
-                aria-label="Close graph view"
-                className="ml-auto cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-              >
-                <XIcon className="size-4.5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <GraphView />
-            </div>
-          </>
-        ) : note ? (
-          <>
-            <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
-              <h1 className="min-w-0 truncate para-medium-semibold">{note.title}</h1>
-              {dirty && <span className="size-2 shrink-0 rounded-full bg-amber-400" title="Unsaved changes" />}
-              <div className="ml-auto flex shrink-0 items-center gap-x-1">
-                <button
-                  type="button"
-                  onClick={() => setGraphOpen(true)}
-                  aria-label="Open graph view"
-                  title="Graph view"
-                  className="mr-1 cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-                >
-                  <WaypointsIcon className="size-4.5" />
-                </button>
-                <div className="mr-2 flex items-center rounded-lg bg-neutral-900 p-0.5">
-                  {VIEW_MODES.map(({ mode, label, icon: Icon }) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setViewMode(mode)}
-                      aria-label={label}
-                      title={label}
-                      className={cn(
-                        "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
-                        viewMode === mode && "bg-neutral-700 text-white",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!dirty || saving}
-                  aria-label="Save note"
-                  title="Save (⌘S)"
-                  className={cn(
-                    "flex cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1.5 para-small-medium transition-colors",
-                    dirty && !saving
-                      ? "bg-white text-black hover:bg-neutral-200"
-                      : "cursor-not-allowed bg-neutral-800 text-neutral-500",
-                  )}
-                >
-                  <SaveIcon className="size-4" />
-                  {saving ? "Saving…" : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((open) => !open)}
-                  aria-label="Revision history"
-                  title="Revision history"
-                  className={cn(
-                    "cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800",
-                    historyOpen && "bg-neutral-800 text-white",
-                  )}
-                >
-                  <HistoryIcon className="size-4.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setContextOpen((open) => !open)}
-                  aria-label="Toggle context panel"
-                  className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-                >
-                  {contextOpen ? (
-                    <PanelRightCloseIcon className="size-4.5" />
-                  ) : (
-                    <PanelRightOpenIcon className="size-4.5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <AiBar
-              noteId={note.id}
-              pendingCommand={aiCommand}
-              onCommandHandled={() => setAiCommand(null)}
-              onContent={setContent}
-              onSaved={refetchAfterAi}
-              onBusyChange={setAiBusy}
-            />
-
-            <div className="relative min-h-0 flex-1">
-              {historyOpen && (
-                <RevisionList
-                  noteId={note.id}
-                  refreshKey={revisionRefresh}
-                  onRestored={(detail) => {
-                    applyDetail(detail);
-                    setHistoryOpen(false);
-                  }}
-                />
-              )}
-              {viewMode === "source" && editorPane}
-              {viewMode === "preview" && previewPane}
-              {viewMode === "split" && <SplitPane left={editorPane} right={previewPane} />}
-            </div>
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-y-3 text-neutral-500">
-            <NotebookPenIcon className="size-10" />
-            <p className="para-small-medium">Select a note or create a new one</p>
-            <button
-              type="button"
-              onClick={() => setGraphOpen(true)}
-              className="flex cursor-pointer items-center gap-x-2 rounded-lg border border-neutral-800 px-3 py-1.5 para-small-medium text-neutral-300 hover:bg-neutral-800"
-            >
-              <WaypointsIcon className="size-4" />
-              Graph view
-            </button>
-          </div>
-        )}
-      </section>
+      <section className="flex h-full min-w-0 flex-1 flex-col">{renderCenterSection()}</section>
 
       {note && contextOpen && (
         <ContextPanel noteId={note.id} content={content} tags={note.tags} onWikiClick={wiki.onLinkClick} />
