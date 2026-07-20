@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import { SparklesIcon, SquareIcon, WandSparklesIcon } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { toast } from "@/components/common/toast";
 import ModelSelector from "@/components/common/ModelSelector";
 import { useDefaultSelectedModel } from "@/hooks/useDefaultSelectedModel";
 import { runAiEdit } from "@/modules/diagram/ai/runAiEdit";
 import type { SelectedModel } from "@/modules/chat/types";
-import { cn } from "@/lib/utils";
 
 interface DiagramAiBarProps {
   diagramId: number;
@@ -16,12 +15,13 @@ interface DiagramAiBarProps {
   onApplied: () => void;
 }
 
-/** AI edits over the open diagram: instruction in, Mermaid generation or command list applied. */
+/** AI edits over the open diagram: Mermaid generation or a command-list applied. Mirrors the notes AI bar. */
 const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
   const [instruction, setInstruction] = useState("");
   const [selected, setSelected] = useState<SelectedModel | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // stop generation when the diagram changes or the bar unmounts
   useEffect(() => {
@@ -36,6 +36,7 @@ const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
     if (busy) return;
     if (!instruction.trim()) {
       toast.error("Describe what the AI should change");
+      inputRef.current?.focus();
       return;
     }
     if (!activeSelection) {
@@ -75,35 +76,38 @@ const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-x-2 border-b border-neutral-800 bg-neutral-900/40 px-4 py-2">
-      <SparklesIcon className={cn("size-4 shrink-0", busy ? "animate-pulse text-sky-400" : "text-neutral-400")} />
+    <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 bg-neutral-900/40 px-4">
+      <SparklesIcon className="size-4 shrink-0 text-neutral-400" />
       <input
+        ref={inputRef}
         value={instruction}
-        onChange={(event) => setInstruction(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") run();
+        onChange={(e) => setInstruction(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") run();
         }}
         disabled={busy}
-        placeholder="Ask the AI to change the diagram's structure…"
-        className="min-w-0 flex-1 bg-transparent caption-small-regular text-neutral-200 outline-none placeholder:text-neutral-500"
+        placeholder="Ask AI to change the diagram… (e.g. draw a login flow, or add a Redis node)"
+        className="min-w-0 flex-1 bg-transparent para-small-medium text-neutral-200 outline-none placeholder:text-neutral-500 disabled:opacity-50"
       />
       {busy ? (
         <button
           type="button"
           onClick={handleStop}
-          aria-label="Stop generation"
-          className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          aria-label="Stop generating"
+          className="flex shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg bg-white px-2.5 py-1 caption-small-medium text-black hover:bg-neutral-200"
         >
-          <SquareIcon className="size-4" />
+          <SquareIcon className="size-3 fill-current" />
+          Stop
         </button>
       ) : (
         <button
           type="button"
           onClick={run}
-          aria-label="Run AI edit"
-          className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          title="Apply the instruction to the diagram"
+          className="flex shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1 caption-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
         >
-          <ArrowRightIcon className="size-4" />
+          <WandSparklesIcon className="size-3.5" />
+          Run
         </button>
       )}
       {/* model picker sits at the bar's right edge, shared with chat and notes */}

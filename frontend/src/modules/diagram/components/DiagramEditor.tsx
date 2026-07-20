@@ -104,19 +104,23 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
         </span>
       </div>
       <DiagramAiBar diagramId={diagramId} getApi={() => apiRef.current} onApplied={() => doSave(true)} />
+      {/* Pin Excalidraw to an absolutely-filled box so a sibling reflow (e.g. the
+          AI bar toggling to "Stop") can never change the canvas size or overflow. */}
       <div className="relative min-h-0 flex-1">
-        {initialData ? (
-          <Excalidraw
-            theme="dark"
-            initialData={initialData}
-            excalidrawAPI={(api) => {
-              apiRef.current = api;
-            }}
-            onChange={onChange}
-          />
-        ) : (
-          <span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>
-        )}
+        <div className="absolute inset-0">
+          {initialData ? (
+            <Excalidraw
+              theme="dark"
+              initialData={initialData}
+              excalidrawAPI={(api) => {
+                apiRef.current = api;
+              }}
+              onChange={onChange}
+            />
+          ) : (
+            <span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>
+          )}
+        </div>
       </div>
     </div>
   );
