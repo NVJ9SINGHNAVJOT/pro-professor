@@ -35,7 +35,7 @@ non-JSON endpoints are handled deliberately:
 
 | Endpoint | Logged as |
 | --- | --- |
-| SSE streams (`/chats/send`, notes/diagram AI routes) | frames accumulated in the controller, logged once on completion as a JSON **array** |
+| SSE streams (`/chats/send`, notes AI routes) | frames accumulated in the controller, logged once on completion as a JSON **array** |
 | `POST /audio/speech`, `GET /media/{id}/file` (`byte[]`) | a **byte count**, never the bytes |
 | everything else (JSON) | the body as a JSON **object** |
 

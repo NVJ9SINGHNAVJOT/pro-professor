@@ -5,19 +5,18 @@ import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { settingsRoute, type AppSettings } from "@/services/operations/settings/settings.route";
 import type { InferenceParams } from "@/modules/chat/types";
-import { NOTES_DEFAULT_PARAMS, DIAGRAM_DEFAULT_PARAMS } from "@/modules/settings/constants";
+import { NOTES_DEFAULT_PARAMS } from "@/modules/settings/constants";
 import InferenceParamsPanel from "@/modules/settings/components/InferenceParamsPanel";
 
 /**
- * Global default inference params for the Notes and Diagrams AI actions. Loaded from and saved to the
- * backend `app_settings` singleton; the defaults are applied server-side, so nothing else reads this.
+ * Global default inference params for the Notes AI actions. Loaded from and saved to the backend
+ * `app_settings` singleton; the defaults are applied server-side, so nothing else reads this.
  */
 const SettingsScreen = () => {
   const { execute: fetchSettings, loading } = useApi(settingsRoute.getSettings);
   const { execute: saveSettings } = useApi(settingsRoute.updateSettings);
 
   const [notesParams, setNotesParams] = useState<InferenceParams | null>(null);
-  const [diagramParams, setDiagramParams] = useState<InferenceParams | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -25,7 +24,6 @@ const SettingsScreen = () => {
       const res = await fetchSettings();
       if (res.response) {
         setNotesParams(res.response.data.notes);
-        setDiagramParams(res.response.data.diagram);
       } else if (res.error) {
         toast.error(res.error.message);
       }
@@ -34,16 +32,16 @@ const SettingsScreen = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!notesParams || !diagramParams) return;
+    if (!notesParams) return;
     setSaving(true);
-    const payload: AppSettings = { notes: notesParams, diagram: diagramParams };
+    const payload: AppSettings = { notes: notesParams };
     const res = await saveSettings(payload);
     setSaving(false);
     if (res.response) toast.success("Settings saved");
     else if (res.error) toast.error(res.error.message);
   };
 
-  const ready = notesParams != null && diagramParams != null;
+  const ready = notesParams != null;
 
   return (
     <Page className="overflow-y-auto">
@@ -51,7 +49,7 @@ const SettingsScreen = () => {
         <header className="mb-8">
           <h1 className="heading-semibold text-white">Settings</h1>
           <p className="mt-1.5 para-small-regular text-neutral-400">
-            Default inference parameters applied to the Notes and Diagrams AI actions. Chat keeps its own
+            Default inference parameters applied to the Notes AI actions. Chat keeps its own
             per-conversation settings.
           </p>
         </header>
@@ -66,13 +64,6 @@ const SettingsScreen = () => {
               params={notesParams}
               onChange={setNotesParams}
               onReset={() => setNotesParams(NOTES_DEFAULT_PARAMS)}
-            />
-            <InferenceParamsPanel
-              title="Diagrams"
-              description="Used when the AI edits a diagram. A lower temperature yields more schema-valid patches."
-              params={diagramParams}
-              onChange={setDiagramParams}
-              onReset={() => setDiagramParams(DIAGRAM_DEFAULT_PARAMS)}
             />
 
             <div className="flex justify-end">

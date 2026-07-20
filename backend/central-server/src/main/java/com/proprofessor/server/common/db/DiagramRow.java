@@ -5,7 +5,7 @@ import java.time.Instant;
 /**
  * In-memory shape of a {@code diagrams} row.
  *
- * @param contentJson the raw jsonb text of the DiagramBundle document
+ * @param contentJson the raw jsonb text of the Excalidraw scene document
  */
 public record DiagramRow(
         long id,

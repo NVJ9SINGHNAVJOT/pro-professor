@@ -6,8 +6,7 @@ import "@excalidraw/excalidraw/index.css";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
-import { PRO_FONT_FAMILY, PRO_ROUGHNESS } from "@/modules/diagram/persistence/bundleIO";
-import DiagramAiBar from "@/modules/diagram/components/DiagramAiBar";
+import { PRO_FONT_FAMILY, PRO_ROUGHNESS } from "@/modules/diagram/persistence/sceneIO";
 
 interface DiagramEditorProps {
   diagramId: number;
@@ -20,8 +19,7 @@ type SaveState = "idle" | "saving" | "saved";
 /**
  * The editable diagram: an Excalidraw scene loaded from / saved to the diagram
  * row. Excalidraw owns the scene state and undo history; we debounce-save on
- * change and expose the imperative API to the AI bar (mermaid generation +
- * command edits go through `updateScene`).
+ * change. Diagrams are drawn by the user — there is no AI generation/editing.
  */
 const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
@@ -64,13 +62,13 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
   }, [diagramId]);
 
   const doSave = useCallback(
-    async (snapshot: boolean) => {
+    async () => {
       const api = apiRef.current;
       if (!api) return;
       const elements = api.getSceneElements();
       const content = JSON.parse(serializeAsJSON(elements, api.getAppState(), api.getFiles(), "database"));
       setSaveState("saving");
-      const res = await updateDiagram(diagramId, { content, ...(snapshot ? { snapshot: true } : {}) });
+      const res = await updateDiagram(diagramId, { content });
       if (res.error) {
         setSaveState("idle");
         toast.error("Failed to save diagram");
@@ -90,7 +88,7 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
     (elements: readonly unknown[]) => {
       if (getSceneVersion(elements as never) === savedVersion.current) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => doSave(false), 800);
+      saveTimer.current = setTimeout(() => doSave(), 800);
     },
     [doSave],
   );
@@ -103,9 +101,7 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
           {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
         </span>
       </div>
-      <DiagramAiBar diagramId={diagramId} getApi={() => apiRef.current} onApplied={() => doSave(true)} />
-      {/* Pin Excalidraw to an absolutely-filled box so a sibling reflow (e.g. the
-          AI bar toggling to "Stop") can never change the canvas size or overflow. */}
+      {/* Pin Excalidraw to an absolutely-filled box so it fills the canvas area. */}
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">
           {initialData ? (

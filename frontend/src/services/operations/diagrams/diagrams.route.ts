@@ -19,7 +19,7 @@ export interface DiagramSummary {
 export interface DiagramDetail {
   id: number;
   title: string;
-  /** The DiagramBundle document — validated client-side before entering the store. */
+  /** The Excalidraw scene document ({ type, elements, appState, files }). */
   content: unknown;
   createdAt: string;
   updatedAt: string;
@@ -28,8 +28,6 @@ export interface DiagramDetail {
 export interface DiagramSavePayload {
   title?: string;
   content: unknown;
-  /** Snapshot the current row into diagram_revisions before overwriting (set on AI-edit saves). */
-  snapshot?: boolean;
 }
 
 export type GetDiagramsResponse = {

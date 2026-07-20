@@ -7,21 +7,24 @@ interop; only Obsidian's *syntax and interaction model* is borrowed.
 
 ## 1. Overview
 
-- **Dependency budget held:** the only new runtime libraries are `mermaid` and `@xyflow/react`
-  on the frontend, both lazy-loaded via dynamic `import()` so they stay out of the main bundle.
+- **Dependency budget held:** the only new runtime library for notes is `mermaid` on the
+  frontend, lazy-loaded via dynamic `import()` so it stays out of the main bundle.
   central-server added **zero** jars (frontmatter parsing uses the SnakeYAML Spring Boot already
   ships).
 - Notes are optimized for **AI-authored Markdown**: content usually arrives pasted from a chat or
   is rewritten in place by the AI actions (§6), and everything round-trips through one `content`
   text column.
 
-## 2. Database (migrations V3–V5)
+## 2. Database
 
-| Migration | Tables / changes |
+The notes tables live in the consolidated `V1__init_schema.sql`:
+
+| Table | Shape |
 | --- | --- |
-| `V3__notes.sql` | `notes` (id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb), `tags` (unique name), `note_tags` link table |
-| `V4__note_links.sql` | `note_links` (source_note_id, target_ref, link_type `link\|embed`); generated `content_tsv` tsvector column + GIN index on `notes` for full-text search |
-| `V5__note_revisions.sql` | `note_revisions` (note_id, content snapshot, created_at) — written before every AI overwrite/restore |
+| `notes` | id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb, generated `content_tsv` tsvector column + GIN index for full-text search |
+| `tags` / `note_tags` | `tags` (unique name) + `note_tags` link table |
+| `note_links` | source_note_id, target_ref, link_type `link\|embed` |
+| `note_revisions` | note_id, content snapshot, created_at — written before every AI overwrite/restore |
 
 Conventions that matter:
 
@@ -29,11 +32,9 @@ Conventions that matter:
   unique; a colliding save gets a numeric suffix ("Untitled" → "Untitled 2").
 - `target_ref` stores the referenced **title as written** — links may point at notes that don't
   exist yet (Obsidian's "unresolved link"); resolution happens at read time.
-- Each new table must be listed in the jOOQ `<includes>` regex in
+- Each table must be listed in the jOOQ `<includes>` regex in
   [pom.xml](../backend/central-server/pom.xml); schema changes follow the usual
   `task migrate` → `task codegen` → recompile loop.
-- Per [database-rules.md](../backend/central-server/docs/database-rules.md), V3–V5 are meant to be **folded back into `V1`**
-  eventually (drop DB + re-migrate) — pending.
 
 ## 3. Backend (`com.proprofessor.server.notes`)
 
@@ -103,13 +104,13 @@ transforms (no `unist-util-visit` dependency):
 - **Embeds** — `![[Note]]` / `![[Note#Heading]]` render [NoteEmbed](../frontend/src/modules/notes/components/NoteEmbed.tsx):
   fetches the target and transcludes the body (or just that heading's section via
   `extractSection`); image filenames render via the media by-filename endpoint. Depth is capped at
-  1 — nested embeds fall back to plain links. A `![[Title.diagram]]` target routes to the diagram
-  module's `DiagramEmbed` instead (see [diagram-flow.md](diagram-flow.md) §5).
-- **Diagrams** — ```` ```mermaid ```` fences → [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx)
-  (lazy `import("mermaid")`, dark theme, parse failure shows raw source);
-  ```` ```reactflow-json ```` fences → [FlowBlock](../frontend/src/components/common/FlowBlock.tsx)
-  (lazy `@xyflow/react`, draggable nodes, JSON `{nodes:[{id,label,position}], edges:[{source,target}]}`,
-  invalid JSON shows raw source). Both work in chat replies too.
+  1 — nested embeds fall back to plain links. A `[[Title.diagram]]` **link** (not an embed) opens
+  the standalone diagram page: `onLinkClick` resolves the title→id and navigates to `/diagrams/:id`
+  (see [diagram-flow.md](diagram-flow.md) §5).
+- **Inline diagrams** — ```` ```mermaid ```` fences → [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx)
+  (lazy `import("mermaid")`, dark theme, parse failure shows raw source). Mermaid is the way to draw
+  a diagram inline in a note; it works in chat replies too. Standalone Excalidraw diagrams live in
+  the `/diagrams` module and are referenced by `[[Title.diagram]]` link.
 
 ## 6. AI note actions (`notes.ai` package)
 

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST endpoints for the global default inference params (Notes + Diagrams). Thin — delegates to
+ * REST endpoints for the global default inference params (Notes). Thin — delegates to
  * {@link SettingsService} and wraps results in {@link ApiResponse}.
  */
 @RestController

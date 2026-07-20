@@ -1,14 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ClipboardPaste, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
 import { diagramsRoute, type DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
-import { makeEmptyScene } from "@/modules/diagram/persistence/bundleIO";
-import ImportDiagramDialog from "@/modules/diagram/components/ImportDiagramDialog";
-import type { DiagramScene } from "@/modules/diagram/types";
+import { makeEmptyScene } from "@/modules/diagram/persistence/sceneIO";
 import { cn } from "@/lib/utils";
 
 // Lazy: the editor carries the Excalidraw runtime + styles.
@@ -20,7 +18,6 @@ const DiagramsScreen = () => {
   const { diagramId } = useParams();
   const openId = diagramId && Number.isFinite(Number(diagramId)) ? Number(diagramId) : null;
   const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
-  const [importOpen, setImportOpen] = useState(false);
 
   const { execute: fetchDiagrams } = useApi(diagramsRoute.getDiagrams);
   const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
@@ -46,16 +43,6 @@ const DiagramsScreen = () => {
     navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
   };
 
-  /** Import-dialog callback: an Excalidraw scene is created and opened. */
-  const importDiagram = async (title: string, scene: DiagramScene): Promise<string | null> => {
-    const res = await createDiagram({ title, content: scene });
-    if (res.error) return "Failed to create diagram";
-    await refreshList();
-    setImportOpen(false);
-    navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
-    return null;
-  };
-
   const remove = async (id: number) => {
     const res = await deleteDiagram(id);
     if (res.error) {
@@ -73,25 +60,14 @@ const DiagramsScreen = () => {
         <LeftNav />
         <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
           <span className="caption-small-medium text-neutral-300">Diagrams</span>
-          <span className="flex items-center gap-x-1">
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              aria-label="Import diagram"
-              title="Import an Excalidraw scene"
-              className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-            >
-              <ClipboardPaste size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={create}
-              aria-label="New diagram"
-              className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-            >
-              <Plus size={16} />
-            </button>
-          </span>
+          <button
+            type="button"
+            onClick={create}
+            aria-label="New diagram"
+            className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          >
+            <Plus size={16} />
+          </button>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto py-1">
           {diagrams.map((diagram) => (
@@ -134,8 +110,6 @@ const DiagramsScreen = () => {
           </div>
         )}
       </main>
-
-      <ImportDiagramDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={importDiagram} />
     </div>
   );
 };

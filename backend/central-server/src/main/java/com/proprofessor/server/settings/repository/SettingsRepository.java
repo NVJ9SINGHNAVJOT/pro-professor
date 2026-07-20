@@ -28,16 +28,12 @@ public class SettingsRepository {
                 .fetchOne(this::toRow);
     }
 
-    public void update(InferenceDefaults notes, InferenceDefaults diagram) {
+    public void update(InferenceDefaults notes) {
         dsl.update(APP_SETTINGS)
                 .set(APP_SETTINGS.NOTES_MAX_TOKENS, notes.maxTokens())
                 .set(APP_SETTINGS.NOTES_TEMPERATURE, notes.temperature())
                 .set(APP_SETTINGS.NOTES_TOP_P, notes.topP())
                 .set(APP_SETTINGS.NOTES_REPETITION_PENALTY, notes.repetitionPenalty())
-                .set(APP_SETTINGS.DIAGRAM_MAX_TOKENS, diagram.maxTokens())
-                .set(APP_SETTINGS.DIAGRAM_TEMPERATURE, diagram.temperature())
-                .set(APP_SETTINGS.DIAGRAM_TOP_P, diagram.topP())
-                .set(APP_SETTINGS.DIAGRAM_REPETITION_PENALTY, diagram.repetitionPenalty())
                 .where(APP_SETTINGS.ID.eq(SINGLETON_ID))
                 .execute();
     }
@@ -49,15 +45,8 @@ public class SettingsRepository {
                 r.get(APP_SETTINGS.NOTES_TOP_P),
                 r.get(APP_SETTINGS.NOTES_REPETITION_PENALTY)
         );
-        InferenceDefaults diagram = new InferenceDefaults(
-                r.get(APP_SETTINGS.DIAGRAM_MAX_TOKENS),
-                r.get(APP_SETTINGS.DIAGRAM_TEMPERATURE),
-                r.get(APP_SETTINGS.DIAGRAM_TOP_P),
-                r.get(APP_SETTINGS.DIAGRAM_REPETITION_PENALTY)
-        );
         return new AppSettingsRow(
                 notes,
-                diagram,
                 r.get(APP_SETTINGS.CREATED_AT).toInstant(),
                 r.get(APP_SETTINGS.UPDATED_AT).toInstant()
         );

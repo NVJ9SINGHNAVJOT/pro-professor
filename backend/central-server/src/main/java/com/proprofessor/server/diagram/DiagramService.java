@@ -17,9 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * CRUD for diagrams. The DiagramBundle document is validated client-side (ajv
- * is the single gate); the server only requires content to be a JSON object.
- * Titles are unique — `![[name.diagram]]` embeds resolve by them.
+ * CRUD for diagrams. The content is an Excalidraw scene JSON document; the
+ * server only requires it to be a JSON object (no server-side schema).
+ * Titles are unique — `[[Title.diagram]]` links resolve by them.
  */
 @Service
 public class DiagramService {
@@ -62,9 +62,6 @@ public class DiagramService {
         String title = request.title() == null || request.title().isBlank()
                 ? existing.title()
                 : uniqueTitle(normalizeTitle(request.title()), id);
-        if (Boolean.TRUE.equals(request.snapshot())) {
-            diagramRepository.insertRevision(id, existing.contentJson());
-        }
         diagramRepository.update(id, title, requireContent(request.content()));
         return getDiagram(id);
     }

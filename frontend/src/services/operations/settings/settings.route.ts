@@ -7,10 +7,9 @@ const settingsEndPoints = {
   UPDATE: `${BASE_URL_SERVER}/settings`,
 };
 
-/** Global default inference params, grouped by feature. Applied server-side to the AI actions. */
+/** Global default inference params. Applied server-side to the Notes AI actions. */
 export interface AppSettings {
   notes: InferenceParams;
-  diagram: InferenceParams;
 }
 
 export type GetSettingsResponse = { message: string; data: AppSettings };

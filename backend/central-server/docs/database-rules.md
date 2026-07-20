@@ -13,7 +13,7 @@ is disposable. Persistence uses **Flyway** migrations (`src/main/resources/db/mi
   rows carry no value to preserve.
 - **Create new migrations when needed.** A throwaway incremental migration is fine while
   iterating, but fold it back into `V1` once it settles so the schema stays a single clean file.
-  (Currently pending for `V3`–`V6`: the notes and diagram tables.)
+  (The schema is currently a single `V1__init_schema.sql` — all tables live there.)
 - **Workflow after any schema change:** clean/drop the DB → `task migrate` → `task codegen`
   (regenerate jOOQ) → recompile. Verify it applies on an empty schema, not just an existing one.
   New tables must also be added to the jOOQ `<includes>` regex in `pom.xml`.

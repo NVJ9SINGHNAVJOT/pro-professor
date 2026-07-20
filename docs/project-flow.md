@@ -95,25 +95,24 @@ Each conversation persists its current inference settings on the `conversations`
 
 ### 2.8 Database schema & migrations
 
-Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental `ALTER` scripts. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, plus the notes tables from `V3`–`V5` (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)) and the diagram tables from `V6` (`diagrams`, `diagram_revisions` — see [diagram-flow.md](diagram-flow.md)); these incremental migrations are still to be folded back into `V1`.
+Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), `diagrams` (see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
 
 ### 2.9 Notes module
 
 An Obsidian-like Markdown notes workspace at `/notes` (backend vertical
 `com.proprofessor.server.notes`, frontend `modules/notes`): wiki-links/backlinks/embeds, tags,
-Postgres full-text search, Mermaid + React Flow diagrams, a graph view, and AI note actions
+Postgres full-text search, inline Mermaid diagrams, a graph view, and AI note actions
 (local models) with reversible revision snapshots. Full
 architecture and flow: [notes-flow.md](notes-flow.md).
 
 ### 2.10 Diagram module
 
-An AI-native diagram engine at `/diagrams` (backend vertical `com.proprofessor.server.diagram`,
-frontend `modules/diagram`): a semantic/layout-separated `.diagram` JSON document where **AI owns
-meaning and the user owns layout** — AI edits (validated command-list patches over SSE, atomic
-apply, one-step undo) can never move a manually placed node. Includes `![[Title.diagram]]` note
-embeds, a paste-JSON import for externally authored diagrams (see the repo-root
-[skills/](../skills/README.md) folder), and revision snapshots before AI-edit saves. Full
-architecture and flow: [diagram-flow.md](diagram-flow.md).
+A manual diagram editor at `/diagrams` (backend vertical `com.proprofessor.server.diagram`,
+frontend `modules/diagram`): the user draws in an **Excalidraw** canvas and the scene JSON
+(`{ type, elements, appState, files }`) is stored inline in Postgres like a note, with debounced
+autosave and professional (non-hand-drawn) styling defaults. Notes reference a standalone diagram
+with a `[[Title.diagram]]` link that opens the diagram page; inline note diagrams use Mermaid.
+There is no AI in diagrams. Full architecture and flow: [diagram-flow.md](diagram-flow.md).
 
 ## 3. Related Docs
 
@@ -125,7 +124,7 @@ architecture and flow: [diagram-flow.md](diagram-flow.md).
 - [project-rules.md](project-rules.md) — repository boundaries + when to edit directly vs. plan.
 - [notes-flow.md](notes-flow.md) — the Notes module's architecture & flow (schema, link parsing,
   shared Markdown rendering, AI actions/revisions).
-- [diagram-flow.md](diagram-flow.md) — the Diagram module's architecture & flow (bundle format,
-  command/undo layer, AI patch pipeline, embeds, import).
+- [diagram-flow.md](diagram-flow.md) — the Diagram module's architecture & flow (Excalidraw scene
+  format, save/load, `[[Title.diagram]]` links, Mermaid for inline note diagrams).
 - [../skills/](../skills/README.md) — authoring skills for **external** AI models (paste-ready
-  note/diagram files); the in-app AI prompts live in `NotesAiService` / `DiagramAiService`.
+  note files); the in-app AI prompts live in `NotesAiService`.

@@ -26,9 +26,9 @@ src/modules/<feature-name>/
 └── constants/           # Feature-specific constants (e.g., dropdown options, specific UI strings).
 ```
 
-> Modules with a domain layer may add more (the diagram module has `model/`, `commands/`,
-> `schema/`, `adapter/`, `renderer/`, … — see [docs/diagram-flow.md](../../docs/diagram-flow.md)).
-> The subfolder names above are the shared baseline.
+> Some modules add more (e.g. the notes module has `editor/` and `hooks/`; the diagram module has
+> `persistence/` — see [docs/diagram-flow.md](../../docs/diagram-flow.md)). The subfolder names
+> above are the shared baseline.
 
 ## Global Structure (`src/`)
 

@@ -6,8 +6,8 @@ import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesSlice";
 import { notesRoute } from "@/services/operations/notes/notes.route";
+import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
 import NoteEmbed from "@/modules/notes/components/NoteEmbed";
-import DiagramEmbed from "@/modules/diagram/components/DiagramEmbed";
 import { DIAGRAM_SUFFIX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 
@@ -17,11 +17,23 @@ function useWikiBase(): WikiHandlers {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { execute: createNote } = useApi(notesRoute.createNote);
+  const { execute: fetchDiagramByTitle } = useApi(diagramsRoute.getDiagramByTitle);
 
   return useMemo<WikiHandlers>(
     () => ({
       linkExists: (target) => notes.some((note) => note.title.toLowerCase() === target.toLowerCase()),
       onLinkClick: async (target, heading) => {
+        // `[[Title.diagram]]` is a link to a standalone diagram — resolve title→id and open the diagram page.
+        if (target.toLowerCase().endsWith(DIAGRAM_SUFFIX)) {
+          const title = target.slice(0, -DIAGRAM_SUFFIX.length);
+          const res = await fetchDiagramByTitle(title);
+          if (res.error) {
+            toast.error(`No diagram titled "${title}"`);
+            return;
+          }
+          navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
+          return;
+        }
         const existing = notes.find((note) => note.title.toLowerCase() === target.toLowerCase());
         if (existing) {
           // the heading rides along as router state; NotesScreen scrolls the preview to it
@@ -50,13 +62,9 @@ export function useWikiHandlers(): WikiHandlers {
   return useMemo<WikiHandlers>(
     () => ({
       ...base,
-      renderEmbed: (target, heading) =>
-        // `![[name.diagram]]` embeds a diagram (by title); everything else stays a note/image embed
-        target.toLowerCase().endsWith(DIAGRAM_SUFFIX) ? (
-          <DiagramEmbed title={target.slice(0, -DIAGRAM_SUFFIX.length)} />
-        ) : (
-          <NoteEmbed target={target} heading={heading} wiki={base} />
-        ),
+      // `![[...]]` transcludes a note/image. Diagrams are referenced by LINK
+      // (`[[Title.diagram]]`), handled in onLinkClick — not embedded inline.
+      renderEmbed: (target, heading) => <NoteEmbed target={target} heading={heading} wiki={base} />,
     }),
     [base],
   );

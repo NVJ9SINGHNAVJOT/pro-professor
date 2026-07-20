@@ -2,9 +2,9 @@ import type { DiagramScene } from "@/modules/diagram/types";
 
 /**
  * Scene helpers kept free of any `@excalidraw/excalidraw` import, so the (not
- * lazy-loaded) list screen and import dialog can use them without pulling the
- * Excalidraw runtime into the main bundle. Loading/serialising a live scene
- * (restore/serializeAsJSON) happens inside the lazy DiagramEditor instead.
+ * lazy-loaded) list screen can use them without pulling the Excalidraw runtime
+ * into the main bundle. Loading/serialising a live scene (restore/serializeAsJSON)
+ * happens inside the lazy DiagramEditor instead.
  */
 
 export const EXCALIDRAW_SOURCE = "pro-professor";
@@ -33,13 +33,4 @@ export function makeEmptyScene(): DiagramScene {
     },
     files: {},
   };
-}
-
-/** Loose shape guard for pasted/fetched content — enough to reject non-scenes. */
-export function isDiagramScene(value: unknown): value is DiagramScene {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    Array.isArray((value as { elements?: unknown }).elements)
-  );
 }

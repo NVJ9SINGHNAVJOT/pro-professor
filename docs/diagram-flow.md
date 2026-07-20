@@ -1,100 +1,71 @@
 # Diagram Module - Architecture & Flow
 
-The AI-native diagram engine at `/diagrams`, implemented from
-the (since removed) `docs/diagram-engine-execution-plan.md` (Phases 0–5 complete;
-Phase 6+ — more node types, Dagre/ELK auto-layout, export — is open-as-needed). The core idea:
-**AI owns meaning, the user owns layout** — a diagram's `semantic` (nodes/edges) and `layout`
-(positions) are separate namespaces with separate owners, so an AI edit can never destroy a
-manually arranged diagram.
+The diagram feature at `/diagrams` is a **manual [Excalidraw](https://github.com/excalidraw/excalidraw)
+editor**. A diagram is a single Excalidraw **scene** (`{ type, elements, appState, files }`) that the
+user draws by hand; it is stored inline in Postgres like a note. There is **no AI** in diagrams —
+diagrams are created and edited by the user. (An AI generate/edit path existed briefly and was
+removed; it may return "some other day".)
 
 ## 1. Overview
 
-- One document format: the **DiagramBundle** JSON — `schemaVersion`, `semantic` (AI-owned, no
-  coordinates), `layout` (user-owned, keyed by node id), `theme` (named ref), `metadata`.
-- Stored **inline in Postgres like notes** (`content` jsonb + revisions), NOT as a
-  storage-service blob — diagrams are editable documents, not immutable media.
-- React Flow (`@xyflow/react`) is the **renderer only**, confined behind an adapter. There is
-  exactly **one `<ReactFlow>` mount** in the app:
-  [DiagramRenderer.tsx](../frontend/src/modules/diagram/renderer/DiagramRenderer.tsx) — the
-  editor canvas, `![[Title.diagram]]` wiki embeds, and the legacy ```reactflow-json chat fence
-  ([FlowBlock.tsx](../frontend/src/components/common/FlowBlock.tsx)) all render through it.
-- New deps: `ajv` (validation) and `nanoid` (ids) only. **vitest** was added as the frontend's
-  test runner for this module's gates (`cd frontend && npm test`).
+- One document format: the canonical **Excalidraw scene** JSON (`type: "excalidraw"`, `version`,
+  `source`, `elements`, `appState`, `files`) — the whole document, no separate semantic model.
+- Stored **inline in Postgres like notes** (`content` jsonb + revisions), NOT as a storage-service
+  blob — diagrams are editable documents, not immutable media.
+- Excalidraw (`@excalidraw/excalidraw`) is the editor. It owns scene state and undo/redo; it is
+  lazy-loaded (a code-split chunk) so the runtime + CSS stay out of the main bundle.
+- **Professional defaults**: new content is drawn clean, not sketchy — roughness `0` (architect)
+  and a normal sans font (`FONT_FAMILY.Nunito = 6`), seeded via `appState`
+  (`currentItemRoughness` / `currentItemFontFamily`) in
+  [sceneIO.ts](../frontend/src/modules/diagram/persistence/sceneIO.ts).
 
-## 2. Database (migration V6)
+## 2. Database
 
-| Migration | Tables |
-| --- | --- |
-| `V6__diagrams.sql` | `diagrams` (id BIGSERIAL, **title UNIQUE**, content jsonb, timestamps + updated_at trigger), `diagram_revisions` (diagram_id, content snapshot, created_at) |
-
-Same conventions as notes: titles are the diagram's identity (`![[Title.diagram]]` embeds
-resolve by title, case-insensitively; clashes get a numeric suffix); the tables are listed in the
-jOOQ `<includes>` in [pom.xml](../backend/central-server/pom.xml); V6 joins V3–V5 in "to be
-folded back into V1 eventually". A revision snapshot is written before every AI-edit save
-(`snapshot: true` on PUT), so AI edits are reversible server-side too.
+A single `diagrams` table lives in the consolidated `V1__init_schema.sql` (id BIGSERIAL,
+**title UNIQUE**, content jsonb, timestamps + updated_at trigger). Same conventions as notes: titles
+are the diagram's identity (`[[Title.diagram]]` links resolve by title, case-insensitively; clashes
+get a numeric suffix); the table is listed in the jOOQ `<includes>` in
+[pom.xml](../backend/central-server/pom.xml). There is no revisions table — diagrams are drawn
+directly, with no snapshot/undo-on-server machinery.
 
 ## 3. Backend (`com.proprofessor.server.diagram`)
 
-Standard vertical: [DiagramController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramController.java)
+Pure CRUD vertical: [DiagramController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramController.java)
 → [DiagramService](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramService.java)
 → [DiagramRepository](../backend/central-server/src/main/java/com/proprofessor/server/diagram/repository/DiagramRepository.java), plus `dto/` and `mapper/`.
 
-- CRUD at `/api/v1/diagrams` (+ `GET /by-title/{title}` for embed resolution). `content` rides
-  as a Jackson `JsonNode` and is stored as jsonb; the server only requires a JSON object —
-  **ajv on the frontend is the single content validator**.
-- `PUT /{id}` accepts `snapshot: true` → inserts a `diagram_revisions` row of the current
-  content before overwriting.
-- **AI edit**: [DiagramAiController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/ai/DiagramAiController.java)
-  streams `POST /{id}/ai-edit` as SSE (`diagram.start/chunk/done/error`), mirroring the notes AI
-  route. [DiagramAiService](../backend/central-server/src/main/java/com/proprofessor/server/diagram/ai/DiagramAiService.java)
-  reuses `ChatCompletionClient` (Ollama / AI Service) with a **JSON-only command-list system
-  prompt**; chunks are progress-display only — the client applies nothing until `diagram.done`
-  delivers the full buffered reply. The repair retry is client-driven: an invalid reply comes
-  back with `priorReply` + `validationErrors` and the conversation is rebuilt with that feedback.
-
-> The in-app AI system prompts live in `DiagramAiService` (command-list *editing* contract) and
-> `NotesAiService` (full-note rewrite). For **external** models authoring paste-ready files, use
-> the repo-root [skills/](../skills/README.md) folder instead — different contract, deliberately
-> not shared.
+- CRUD at `/api/v1/diagrams`: list, `GET /{id}`, `GET /by-title/{title}` (for `[[Title.diagram]]`
+  link resolution), `POST`, `PUT /{id}`, `DELETE /{id}`.
+- `content` rides as a Jackson `JsonNode` and is stored as jsonb; the server only requires it to be
+  a JSON object — there is no server-side scene schema (Excalidraw's `restore` normalises on load).
 
 ## 4. Frontend (`src/modules/diagram/`)
 
-Dependency rule: `model → commands → adapter → renderer` — the domain never imports the renderer.
+A thin module — the editor is a wrapper around `<Excalidraw>`; there is no domain/adapter/renderer
+layering (Excalidraw is the model + renderer).
 
 | Layer | Files | Role |
 | --- | --- | --- |
-| `model/` | 4 namespace slices (`semantic`, `layout`, `viewport`, `selection`) + `doc`/`history` bookkeeping, combined under `state.diagram` | single source of truth in the existing RTK store |
-| `schema/` | `diagram.schema.json`, `aiPatch.schema.json`, `validate.ts` | **the single ajv gate** — every load, save, command and AI patch passes `validateBundle` |
-| `commands/` | `ops.ts` (pure op appliers) + thunks + `model/historySlice` | every mutation = validated op returning `{redo, undo}`; Ctrl+Z/Ctrl+Shift+Z replay the inverse-command stack (per-diagram) |
-| `layout/` | `LayoutStrategy` + `NearParentPlacement` | places ONLY new node ids; frozen entries are never rewritten |
-| `adapter/` | `ReactFlowAdapter.ts` | domain→RF memoized selectors; RF→domain guarded commits (drag-end → `moveNodeCommand`, layout only) |
-| `renderer/` | `DiagramRenderer` (the one RF mount, lazy-loaded), `DiagramCanvas` (store-connected, local mirror for smooth drags) | |
-| `ai/` | `runAiEdit` → `patchParser` → `applyAiPatch` | buffer → parse (strips prose/fences) → ajv → **atomic** apply as ONE history entry → save with `snapshot:true`; ≤1 repair retry, never after a user Stop |
-| `persistence/` | `bundleIO.ts` | validate-in/validate-out save + load payload builders |
-| `nodes/`, `edges/` | `registry.ts` + components | adding a type = one component + one registry line + its name in `NODE_TYPES`/`EDGE_TYPES` (a sync test enforces the two match) |
-| `components/` | `DiagramAiBar`, `DiagramEmbed`, `ImportDiagramDialog` | AI bar; wiki embed (store-free, read-only, edit via deep link); paste-a-JSON import |
-| `screens/` | `DiagramsScreen` (routes `/diagrams`, `/diagrams/:diagramId`) | list + editor + AI bar + import |
+| `types/` | `index.ts` | the `DiagramScene` document type |
+| `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
+| `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) |
+| `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/:diagramId`) | diagram list + `<DiagramEditor>` |
 
-Behavioral guarantees (all covered by vitest tests):
-- A drag can never touch `semantic` (byte-identical before/after layout-only changes).
-- An AI edit never moves an existing node; only new ids get placed.
-- A malformed AI patch (or any invalid command) leaves the store byte-identical.
-- Undo of a delete restores exact document order (index-aware inverse actions).
+Save/load: `DiagramEditor` loads a scene with `restore(content)`, seeds the professional tool
+defaults, and mounts `<Excalidraw>`. `onChange` is debounced (~800ms) and skipped when the scene
+version (`getSceneVersion`) is unchanged, so selection/pointer events don't trigger saves. Save
+serialises with `serializeAsJSON(..., "database")` and `PUT`s the scene.
 
-## 5. Embeds & the fence
+## 5. Referencing a diagram from a note
 
-- `![[Title.diagram]]` in a note transcludes the diagram:
-  [useWikiHandlers](../frontend/src/modules/notes/hooks/useWikiHandlers.tsx) routes `.diagram`
-  targets to [DiagramEmbed](../frontend/src/modules/diagram/components/DiagramEmbed.tsx), which
-  resolves by title, renders read-only (ephemeral RF mode — drags never commit), and deep-links
-  to `/diagrams/:id` for editing. Embeds are store-free, so many can coexist.
-- The ```reactflow-json fence remains for quick throwaway diagrams in chat/notes; it parses a
-  tolerant shape into an ephemeral bundle and renders through the same adapter/renderer
-  (keyed by source so edits re-render). Persistent, AI-editable diagrams are `.diagram` documents.
+A note references a standalone diagram with a **link**, not an inline render:
+`[[Title.diagram]]`. [useWikiHandlers](../frontend/src/modules/notes/hooks/useWikiHandlers.tsx)'s
+`onLinkClick` detects the `.diagram` suffix (`DIAGRAM_SUFFIX`), resolves the title→id via
+`diagramsRoute.getDiagramByTitle`, and navigates to `/diagrams/:id`. There is no inline diagram
+embed.
 
-## 6. Importing externally authored diagrams
-
-`Diagrams → Import` (ImportDiagramDialog) accepts a pasted DiagramBundle JSON, runs it through
-`validateBundle`, and creates the diagram on success. The authoring contract external AI models
-follow lives in [skills/pro-professor-diagrams](../skills/pro-professor-diagrams/SKILL.md);
-notes have the equivalent in [skills/pro-professor-notes](../skills/pro-professor-notes/SKILL.md).
+**Diagrams drawn *inside* a note** use **Mermaid**: a ```mermaid fenced block renders inline via
+[MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx) (the `language-mermaid` case in
+[Markdown.tsx](../frontend/src/components/common/Markdown.tsx)). Mermaid is the tool for quick
+in-note diagrams; the Excalidraw `/diagrams` module is for standalone, hand-drawn diagrams linked
+from notes.

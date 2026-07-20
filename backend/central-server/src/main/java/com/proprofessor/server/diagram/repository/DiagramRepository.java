@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.proprofessor.server.db.Tables.DIAGRAMS;
-import static com.proprofessor.server.db.Tables.DIAGRAM_REVISIONS;
 
 @Repository
 public class DiagramRepository {
@@ -62,14 +61,6 @@ public class DiagramRepository {
 
     public void deleteById(long id) {
         dsl.deleteFrom(DIAGRAMS).where(DIAGRAMS.ID.eq(id)).execute();
-    }
-
-    /** Snapshots the current content before an overwrite (AI edit / restore). */
-    public void insertRevision(long diagramId, String contentJson) {
-        dsl.insertInto(DIAGRAM_REVISIONS)
-                .set(DIAGRAM_REVISIONS.DIAGRAM_ID, diagramId)
-                .set(DIAGRAM_REVISIONS.CONTENT, JSONB.valueOf(contentJson))
-                .execute();
     }
 
     private DiagramRow toRow(Record r) {

@@ -9,9 +9,9 @@ import com.proprofessor.server.settings.repository.SettingsRepository;
 import org.springframework.stereotype.Service;
 
 /**
- * Global default inference params. The Notes and Diagrams AI actions read their defaults here (chat
- * carries its own per-conversation settings and does not use this). The settings page reads and writes
- * these via {@link com.proprofessor.server.settings.SettingsController}.
+ * Global default inference params. The Notes AI actions read their defaults here (chat carries its
+ * own per-conversation settings and does not use this). The settings page reads and writes these via
+ * {@link com.proprofessor.server.settings.SettingsController}.
  */
 @Service
 public class SettingsService {
@@ -24,22 +24,17 @@ public class SettingsService {
 
     public SettingsResponse get() {
         AppSettingsRow row = settingsRepository.find();
-        return new SettingsResponse(row.notes(), row.diagram());
+        return new SettingsResponse(row.notes());
     }
 
     public SettingsResponse update(SettingsUpdateRequest request) {
-        settingsRepository.update(request.notes(), request.diagram());
+        settingsRepository.update(request.notes());
         return get();
     }
 
     /** Defaults applied to Notes AI actions (rewrite/summarize/continue). */
     public InferenceOptions notesInferenceOptions() {
         return toOptions(settingsRepository.find().notes());
-    }
-
-    /** Defaults applied to Diagram AI edits. */
-    public InferenceOptions diagramInferenceOptions() {
-        return toOptions(settingsRepository.find().diagram());
     }
 
     private static InferenceOptions toOptions(InferenceDefaults d) {

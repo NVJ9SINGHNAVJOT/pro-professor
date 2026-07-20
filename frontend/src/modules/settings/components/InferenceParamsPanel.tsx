@@ -36,7 +36,7 @@ interface InferenceParamsPanelProps {
 }
 
 /**
- * A default-inference-params editor for one feature (Notes or Diagrams): the same preset cards +
+ * A default-inference-params editor for a feature (e.g., Notes): the same preset cards +
  * sliders the chat panel uses, plus a Reset. Fully controlled — the screen owns the state.
  */
 const InferenceParamsPanel = ({ title, description, params, onChange, onReset }: InferenceParamsPanelProps) => {
