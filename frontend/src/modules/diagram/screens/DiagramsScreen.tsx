@@ -69,7 +69,7 @@ const DiagramsScreen = () => {
   return (
     <div className="flex h-full min-h-0">
       {/* ── List ── */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-neutral-800 bg-chat-sidebar">
+      <aside className="flex w-67.5 shrink-0 flex-col border-r border-neutral-800 bg-chat-sidebar">
         <LeftNav />
         <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
           <span className="caption-small-medium text-neutral-300">Diagrams</span>
@@ -125,9 +125,7 @@ const DiagramsScreen = () => {
       {/* ── Editor ── */}
       <main className="flex min-w-0 flex-1 flex-col">
         {openId !== null ? (
-          <Suspense
-            fallback={<span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>}
-          >
+          <Suspense fallback={<span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>}>
             <DiagramEditor key={openId} diagramId={openId} onSaved={refreshList} />
           </Suspense>
         ) : (
