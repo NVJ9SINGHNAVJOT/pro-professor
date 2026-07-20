@@ -9,7 +9,8 @@ import type { SelectedModel } from "@/modules/chat/types";
 export function useDefaultSelectedModel(): SelectedModel | null {
   const models = useAppSelector((state) => state.models.models);
   return useMemo(() => {
-    const fallback = models.find((model) => model.isActive) ?? models[0];
+    const validModels = models.filter((m) => m.role !== "embedding" && !m.name.toLowerCase().includes("embed"));
+    const fallback = validModels.find((model) => model.isActive) ?? validModels[0];
     if (!fallback) return null;
     return {
       provider: fallback.provider,

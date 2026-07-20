@@ -25,11 +25,13 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** Dropdown alignment relative to the trigger — "end" for right-edge placements. */
   align?: "start" | "end";
+  /** Optional filter to exclude certain models (like embeddings) from the list. */
+  filter?: (model: ProviderModel) => boolean;
 }
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
 
-const ModelSelector = ({ value, onChange, disabled, align = "start" }: ModelSelectorProps) => {
+const ModelSelector = ({ value, onChange, disabled, align = "start", filter }: ModelSelectorProps) => {
   const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
@@ -48,6 +50,7 @@ const ModelSelector = ({ value, onChange, disabled, align = "start" }: ModelSele
   const groups = useMemo(() => {
     const byProvider = new Map<ModelProvider, ProviderModel[]>();
     for (const m of models) {
+      if (filter && !filter(m)) continue;
       const list = byProvider.get(m.provider) ?? [];
       list.push(m);
       byProvider.set(m.provider, list);
@@ -58,7 +61,7 @@ const ModelSelector = ({ value, onChange, disabled, align = "start" }: ModelSele
       return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);
     });
     return ordered.map((provider) => ({ provider, items: byProvider.get(provider)! }));
-  }, [models]);
+  }, [models, filter]);
 
   const renderItem = (m: ProviderModel) => {
     const provider = PROVIDER_META[m.provider];

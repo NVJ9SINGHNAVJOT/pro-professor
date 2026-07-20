@@ -61,14 +61,22 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagramId]);
 
+  const titleRef = useRef(title);
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
+
   const doSave = useCallback(
-    async () => {
+    async (overrideTitle?: string | React.MouseEvent | Event) => {
       const api = apiRef.current;
       if (!api) return;
       const elements = api.getSceneElements();
       const content = JSON.parse(serializeAsJSON(elements, api.getAppState(), api.getFiles(), "database"));
       setSaveState("saving");
-      const res = await updateDiagram(diagramId, { content });
+      
+      const titleToSave = typeof overrideTitle === "string" ? overrideTitle : titleRef.current;
+      const res = await updateDiagram(diagramId, { title: titleToSave, content });
+      
       if (res.error) {
         setSaveState("idle");
         toast.error("Failed to save diagram");
@@ -96,7 +104,17 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
-        <h1 className="min-w-0 truncate para-medium-semibold">{title}</h1>
+        <input
+          value={title}
+          spellCheck={false}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            if (saveTimer.current) clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => doSave(e.target.value), 800);
+          }}
+          className="min-w-0 flex-1 truncate bg-transparent para-medium-semibold outline-none"
+          placeholder="Untitled Diagram"
+        />
         <span className="ml-auto caption-small-regular text-neutral-500">
           {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
         </span>

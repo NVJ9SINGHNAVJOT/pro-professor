@@ -227,7 +227,9 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
         {filtered.length === 0 && (
           <div className="px-2 caption-regular text-neutral-500">{searching ? "No notes found" : "No notes yet"}</div>
         )}
-        {filtered.map((note) => noteEntry(note))}
+        <div className="flex flex-col gap-y-0.5">
+          {filtered.map((note) => noteEntry(note))}
+        </div>
       </div>
     </aside>
   );

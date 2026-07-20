@@ -17,10 +17,11 @@ import {
   ListPlusIcon,
   NotebookPenIcon,
   NotebookTextIcon,
-  PanelRightCloseIcon,
+  
   PanelRightOpenIcon,
-  SaveIcon,
+  
   SparklesIcon,
+  
   SquarePenIcon,
   TextQuoteIcon,
   WandSparklesIcon,
@@ -29,6 +30,9 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/common/toast";
 import Markdown from "@/components/common/Markdown";
+import NotesBar from "@/modules/notes/components/NotesBar";
+import { useNoteAi, type AiBarCommand } from "@/modules/notes/hooks/useNoteAi";
+
 import { TextareaInput } from "@/components/inputs/TextareaInput";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -38,7 +42,6 @@ import NoteList from "@/modules/notes/components/NoteList";
 import ContextPanel from "@/modules/notes/components/ContextPanel";
 import SplitPane from "@/modules/notes/components/SplitPane";
 import GraphView from "@/modules/notes/components/GraphView";
-import AiBar, { type AiBarCommand } from "@/modules/notes/components/AiBar";
 import RevisionList from "@/modules/notes/components/RevisionList";
 import CommandPalette, { type PaletteCommand } from "@/modules/notes/components/CommandPalette";
 import SlashMenu from "@/modules/notes/components/SlashMenu";
@@ -63,11 +66,10 @@ import type { NoteViewMode } from "@/modules/notes/types";
 import {
   HEADING_SCROLL_DELAY_MS,
   MERMAID_TEMPLATE,
-  VIEW_MODES,
+  
   type SlashCommand,
 } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
-import { cn } from "@/lib/utils";
 
 /** Obsidian-like three-pane workspace: explorer | editor⟷preview | outline/tags. */
 const NotesScreen = () => {
@@ -84,6 +86,8 @@ const NotesScreen = () => {
   const [note, setNote] = useState<NoteDetail | null>(null);
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [savedTitle, setSavedTitle] = useState("");
   const [viewMode, setViewMode] = useState<NoteViewMode>("split");
   const [contextOpen, setContextOpen] = useState(true);
   const [graphOpen, setGraphOpen] = useState(false);
@@ -99,17 +103,6 @@ const NotesScreen = () => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const wiki = useWikiHandlers();
 
-  const dirty = note !== null && content !== savedContent && !aiBusy;
-
-  /** Applies a fresh detail from the server (AI save, restore) to every bit of local state. */
-  const applyDetail = (detail: NoteDetail) => {
-    setNote(detail);
-    setContent(detail.content);
-    setSavedContent(detail.content);
-    dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
-    setRevisionRefresh((key) => key + 1);
-  };
-
   /** The AI action saved the note server-side — pull the fresh copy (title/tags may have changed). */
   const refetchAfterAi = async () => {
     if (!noteId) return;
@@ -117,12 +110,37 @@ const NotesScreen = () => {
     if (!res.error) applyDetail(res.response.data);
   };
 
+  const aiInputRef = useRef<HTMLInputElement | null>(null);
+  const ai = useNoteAi(
+    note?.id,
+    setContent,
+    refetchAfterAi,
+    setAiBusy
+  );
+
+  const dirty = note !== null && (content !== savedContent || title !== savedTitle) && !aiBusy;
+
+  /** Applies a fresh detail from the server (AI save, restore) to every bit of local state. */
+  const applyDetail = (detail: NoteDetail) => {
+    setNote(detail);
+    setContent(detail.content);
+    setSavedContent(detail.content);
+    setTitle(detail.title);
+    setSavedTitle(detail.title);
+    dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
+    setRevisionRefresh((key) => key + 1);
+  };
+
+
+
   // Load (or reset) the note when the route param changes.
   useEffect(() => {
     if (!noteId) {
       setNote(null);
       setContent("");
       setSavedContent("");
+      setTitle("");
+      setSavedTitle("");
       return;
     }
     (async () => {
@@ -136,6 +154,8 @@ const NotesScreen = () => {
       setNote(detail);
       setContent(detail.content);
       setSavedContent(detail.content);
+      setTitle(detail.title);
+      setSavedTitle(detail.title);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
@@ -153,15 +173,12 @@ const NotesScreen = () => {
 
   const handleSave = async () => {
     if (!note || saving || aiBusy) return;
-    const res = await updateNote(note.id, { content });
+    const res = await updateNote(note.id, { title, content });
     if (res.error) {
       toast.error(res.error.message || "Failed to save note");
       return;
     }
-    const detail = res.response.data;
-    setNote(detail);
-    setSavedContent(content);
-    dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
+    applyDetail(res.response.data);
   };
 
   // Cmd/Ctrl+S saves the active note. The ref always points at the latest save
@@ -238,6 +255,15 @@ const NotesScreen = () => {
     const pos = measureCaret(textarea, lineStart);
     setSlash({ start: lineStart, query: match[1], anchor: { top: pos.top + pos.lineHeight + 2, left: pos.left } });
   };
+
+  // Execute a command handed down from the Cmd+P palette.
+  useEffect(() => {
+    if (!aiCommand) return;
+    if (aiCommand === "focus") aiInputRef.current?.focus();
+    else ai.runAction(aiCommand, () => aiInputRef.current?.focus());
+    setAiCommand(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiCommand]);
 
   const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
@@ -410,86 +436,19 @@ const NotesScreen = () => {
     if (note) {
       return (
         <>
-          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
-            <h1 className="min-w-0 truncate para-medium-semibold">{note.title}</h1>
-            {dirty && <span className="size-2 shrink-0 rounded-full bg-amber-400" title="Unsaved changes" />}
-            <div className="ml-auto flex shrink-0 items-center gap-x-1">
-              <button
-                type="button"
-                onClick={() => setGraphOpen(true)}
-                aria-label="Open graph view"
-                title="Graph view"
-                className="mr-1 cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-              >
-                <WaypointsIcon className="size-4.5" />
-              </button>
-              <div className="mr-2 flex items-center rounded-lg bg-neutral-900 p-0.5">
-                {VIEW_MODES.map(({ mode, label, icon: Icon }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setViewMode(mode)}
-                    aria-label={label}
-                    title={label}
-                    className={cn(
-                      "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
-                      viewMode === mode && "bg-neutral-700 text-white",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!dirty || saving}
-                aria-label="Save note"
-                title="Save (⌘S)"
-                className={cn(
-                  "flex cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1.5 para-small-medium transition-colors",
-                  dirty && !saving
-                    ? "bg-white text-black hover:bg-neutral-200"
-                    : "cursor-not-allowed bg-neutral-800 text-neutral-500",
-                )}
-              >
-                <SaveIcon className="size-4" />
-                {saving ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen((open) => !open)}
-                aria-label="Revision history"
-                title="Revision history"
-                className={cn(
-                  "cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800",
-                  historyOpen && "bg-neutral-800 text-white",
-                )}
-              >
-                <HistoryIcon className="size-4.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setContextOpen((open) => !open)}
-                aria-label="Toggle context panel"
-                className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-              >
-                {contextOpen ? (
-                  <PanelRightCloseIcon className="size-4.5" />
-                ) : (
-                  <PanelRightOpenIcon className="size-4.5" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <AiBar
-            noteId={note.id}
-            pendingCommand={aiCommand}
-            onCommandHandled={() => setAiCommand(null)}
-            onContent={setContent}
-            onSaved={refetchAfterAi}
-            onBusyChange={setAiBusy}
+          <NotesBar
+            ai={ai}
+            aiInputRef={aiInputRef}
+            dirty={dirty}
+            saving={saving}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            historyOpen={historyOpen}
+            setHistoryOpen={setHistoryOpen}
+            contextOpen={contextOpen}
+            setContextOpen={setContextOpen}
+            setGraphOpen={setGraphOpen}
+            onSave={handleSave}
           />
 
           <div className="relative min-h-0 flex-1">
@@ -548,5 +507,8 @@ const NotesScreen = () => {
     </div>
   );
 };
+
+
+
 
 export default NotesScreen;

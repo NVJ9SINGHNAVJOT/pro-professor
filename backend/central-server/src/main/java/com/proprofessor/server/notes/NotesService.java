@@ -126,14 +126,10 @@ public class NotesService {
                 .orElseThrow(() -> new ResourceNotFoundException("Note not found: " + id));
     }
 
-    /** Title precedence: frontmatter {@code title} → request title → first Markdown heading → "Untitled". */
+    /** Title precedence: frontmatter {@code title} → request title → "Untitled". */
     private static String resolveTitle(Frontmatter frontmatter, String requestTitle, String content) {
         String title = frontmatter.title();
         if (title == null && requestTitle != null && !requestTitle.isBlank()) title = requestTitle.trim();
-        if (title == null) {
-            Matcher heading = FIRST_HEADING.matcher(frontmatter.body());
-            if (heading.find()) title = heading.group(1).trim();
-        }
         if (title == null || title.isBlank()) title = DEFAULT_TITLE;
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
     }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2, SquarePenIcon } from "lucide-react";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { ROUTES } from "@/constants/routes";
@@ -54,48 +54,51 @@ const DiagramsScreen = () => {
   };
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* ── List ── */}
-      <aside className="flex w-67.5 shrink-0 flex-col border-r border-neutral-800 bg-chat-sidebar">
+      <aside className="flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden border-r border-neutral-800 bg-chat-sidebar text-white">
         <LeftNav />
-        <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
-          <span className="caption-small-medium text-neutral-300">Diagrams</span>
+        <div className="flex h-11.5 shrink-0 items-center px-2">
           <button
             type="button"
             onClick={create}
-            aria-label="New diagram"
-            className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex w-full cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800"
           >
-            <Plus size={16} />
+            <SquarePenIcon className="size-4.5" />
+            New diagram
           </button>
         </div>
-        <ul className="min-h-0 flex-1 overflow-y-auto py-1">
-          {diagrams.map((diagram) => (
-            <li key={diagram.id} className="group flex items-center">
+        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          {diagrams.length === 0 && (
+            <div className="px-2 caption-regular text-neutral-500">No diagrams yet</div>
+          )}
+          <div className="flex flex-col gap-y-0.5">
+            {diagrams.map((diagram) => (
               <button
+                key={diagram.id}
                 type="button"
                 onClick={() => navigate(ROUTES.DIAGRAMS_DETAIL(diagram.id))}
                 className={cn(
-                  "min-w-0 flex-1 cursor-pointer truncate px-3 py-1.5 text-left caption-small-regular hover:bg-neutral-900",
-                  openId === diagram.id ? "text-sky-400" : "text-neutral-300",
+                  "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-neutral-800",
+                  openId === diagram.id && "bg-neutral-800"
                 )}
               >
-                {diagram.title}
+                <span className="truncate para-small-medium text-white">{diagram.title}</span>
+                <div
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(diagram.id);
+                  }}
+                  aria-label={`Delete ${diagram.title}`}
+                  className="shrink-0 cursor-pointer rounded p-1 text-neutral-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                >
+                  <Trash2 size={16} />
+                </div>
               </button>
-              <button
-                type="button"
-                onClick={() => remove(diagram.id)}
-                aria-label={`Delete ${diagram.title}`}
-                className="mr-2 hidden cursor-pointer rounded-md p-1 text-neutral-500 hover:text-red-400 group-hover:block"
-              >
-                <Trash2 size={14} />
-              </button>
-            </li>
-          ))}
-          {diagrams.length === 0 && (
-            <li className="px-3 py-2 caption-small-regular text-neutral-500">No diagrams yet — create one.</li>
-          )}
-        </ul>
+            ))}
+          </div>
+        </div>
       </aside>
 
       {/* ── Editor ── */}
