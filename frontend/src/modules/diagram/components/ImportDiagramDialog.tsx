@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { validateBundle } from "@/modules/diagram/schema/validate";
-import type { DiagramBundle } from "@/modules/diagram/types";
+import { isDiagramScene } from "@/modules/diagram/persistence/bundleIO";
+import type { DiagramScene } from "@/modules/diagram/types";
 import { cn } from "@/lib/utils";
 
 interface ImportDiagramDialogProps {
   open: boolean;
   onClose: () => void;
-  /** Receives an already-validated bundle; returns an error message to display, or null on success. */
-  onImport: (title: string, bundle: DiagramBundle) => Promise<string | null>;
+  /** Receives a parsed Excalidraw scene; returns an error message to display, or null on success. */
+  onImport: (title: string, scene: DiagramScene) => Promise<string | null>;
 }
 
 /**
- * Paste-a-.diagram dialog: JSON in → ajv gate → create. The paste path for
- * externally authored documents (see skills/pro-professor-diagrams).
+ * Paste-an-Excalidraw-scene dialog: JSON in → shape check → create. Accepts a
+ * `.excalidraw` export ({ type, elements, appState, files }).
  */
 const ImportDiagramDialog = ({ open, onClose, onImport }: ImportDiagramDialogProps) => {
   const [title, setTitle] = useState("");
@@ -25,16 +25,15 @@ const ImportDiagramDialog = ({ open, onClose, onImport }: ImportDiagramDialogPro
     try {
       parsed = JSON.parse(json);
     } catch {
-      setError("Not valid JSON — paste the complete .diagram document.");
+      setError("Not valid JSON — paste a complete Excalidraw scene.");
       return;
     }
-    const result = validateBundle(parsed);
-    if (!result.ok) {
-      setError(result.errors[0]);
+    if (!isDiagramScene(parsed)) {
+      setError("Not an Excalidraw scene — expected an object with an `elements` array.");
       return;
     }
     setBusy(true);
-    const failure = await onImport(title.trim() || "Imported Diagram", result.bundle);
+    const failure = await onImport(title.trim() || "Imported Diagram", parsed);
     setBusy(false);
     if (failure) {
       setError(failure);
@@ -73,7 +72,7 @@ const ImportDiagramDialog = ({ open, onClose, onImport }: ImportDiagramDialogPro
             }}
             rows={10}
             spellCheck={false}
-            placeholder='Paste the .diagram JSON here — {"schemaVersion":"1.0.0","semantic":{…},"layout":{},…}'
+            placeholder='Paste an Excalidraw scene here — {"type":"excalidraw","elements":[…],"appState":{…}}'
             className="resize-none rounded-lg border border-neutral-700 bg-transparent px-3 py-2 font-mono caption-small-regular outline-none placeholder:text-neutral-500 focus:border-neutral-500"
           />
           {error && <span className="caption-small-regular text-red-400">{error}</span>}

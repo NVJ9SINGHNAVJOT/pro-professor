@@ -5,7 +5,6 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import MermaidBlock from "@/components/common/MermaidBlock";
-import FlowBlock from "@/components/common/FlowBlock";
 import { cn } from "@/lib/utils";
 
 /* ── Obsidian-style callouts ──────────────────────────────────────────────────
@@ -141,16 +140,13 @@ const parseWikiHref = (href: string, prefix: string): { target: string; heading?
 };
 
 /**
- * ```mermaid and ```reactflow-json fences render as diagrams (both lazy-loaded);
- * everything else stays a plain code block.
+ * ```mermaid fences render as diagrams (lazy-loaded); everything else stays a
+ * plain code block.
  */
 const baseComponents: Components = {
   code: ({ className, children, ...props }) => {
     if (/language-mermaid\b/.test(className ?? "")) {
       return <MermaidBlock code={String(children).trim()} />;
-    }
-    if (/language-reactflow-json\b/.test(className ?? "")) {
-      return <FlowBlock code={String(children).trim()} />;
     }
     return (
       <code className={className} {...props}>

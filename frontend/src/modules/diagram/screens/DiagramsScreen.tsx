@@ -5,33 +5,25 @@ import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
 import { ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
-import store, { useAppDispatch, useAppSelector } from "@/redux/store";
 import { diagramsRoute, type DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
-import { buildSavePayload, parseLoadedDiagram } from "@/modules/diagram/persistence/bundleIO";
-import { makeSampleBundle } from "@/modules/diagram/schema/sampleBundle";
-import { diagramClosed } from "@/modules/diagram/model/actions";
-import { selectDiagramDoc } from "@/modules/diagram/model/selectors";
-import DiagramAiBar from "@/modules/diagram/components/DiagramAiBar";
+import { makeEmptyScene } from "@/modules/diagram/persistence/bundleIO";
 import ImportDiagramDialog from "@/modules/diagram/components/ImportDiagramDialog";
-import type { DiagramBundle } from "@/modules/diagram/types";
+import type { DiagramScene } from "@/modules/diagram/types";
 import { cn } from "@/lib/utils";
 
-// Lazy like FlowBlock: the canvas carries the React Flow runtime + styles.
-const DiagramCanvas = lazy(() => import("@/modules/diagram/renderer/DiagramCanvas"));
+// Lazy: the editor carries the Excalidraw runtime + styles.
+const DiagramEditor = lazy(() => import("@/modules/diagram/components/DiagramEditor"));
 
-/** Diagram list + editable canvas. New diagrams start from the sample starter (AI editing arrives in Phase 4). */
+/** Diagram list + Excalidraw editor. New diagrams start from an empty scene. */
 const DiagramsScreen = () => {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { diagramId } = useParams();
-  const doc = useAppSelector(selectDiagramDoc);
+  const openId = diagramId && Number.isFinite(Number(diagramId)) ? Number(diagramId) : null;
   const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
   const [importOpen, setImportOpen] = useState(false);
 
   const { execute: fetchDiagrams } = useApi(diagramsRoute.getDiagrams);
-  const { execute: fetchDiagram } = useApi(diagramsRoute.getDiagram);
   const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
-  const { execute: updateDiagram, loading: saving } = useApi(diagramsRoute.updateDiagram);
   const { execute: deleteDiagram } = useApi(diagramsRoute.deleteDiagram);
 
   const refreshList = async () => {
@@ -41,36 +33,11 @@ const DiagramsScreen = () => {
 
   useEffect(() => {
     refreshList();
-    return () => {
-      dispatch(diagramClosed());
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const open = async (id: number) => {
-    const res = await fetchDiagram(id);
-    if (res.error) {
-      toast.error("Failed to load diagram");
-      return;
-    }
-    const parsed = parseLoadedDiagram(res.response.data);
-    if ("errors" in parsed) {
-      toast.error(`Invalid diagram: ${parsed.errors[0]}`);
-      return;
-    }
-    dispatch(parsed.action);
-  };
-
-  // /diagrams/:diagramId deep link (embeds' edit button, reload) opens that diagram
-  useEffect(() => {
-    const id = Number(diagramId);
-    if (diagramId && Number.isFinite(id)) open(id);
-    else dispatch(diagramClosed());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diagramId]);
-
   const create = async () => {
-    const res = await createDiagram({ title: "Untitled Diagram", content: makeSampleBundle() });
+    const res = await createDiagram({ title: "Untitled Diagram", content: makeEmptyScene() });
     if (res.error) {
       toast.error("Failed to create diagram");
       return;
@@ -79,30 +46,14 @@ const DiagramsScreen = () => {
     navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
   };
 
-  /** Import-dialog callback: the bundle is already ajv-validated; persist and open it. */
-  const importDiagram = async (title: string, bundle: DiagramBundle): Promise<string | null> => {
-    const res = await createDiagram({ title, content: bundle });
+  /** Import-dialog callback: an Excalidraw scene is created and opened. */
+  const importDiagram = async (title: string, scene: DiagramScene): Promise<string | null> => {
+    const res = await createDiagram({ title, content: scene });
     if (res.error) return "Failed to create diagram";
     await refreshList();
     setImportOpen(false);
     navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
     return null;
-  };
-
-  const save = async (snapshot = false) => {
-    if (doc.id === null) return;
-    const built = buildSavePayload(store.getState());
-    if ("errors" in built) {
-      toast.error(`Cannot save: ${built.errors[0]}`);
-      return;
-    }
-    const res = await updateDiagram(doc.id, { ...built.payload, ...(snapshot ? { snapshot: true } : {}) });
-    if (res.error) {
-      toast.error("Failed to save diagram");
-      return;
-    }
-    toast.success("Diagram saved");
-    refreshList();
   };
 
   const remove = async (id: number) => {
@@ -111,7 +62,7 @@ const DiagramsScreen = () => {
       toast.error("Failed to delete diagram");
       return;
     }
-    if (doc.id === id) navigate(ROUTES.DIAGRAMS);
+    if (openId === id) navigate(ROUTES.DIAGRAMS);
     refreshList();
   };
 
@@ -127,7 +78,7 @@ const DiagramsScreen = () => {
               type="button"
               onClick={() => setImportOpen(true)}
               aria-label="Import diagram"
-              title="Import a .diagram JSON"
+              title="Import an Excalidraw scene"
               className="cursor-pointer rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
             >
               <ClipboardPaste size={16} />
@@ -150,7 +101,7 @@ const DiagramsScreen = () => {
                 onClick={() => navigate(ROUTES.DIAGRAMS_DETAIL(diagram.id))}
                 className={cn(
                   "min-w-0 flex-1 cursor-pointer truncate px-3 py-1.5 text-left caption-small-regular hover:bg-neutral-900",
-                  doc.id === diagram.id ? "text-sky-400" : "text-neutral-300",
+                  openId === diagram.id ? "text-sky-400" : "text-neutral-300",
                 )}
               >
                 {diagram.title}
@@ -171,31 +122,14 @@ const DiagramsScreen = () => {
         </ul>
       </aside>
 
-      {/* ── Canvas ── */}
+      {/* ── Editor ── */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {doc.loaded ? (
-          <>
-            <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
-              <span className="caption-small-medium text-neutral-200">{doc.title}</span>
-              <button
-                type="button"
-                onClick={() => save()}
-                disabled={saving}
-                className="cursor-pointer rounded-md border border-neutral-700 px-3 py-1 caption-small-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-            {doc.id !== null && (
-              // AI edit applies to the store; a valid patch is then saved with a revision snapshot
-              <DiagramAiBar diagramId={doc.id} onApplied={() => save(true)} />
-            )}
-            <Suspense
-              fallback={<span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>}
-            >
-              <DiagramCanvas className="m-4 h-auto flex-1" />
-            </Suspense>
-          </>
+        {openId !== null ? (
+          <Suspense
+            fallback={<span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>}
+          >
+            <DiagramEditor key={openId} diagramId={openId} onSaved={refreshList} />
+          </Suspense>
         ) : (
           <div className="flex flex-1 items-center justify-center caption-small-regular text-neutral-500">
             Select or create a diagram

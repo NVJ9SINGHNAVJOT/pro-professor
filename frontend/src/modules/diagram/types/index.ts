@@ -1,58 +1,51 @@
 /* ── Diagram domain types ─────────────────────────────────────────────────────
- * The on-row / on-wire format is a single JSON document with four namespaces:
- * `semantic` (AI-owned, no coordinates), `layout` (user-owned positions),
- * `theme` and `metadata`. React Flow never sees these types directly — the
- * adapter translates them (see docs/diagram-engine-execution-plan.md §3).
+ * Diagrams are stored as Excalidraw scenes (elements + appState + files). Our
+ * only additions are logical ids on `customData` (nodeId/edgeId) so AI command
+ * edits can resolve "which element is Redis" across saves. The AI never emits
+ * geometry — see schema/aiPatch.schema.json and ai/applyCommandsToScene.
  */
 
 export type NodeId = string;
 export type EdgeId = string;
 
-/** Registered node type names — the registry (nodes/registry.ts) keys off this list. */
-export const NODE_TYPES: readonly string[] = ["service", "database", "note"];
-/** Registered edge type names — the registry (edges/) keys off this list. */
-export const EDGE_TYPES: readonly string[] = ["straight", "curved"];
-
-export const DIAGRAM_SCHEMA_VERSION = "1.0.0";
-
-export interface SemNode {
-  id: NodeId;
-  type: string;
-  label: string;
-  data?: Record<string, unknown>;
+/** The stored diagram document — the canonical Excalidraw scene shape. */
+export interface DiagramScene {
+  type: "excalidraw";
+  version: number;
+  source: string;
+  elements: unknown[];
+  appState: Record<string, unknown>;
+  files: Record<string, unknown>;
 }
 
-export interface SemEdge {
-  id: EdgeId;
-  source: NodeId;
-  target: NodeId;
-  type: string;
-  label?: string;
+/** Node geometries we map onto native Excalidraw shapes. */
+export const SHAPE_KINDS = ["rectangle", "ellipse", "diamond"] as const;
+export type ShapeKind = (typeof SHAPE_KINDS)[number];
+
+/** Node styling the AI may set (CSS colors). */
+export interface NodeStyle {
+  fill?: string;
+  textColor?: string;
+  stroke?: string;
 }
 
-export interface LayoutEntry {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  collapsed?: boolean;
-  z?: number;
+/** Edge styling the AI may set. */
+export interface EdgeStyle {
+  dashed?: boolean;
+  arrow?: "none" | "end" | "both";
+  color?: string;
 }
 
-export interface DiagramMetadata {
-  created: string;
-  updated: string;
-  author?: string;
-  rendererVersion: string;
-}
-
-export interface DiagramBundle {
-  schemaVersion: string;
-  /** AI-owned meaning — never carries coordinates. */
-  semantic: { nodes: SemNode[]; edges: SemEdge[] };
-  /** User-owned arrangement — keyed by node id; keys must be a subset of semantic node ids. */
-  layout: Record<NodeId, LayoutEntry>;
-  /** Named theme ref in v1 (e.g. "default-dark"). */
-  theme: string;
-  metadata: DiagramMetadata;
-}
+/**
+ * The AI command list (schema/aiPatch.schema.json). A command references nodes
+ * and edges by their logical id (customData.nodeId / customData.edgeId); the
+ * applier folds these onto the scene. Layout is never part of the contract.
+ */
+export type DiagramCommand =
+  | { op: "addNode"; node: { id: NodeId; label: string; shape?: ShapeKind; style?: NodeStyle } }
+  | { op: "deleteNode"; id: NodeId }
+  | { op: "renameNode"; id: NodeId; label: string }
+  | { op: "connectNodes"; source: NodeId; target: NodeId; label?: string; id?: EdgeId }
+  | { op: "deleteEdge"; id: EdgeId }
+  | { op: "styleNode"; id: NodeId; shape?: ShapeKind; style?: NodeStyle }
+  | { op: "styleEdge"; id: EdgeId; style?: EdgeStyle };

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { toast } from "@/components/common/toast";
 import ModelSelector from "@/components/common/ModelSelector";
 import { useDefaultSelectedModel } from "@/hooks/useDefaultSelectedModel";
@@ -9,12 +10,14 @@ import { cn } from "@/lib/utils";
 
 interface DiagramAiBarProps {
   diagramId: number;
-  /** A valid patch was applied to the store — persist it (with a revision snapshot). */
+  /** Live editor API accessor — the edit reads the scene from it and applies to it. */
+  getApi: () => ExcalidrawImperativeAPI | null;
+  /** A valid edit was applied to the scene — persist it (with a revision snapshot). */
   onApplied: () => void;
 }
 
-/** AI structure edits over the open diagram: instruction in, validated command list applied. */
-const DiagramAiBar = ({ diagramId, onApplied }: DiagramAiBarProps) => {
+/** AI edits over the open diagram: instruction in, Mermaid generation or command list applied. */
+const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
   const [instruction, setInstruction] = useState("");
   const [selected, setSelected] = useState<SelectedModel | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,6 +42,11 @@ const DiagramAiBar = ({ diagramId, onApplied }: DiagramAiBarProps) => {
       toast.error("No model available — activate a model first");
       return;
     }
+    const api = getApi();
+    if (!api) {
+      toast.error("The canvas is not ready yet");
+      return;
+    }
 
     setBusy(true);
     const result = await runAiEdit({
@@ -46,6 +54,7 @@ const DiagramAiBar = ({ diagramId, onApplied }: DiagramAiBarProps) => {
       instruction: instruction.trim(),
       provider: activeSelection.provider,
       model: activeSelection.model,
+      api,
       onController: (controller) => {
         abortRef.current = controller;
       },

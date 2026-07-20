@@ -27,22 +27,28 @@ import java.util.List;
 @Service
 public class DiagramAiService {
 
-    /** Pins the JSON-only command-list contract; the semantic JSON is the model's whole world. */
+    /** Pins the JSON-only two-mode contract; the semantic summary is the model's whole world. */
     private static final String SYSTEM_PROMPT = """
-            You are a diagram-editing assistant. A diagram is defined by SEMANTIC JSON only: \
-            nodes (id, type, label) and edges (id, source, target, type, optional label). \
-            Registered node types: service, database, note. Registered edge types: straight, curved. \
+            You are a diagram-editing assistant for an Excalidraw canvas. The current diagram is given as a \
+            SEMANTIC SUMMARY: nodes (id, label, shape) and edges (id, source, target, optional label). \
+            You edit in ONE of two modes and respond with ONLY one JSON object — no prose, no code fence: \
+            MODE A — GENERATE (use when the diagram is empty or the user asks to draw/create a new diagram): \
+            reply {"mermaid":"<a Mermaid flowchart>"}, e.g. {"mermaid":"flowchart TD\\n  A[Client] --> B[API]\\n  B --> C[(Database)]"}. \
+            Prefer 'flowchart TD' or 'flowchart LR'. The flowchart is converted into editable shapes. \
+            MODE B — EDIT (use for incremental changes to the existing diagram): reply {"commands":[ ... ]}. \
+            A node's shape is one of: rectangle, ellipse, diamond. Node style may set {"fill","stroke"} (CSS colors). \
+            Edge style may set {"dashed":true|false,"arrow":"none|end|both","color":"..."}. \
             You NEVER decide positions — layout belongs to the user and is not part of your world. \
-            Respond with ONLY one JSON object, no prose and no code fence, of this exact shape: \
-            {"commands":[ ... ]} \
             Allowed commands: \
-            {"op":"addNode","node":{"id":"...","type":"service|database|note","label":"..."}} \
+            {"op":"addNode","node":{"id":"...","label":"...","shape":"rectangle|ellipse|diamond","style":{"fill":"...","stroke":"..."}}} (shape and style optional) \
             {"op":"deleteNode","id":"..."} \
             {"op":"renameNode","id":"...","label":"..."} \
-            {"op":"connectNodes","source":"...","target":"...","type":"straight|curved","label":"..."} (type and label optional) \
+            {"op":"styleNode","id":"...","shape":"...","style":{"fill":"...","stroke":"..."}} (all fields but id optional) \
+            {"op":"connectNodes","source":"...","target":"...","label":"..."} (label and id optional) \
             {"op":"deleteEdge","id":"..."} \
-            Use short kebab-case ids for new nodes. Reference only ids that exist in the given semantic \
-            JSON, or that an earlier command in your own list adds.""";
+            {"op":"styleEdge","id":"...","style":{"dashed":true,"arrow":"end","color":"..."}} (style optional) \
+            Use short kebab-case ids for new nodes. In EDIT mode reference only ids that exist in the given \
+            summary, or that an earlier command in your own list adds.""";
 
     /** Streaming callbacks for an AI diagram edit (mirrors {@code NoteAiStreamListener}). */
     public interface DiagramAiStreamListener {
@@ -118,12 +124,12 @@ public class DiagramAiService {
         messages.add(new ChatMessage("system", SYSTEM_PROMPT));
         messages.add(new ChatMessage("user",
                 "Task: apply this instruction to the diagram.\nInstruction: " + request.instruction().trim()
-                        + "\n\nCurrent diagram semantic JSON:\n" + request.semantic().toString()));
+                        + "\n\nCurrent diagram semantic summary:\n" + request.semantic().toString()));
         if (request.priorReply() != null && request.validationErrors() != null) {
             messages.add(new ChatMessage("assistant", request.priorReply()));
             messages.add(new ChatMessage("user",
-                    "Your previous reply was rejected by validation:\n" + request.validationErrors()
-                            + "\nReturn ONLY the corrected {\"commands\":[...]} JSON object — nothing else."));
+                    "Your previous reply was rejected:\n" + request.validationErrors()
+                            + "\nReturn ONLY the corrected JSON object ({\"mermaid\":\"...\"} or {\"commands\":[...]}) — nothing else."));
         }
         return messages;
     }

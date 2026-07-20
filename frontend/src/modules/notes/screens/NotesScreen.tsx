@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
   ArrowRightIcon,
   CodeIcon,
   ColumnsIcon,
   EyeIcon,
+  Heading1Icon,
+  Heading2Icon,
+  Heading3Icon,
   HistoryIcon,
+  IndentDecreaseIcon,
+  IndentIncreaseIcon,
+  ListIcon,
+  ListOrderedIcon,
   ListPlusIcon,
   NotebookPenIcon,
   NotebookTextIcon,
@@ -14,9 +22,9 @@ import {
   SaveIcon,
   SparklesIcon,
   SquarePenIcon,
+  TextQuoteIcon,
   WandSparklesIcon,
   WaypointsIcon,
-  WorkflowIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "@/components/common/toast";
@@ -33,10 +41,31 @@ import GraphView from "@/modules/notes/components/GraphView";
 import AiBar, { type AiBarCommand } from "@/modules/notes/components/AiBar";
 import RevisionList from "@/modules/notes/components/RevisionList";
 import CommandPalette, { type PaletteCommand } from "@/modules/notes/components/CommandPalette";
+import SlashMenu from "@/modules/notes/components/SlashMenu";
+import {
+  continueListOnEnter,
+  indent,
+  insertCodeBlock,
+  outdent,
+  replaceRange,
+  setHeading,
+  toggleBulletList,
+  toggleNumberedList,
+  toggleQuote,
+  wrapInline,
+  type TextAction,
+  type TextState,
+} from "@/modules/notes/editor/textActions";
+import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteViewMode } from "@/modules/notes/types";
-import { HEADING_SCROLL_DELAY_MS, MERMAID_TEMPLATE, REACTFLOW_TEMPLATE, VIEW_MODES } from "@/modules/notes/constants";
+import {
+  HEADING_SCROLL_DELAY_MS,
+  MERMAID_TEMPLATE,
+  VIEW_MODES,
+  type SlashCommand,
+} from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +93,10 @@ const NotesScreen = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   // A palette-issued AI command, handed to the AiBar via props (acknowledged when run).
   const [aiCommand, setAiCommand] = useState<AiBarCommand | null>(null);
+  // Active `/` block context: where the slash starts, what's typed after it, where the menu sits.
+  const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const wiki = useWikiHandlers();
 
   const dirty = note !== null && content !== savedContent && !aiBusy;
@@ -174,12 +206,98 @@ const NotesScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, note?.id, savedContent]);
 
+  /**
+   * Applies a pure textActions result: new content + restored focus/selection.
+   * flushSync so the selection is set on the ALREADY-updated textarea — a
+   * deferred restore (rAF) races with fast typing and scrambles the caret.
+   */
+  const applyTextState = (next: TextState) => {
+    flushSync(() => setContent(next.value));
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(next.selectionStart, next.selectionEnd);
+  };
+
+  /** Runs a toolbar/shortcut transform against the textarea's live selection. */
+  const applyTextAction = (action: TextAction) => {
+    const textarea = textareaRef.current;
+    if (!textarea || aiBusy) return;
+    applyTextState(action({ value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd }));
+  };
+
+  /** Opens/updates the slash menu when the caret sits right after a line-start `/query`. */
+  const syncSlash = (textarea: HTMLTextAreaElement) => {
+    const caret = textarea.selectionStart;
+    const lineStart = textarea.value.lastIndexOf("\n", caret - 1) + 1;
+    const match = /^\/([\w-]*)$/.exec(textarea.value.slice(lineStart, caret));
+    if (!match) {
+      setSlash(null);
+      return;
+    }
+    const pos = measureCaret(textarea, lineStart);
+    setSlash({ start: lineStart, query: match[1], anchor: { top: pos.top + pos.lineHeight + 2, left: pos.left } });
+  };
+
+  const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+    syncSlash(e.target);
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash) return; // the open menu's capture listener owns ↑/↓/Enter/Esc
+    if (e.key === "Tab") {
+      e.preventDefault();
+      applyTextAction(e.shiftKey ? outdent : indent);
+      return;
+    }
+    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+      const textarea = e.currentTarget;
+      const next = continueListOnEnter({
+        value: textarea.value,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+      });
+      if (next) {
+        e.preventDefault();
+        applyTextState(next);
+      }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      applyTextAction((s) => wrapInline(s, "**"));
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+      e.preventDefault();
+      applyTextAction((s) => wrapInline(s, "*"));
+    }
+  };
+
+  /** Slash-menu pick: the `/query` range becomes the block snippet. */
+  const handleSlashSelect = (command: SlashCommand) => {
+    const textarea = textareaRef.current;
+    if (!textarea || !slash) return;
+    const to = slash.start + 1 + slash.query.length;
+    setSlash(null);
+    applyTextState(
+      replaceRange(
+        { value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
+        slash.start,
+        to,
+        command.snippet,
+      ),
+    );
+  };
+
   const editorPane = (
     <TextareaInput
+      ref={textareaRef}
       value={content}
-      onChange={(e) => setContent(e.target.value)}
+      onChange={handleEditorChange}
+      onKeyDown={handleEditorKeyDown}
+      onBlur={() => setSlash(null)}
       readOnly={aiBusy}
-      placeholder="Write Markdown… (---, # headings, > [!note] callouts, $math$)"
+      placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
       spellCheck={false}
       className="chat-scroll h-full min-h-0 resize-none rounded-none border-none bg-transparent p-4 font-mono text-[13px] leading-relaxed focus:border-none"
     />
@@ -233,13 +351,16 @@ const NotesScreen = () => {
           icon: WaypointsIcon,
           run: () => insertSnippet(MERMAID_TEMPLATE),
         },
-        {
-          id: "insert-reactflow",
-          label: "Insert React Flow diagram",
-          hint: "```reactflow-json",
-          icon: WorkflowIcon,
-          run: () => insertSnippet(REACTFLOW_TEMPLATE),
-        },
+        // Line formatting (the old toolbar's actions) — applies to the editor's current line/selection.
+        { id: "fmt-h1", label: "Format: Heading 1", hint: "#", icon: Heading1Icon, run: () => applyTextAction((s) => setHeading(s, 1)) },
+        { id: "fmt-h2", label: "Format: Heading 2", hint: "##", icon: Heading2Icon, run: () => applyTextAction((s) => setHeading(s, 2)) },
+        { id: "fmt-h3", label: "Format: Heading 3", hint: "###", icon: Heading3Icon, run: () => applyTextAction((s) => setHeading(s, 3)) },
+        { id: "fmt-bullet", label: "Format: Bullet list", hint: "-", icon: ListIcon, run: () => applyTextAction(toggleBulletList) },
+        { id: "fmt-numbered", label: "Format: Numbered list", hint: "1.", icon: ListOrderedIcon, run: () => applyTextAction(toggleNumberedList) },
+        { id: "fmt-quote", label: "Format: Quote", hint: ">", icon: TextQuoteIcon, run: () => applyTextAction(toggleQuote) },
+        { id: "fmt-code", label: "Format: Code block", hint: "```", icon: CodeIcon, run: () => applyTextAction(insertCodeBlock) },
+        { id: "fmt-indent", label: "Format: Indent", hint: "Tab", icon: IndentIncreaseIcon, run: () => applyTextAction(indent) },
+        { id: "fmt-outdent", label: "Format: Outdent", hint: "⇧Tab", icon: IndentDecreaseIcon, run: () => applyTextAction(outdent) },
         {
           id: "ai-rewrite",
           label: "AI: rewrite with instruction…",
@@ -372,6 +493,12 @@ const NotesScreen = () => {
           />
 
           <div className="relative min-h-0 flex-1">
+            <SlashMenu
+              anchor={slash?.anchor ?? null}
+              query={slash?.query ?? ""}
+              onSelect={handleSlashSelect}
+              onClose={() => setSlash(null)}
+            />
             {historyOpen && (
               <RevisionList
                 noteId={note.id}
@@ -408,6 +535,7 @@ const NotesScreen = () => {
 
   return (
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
+      {/* eslint-disable-next-line react-hooks/refs -- the Format entries only touch textareaRef inside their run() callbacks (event time, not render) */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={buildPaletteCommands()} />
       <NoteList onCreate={handleCreate} creating={creating} />
 

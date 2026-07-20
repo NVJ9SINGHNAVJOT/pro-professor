@@ -1,43 +1,45 @@
-import type { DiagramDetail, DiagramSavePayload } from "@/services/operations/diagrams/diagrams.route";
-import { validateBundle } from "@/modules/diagram/schema/validate";
-import { bundleLoaded } from "@/modules/diagram/model/actions";
-import { selectBundle, selectDiagramDoc } from "@/modules/diagram/model/selectors";
-import { DIAGRAM_SCHEMA_VERSION, type DiagramBundle } from "@/modules/diagram/types";
-import type { RootState } from "@/redux/rootReducer";
+import type { DiagramScene } from "@/modules/diagram/types";
 
 /**
- * Bundle ⇄ server round-trip. Validation is the gate in BOTH directions: a
- * fetched document that fails ajv never reaches the store, and a store state
- * that somehow fails ajv is never sent to the server.
+ * Scene helpers kept free of any `@excalidraw/excalidraw` import, so the (not
+ * lazy-loaded) list screen and import dialog can use them without pulling the
+ * Excalidraw runtime into the main bundle. Loading/serialising a live scene
+ * (restore/serializeAsJSON) happens inside the lazy DiagramEditor instead.
  */
 
-/** Validates a fetched diagram and returns the bundleLoaded action, or the errors. */
-export function parseLoadedDiagram(detail: DiagramDetail): { action: ReturnType<typeof bundleLoaded> } | { errors: string[] } {
-  const result = validateBundle(detail.content);
-  if (!result.ok) return { errors: result.errors };
-  return { action: bundleLoaded({ id: detail.id, title: detail.title, bundle: result.bundle }) };
-}
+export const EXCALIDRAW_SOURCE = "pro-professor";
 
-/** Reassembles + validates the open diagram for saving (metadata.updated is bumped). */
-export function buildSavePayload(state: RootState): { payload: DiagramSavePayload } | { errors: string[] } {
-  const doc = selectDiagramDoc(state);
-  const bundle: DiagramBundle = {
-    ...selectBundle(state),
-    metadata: { ...doc.metadata, updated: new Date().toISOString() },
-  };
-  const result = validateBundle(bundle);
-  if (!result.ok) return { errors: result.errors };
-  return { payload: { title: doc.title, content: result.bundle } };
-}
+/**
+ * Professional (non-hand-drawn) defaults for new content: roughness 0 (architect,
+ * clean lines) and a normal sans font (Excalidraw FONT_FAMILY.Nunito = 6) rather
+ * than the sketchy Excalifont default. Kept as literals so this stays free of any
+ * `@excalidraw/excalidraw` import.
+ */
+export const PRO_ROUGHNESS = 0;
+export const PRO_FONT_FAMILY = 6;
 
-/** A fresh empty document for "New diagram". */
-export function makeEmptyBundle(): DiagramBundle {
-  const now = new Date().toISOString();
+/** A fresh empty scene for "New diagram". */
+export function makeEmptyScene(): DiagramScene {
   return {
-    schemaVersion: DIAGRAM_SCHEMA_VERSION,
-    semantic: { nodes: [], edges: [] },
-    layout: {},
-    theme: "default-dark",
-    metadata: { created: now, updated: now, rendererVersion: "1" },
+    type: "excalidraw",
+    version: 2,
+    source: EXCALIDRAW_SOURCE,
+    elements: [],
+    appState: {
+      viewBackgroundColor: "#ffffff",
+      gridSize: null,
+      currentItemRoughness: PRO_ROUGHNESS,
+      currentItemFontFamily: PRO_FONT_FAMILY,
+    },
+    files: {},
   };
+}
+
+/** Loose shape guard for pasted/fetched content — enough to reject non-scenes. */
+export function isDiagramScene(value: unknown): value is DiagramScene {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Array.isArray((value as { elements?: unknown }).elements)
+  );
 }

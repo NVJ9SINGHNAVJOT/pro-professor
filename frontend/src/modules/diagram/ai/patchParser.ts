@@ -1,29 +1,35 @@
 import { Ajv } from "ajv";
 import patchSchema from "@/modules/diagram/schema/aiPatch.schema.json";
-import type { DiagramOp } from "@/modules/diagram/commands/ops";
+import type { DiagramCommand } from "@/modules/diagram/types";
 
 const ajv = new Ajv({ allErrors: true });
-const validatePatchShape = ajv.compile(patchSchema);
+const validateReply = ajv.compile(patchSchema);
 
-export type ParsedPatch = { ok: true; ops: DiagramOp[] } | { ok: false; errors: string[] };
+export type ParsedReply =
+  | { ok: true; kind: "commands"; ops: DiagramCommand[] }
+  | { ok: true; kind: "mermaid"; definition: string }
+  | { ok: false; errors: string[] };
 
 /**
- * Buffered model reply → validated command list. Local models routinely wrap
- * the JSON in prose or a code fence; extraction recovers the common cases
- * before ajv gets the final say. On failure the errors are precise enough to
- * feed back into the repair retry.
+ * Buffered model reply → either a command list (incremental edit) or a Mermaid
+ * definition (from-scratch generation). Local models routinely wrap the JSON in
+ * prose or a code fence; extraction recovers the common cases before ajv gets
+ * the final say. On failure the errors are precise enough for the repair retry.
  */
-export function parsePatchText(raw: string): ParsedPatch {
+export function parseAiReply(raw: string): ParsedReply {
   const json = extractJson(raw);
   if (json === null) return { ok: false, errors: ["reply contains no parseable JSON object"] };
 
-  if (!validatePatchShape(json)) {
-    const errors = (validatePatchShape.errors ?? []).map(
+  if (!validateReply(json)) {
+    const errors = (validateReply.errors ?? []).map(
       (error) => `${error.instancePath || "(root)"} ${error.message ?? "is invalid"}`,
     );
     return { ok: false, errors };
   }
-  return { ok: true, ops: (json as { commands: DiagramOp[] }).commands };
+
+  const obj = json as { commands?: DiagramCommand[]; mermaid?: string };
+  if (obj.mermaid !== undefined) return { ok: true, kind: "mermaid", definition: obj.mermaid };
+  return { ok: true, kind: "commands", ops: obj.commands ?? [] };
 }
 
 /** Direct parse first; otherwise the outermost {...} span (strips prose/fences around it). */

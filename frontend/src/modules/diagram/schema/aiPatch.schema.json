@@ -1,78 +1,132 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "aiPatch.schema.json",
-  "title": "DiagramAiPatch",
-  "description": "The JSON-only contract an AI edit must return: a command list mapping 1:1 onto the op layer. Layout ops (moveNode/resizeNode) are deliberately absent — AI never owns layout.",
+  "title": "DiagramAiReply",
+  "description": "The JSON-only contract an AI edit must return: EITHER a Mermaid flowchart (from-scratch generation) OR a command list (incremental edit). Commands reference nodes/edges by logical id; geometry is never part of the contract.",
   "type": "object",
-  "required": ["commands"],
-  "additionalProperties": false,
-  "properties": {
-    "commands": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["op", "node"],
-            "additionalProperties": false,
-            "properties": {
-              "op": { "const": "addNode" },
-              "node": {
+  "oneOf": [
+    {
+      "required": ["mermaid"],
+      "additionalProperties": false,
+      "properties": {
+        "mermaid": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "required": ["commands"],
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
                 "type": "object",
-                "required": ["id", "type", "label"],
+                "required": ["op", "node"],
                 "additionalProperties": false,
                 "properties": {
+                  "op": { "const": "addNode" },
+                  "node": {
+                    "type": "object",
+                    "required": ["id", "label"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "label": { "type": "string" },
+                      "shape": { "$ref": "#/definitions/shapeKind" },
+                      "style": { "$ref": "#/definitions/nodeStyle" }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "id"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "deleteNode" },
+                  "id": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "id", "label"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "renameNode" },
                   "id": { "type": "string", "minLength": 1 },
-                  "type": { "type": "string", "minLength": 1 },
+                  "label": { "type": "string" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "source", "target"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "connectNodes" },
+                  "source": { "type": "string", "minLength": 1 },
+                  "target": { "type": "string", "minLength": 1 },
                   "label": { "type": "string" },
-                  "data": { "type": "object" }
+                  "id": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "id"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "deleteEdge" },
+                  "id": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "id"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "styleNode" },
+                  "id": { "type": "string", "minLength": 1 },
+                  "shape": { "$ref": "#/definitions/shapeKind" },
+                  "style": { "$ref": "#/definitions/nodeStyle" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["op", "id"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": { "const": "styleEdge" },
+                  "id": { "type": "string", "minLength": 1 },
+                  "style": { "$ref": "#/definitions/edgeStyle" }
                 }
               }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["op", "id"],
-            "additionalProperties": false,
-            "properties": {
-              "op": { "const": "deleteNode" },
-              "id": { "type": "string", "minLength": 1 }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["op", "id", "label"],
-            "additionalProperties": false,
-            "properties": {
-              "op": { "const": "renameNode" },
-              "id": { "type": "string", "minLength": 1 },
-              "label": { "type": "string" }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["op", "source", "target"],
-            "additionalProperties": false,
-            "properties": {
-              "op": { "const": "connectNodes" },
-              "source": { "type": "string", "minLength": 1 },
-              "target": { "type": "string", "minLength": 1 },
-              "type": { "type": "string", "minLength": 1 },
-              "label": { "type": "string" },
-              "id": { "type": "string", "minLength": 1 }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["op", "id"],
-            "additionalProperties": false,
-            "properties": {
-              "op": { "const": "deleteEdge" },
-              "id": { "type": "string", "minLength": 1 }
-            }
+            ]
           }
-        ]
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "shapeKind": {
+      "enum": ["rectangle", "ellipse", "diamond"]
+    },
+    "nodeStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": { "type": "string" },
+        "textColor": { "type": "string" },
+        "stroke": { "type": "string" }
+      }
+    },
+    "edgeStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dashed": { "type": "boolean" },
+        "arrow": { "enum": ["none", "end", "both"] },
+        "color": { "type": "string" }
       }
     }
   }

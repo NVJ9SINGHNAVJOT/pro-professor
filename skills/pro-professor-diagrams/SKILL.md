@@ -1,58 +1,88 @@
 ---
 name: pro-professor-diagrams
-description: Author or edit Pro Professor .diagram JSON documents (a semantic/layout-separated DiagramBundle). Use when asked to produce a diagram file the user will import into Pro Professor, or to modify a pasted .diagram JSON.
+description: Author or edit a Pro Professor diagram (an Excalidraw scene) for the Diagrams → Import paste path. Use when asked to produce a diagram file the user will import into Pro Professor, or to modify a pasted Excalidraw scene.
 ---
 
-# Writing a Pro Professor `.diagram` document
+# Writing a Pro Professor diagram (Excalidraw scene)
 
-You are authoring a **DiagramBundle** — the JSON document behind Pro Professor's diagrams.
-The user imports your output via **Diagrams → Import** (it is validated before anything is
-created, so an invalid document is rejected with the reason).
+Pro Professor diagrams are **Excalidraw scenes**. The user imports your output via
+**Diagrams → Import** (it must be an object with an `elements` array; the app normalises
+the rest with Excalidraw's `restore`, so you may omit boilerplate fields like `seed`,
+`version`, `versionNonce`, `updated`, `groupIds`).
+
+> For a graph the user is building interactively, the in-app **AI bar** (which generates via
+> Mermaid) is usually better than hand-authoring a scene. Use this skill when a scene *file*
+> is specifically wanted.
 
 ## Output contract
 
-- Respond with **ONLY one JSON object** — no prose, no code fence.
-- The object must have exactly these top-level keys:
+Respond with **ONLY one JSON object** — no prose, no code fence:
 
 ```json
 {
-  "schemaVersion": "1.0.0",
-  "semantic": {
-    "nodes": [{ "id": "gateway", "type": "service", "label": "API Gateway" }],
-    "edges": [{ "id": "e1", "source": "gateway", "target": "db", "type": "straight", "label": "reads/writes" }]
-  },
-  "layout": {},
-  "theme": "default-dark",
-  "metadata": { "created": "2026-07-18T00:00:00Z", "updated": "2026-07-18T00:00:00Z", "rendererVersion": "1" }
+  "type": "excalidraw",
+  "version": 2,
+  "source": "pro-professor",
+  "appState": { "viewBackgroundColor": "#ffffff", "currentItemRoughness": 0, "currentItemFontFamily": 6 },
+  "elements": [ ... ],
+  "files": {}
 }
 ```
 
-## Rules (the validator enforces all of these)
+## Professional look (required)
 
-- **Node types**: `service`, `database`, `note` — nothing else.
-  **Edge types**: `straight`, `curved` — nothing else.
-- Every node/edge `id` is unique; use short **kebab-case** ids (`auth-service`, `user-db`).
-- Every edge's `source` and `target` must be the id of a node in `semantic.nodes`.
-- Node shape: `{ "id", "type", "label" }` (optional `"data"` object).
-  Edge shape: `{ "id", "source", "target", "type" }` (optional `"label"`).
-- `metadata.created` / `metadata.updated`: ISO-8601 timestamps; `rendererVersion`: `"1"`.
+Pro Professor diagrams are **clean, not hand-drawn**. On every element you author:
 
-## Layout is the USER'S, not yours
+- `"roughness": 0` (architect / straight lines — never 1 or 2).
+- On text elements set `"fontFamily": 6` (Nunito, a normal sans). **Do not** use `5`
+  (Excalifont — the sketchy default) or `1` (Virgil). `3` is monospace (code).
+- Keep `"strokeStyle": "solid"` unless a dashed edge is intended.
 
-- **New diagram** → emit `"layout": {}`. The app places nodes automatically and the user
-  arranges them by hand afterwards. Never invent coordinates unless explicitly asked.
-- **Editing an existing diagram** (the user pastes their current `.diagram` JSON plus an
-  instruction) → return the **complete updated JSON**, and copy every existing `layout` entry
-  **verbatim** — do not move, resize, or delete a placed node's entry unless you are deleting
-  that node itself (then drop its layout entry too). Layout keys must always be a subset of the
-  node ids.
+## Elements
 
-## Semantics guidance
+A **node** is a shape (`rectangle`, `ellipse`, or `diamond`) with a **bound text label**:
 
-- `service` = any process/component/API; `database` = any datastore; `note` = a free-text
-  annotation pinned into the diagram.
-- Edge direction reads source → target ("gateway calls db"). Use `label` for the relationship
-  ("reads/writes", "publishes to"). `straight` suits direct calls; `curved` suits async or
-  annotation links — either is always safe.
-- The diagram's **title** is not part of this JSON — the user names it at import. If they ask
-  to embed it in a note, that note references it as `![[Title.diagram]]`.
+```json
+{ "id": "api", "type": "rectangle", "x": 120, "y": 120, "width": 180, "height": 70,
+  "roughness": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+  "customData": { "nodeId": "api" }, "boundElements": [{ "type": "text", "id": "api-t" }] }
+```
+```json
+{ "id": "api-t", "type": "text", "x": 130, "y": 145, "width": 160, "height": 25,
+  "text": "API Gateway", "fontFamily": 6, "fontSize": 20, "textAlign": "center",
+  "roughness": 0, "containerId": "api" }
+```
+
+An **edge** is an `arrow` bound to two shapes. The arrow carries `startBinding`/`endBinding`
+(by the shape `id`), and **each connected shape must also list the arrow in its
+`boundElements`** — all three references must agree:
+
+```json
+{ "id": "e1", "type": "arrow", "x": 300, "y": 155, "width": 160, "height": 0,
+  "points": [[0, 0], [160, 0]], "roughness": 0,
+  "startBinding": { "elementId": "api", "focus": 0, "gap": 6 },
+  "endBinding": { "elementId": "db", "focus": 0, "gap": 6 },
+  "customData": { "edgeId": "e1" } }
+```
+
+## Styling (optional)
+
+- Node fill / stroke: element `"backgroundColor"` and `"strokeColor"` (CSS colors, e.g.
+  `"#0ea5e9"`; `"transparent"` for no fill).
+- Dashed edge: arrow `"strokeStyle": "dashed"`. Arrowheads: `"endArrowhead": "arrow"` (default)
+  or `null`; `"startArrowhead": "arrow"` for a double-headed edge.
+
+## Identity for later AI edits (recommended)
+
+Tag each shape with `"customData": { "nodeId": "<kebab-id>" }` and each arrow with
+`"customData": { "edgeId": "<kebab-id>" }`. This lets Pro Professor's AI bar resolve
+"connect X to Y" / "delete X" against the diagram after import. Ids are your own short
+kebab-case strings and must be unique.
+
+## Guidance
+
+- Use `diamond` for decisions, `rectangle` for components/services, `ellipse` for
+  start/end or datastores. Give arrows a bound text label for the relationship if useful
+  (a text element with `containerId` set to the arrow's id, `fontFamily: 6`).
+- The diagram's **title** is not part of this JSON — the user names it at import. To embed
+  it in a note afterwards, that note references it as `![[Title.diagram]]`.
