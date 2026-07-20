@@ -115,7 +115,7 @@ const AiBar = ({ noteId, pendingCommand, onCommandHandled, onContent, onSaved, o
           type="button"
           onClick={handleStop}
           aria-label="Stop generating"
-          className="flex shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg bg-white px-2.5 py-1 caption-small-medium text-black hover:bg-neutral-200"
+          className="flex h-7 shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg bg-white px-2.5 caption-small-medium text-black hover:bg-neutral-200"
         >
           <SquareIcon className="size-3 fill-current" />
           Stop
@@ -166,7 +166,7 @@ const AiActionButton = ({
     onClick={onClick}
     title={title}
     className={cn(
-      "flex cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1 caption-small-medium",
+      "flex h-7 cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 caption-small-medium",
       "text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white",
     )}
   >

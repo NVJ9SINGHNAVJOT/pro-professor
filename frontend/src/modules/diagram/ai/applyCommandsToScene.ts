@@ -30,7 +30,19 @@ export function applyCommandsToScene(
 
   const newIds = new Set(applied.newNodeIds);
   placeNewNodes(applied.semantics, newIds);
-  const rebuilt = convertToExcalidrawElements(buildSkeletons(applied.semantics), { regenerateIds: false });
+  const converted = convertToExcalidrawElements(buildSkeletons(applied.semantics), { regenerateIds: false });
+
+  // Re-stamp our identity tags after conversion. convertToExcalidrawElements does
+  // not carry `customData` through onto arrows, so without this the NEXT edit
+  // can't recognise these arrows as edges and would drop every connection. Ids
+  // are preserved (regenerateIds:false), so id === nodeId/edgeId here.
+  const nodeIds = new Set(applied.semantics.nodes.map((n) => n.id));
+  const edgeIds = new Set(applied.semantics.edges.map((e) => e.id));
+  const rebuilt = converted.map((el) => {
+    if (nodeIds.has(el.id)) return { ...el, customData: { ...el.customData, nodeId: el.id } };
+    if (edgeIds.has(el.id)) return { ...el, customData: { ...el.customData, edgeId: el.id } };
+    return el;
+  });
 
   // Keep every element that is NOT part of our semantic graph (freehand, images,
   // stray text) — semantic shapes/arrows and their bound labels are regenerated.

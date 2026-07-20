@@ -89,12 +89,13 @@ const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
         placeholder="Ask AI to change the diagram… (e.g. draw a login flow, or add a Redis node)"
         className="min-w-0 flex-1 bg-transparent para-small-medium text-neutral-200 outline-none placeholder:text-neutral-500 disabled:opacity-50"
       />
+      {/* Fixed footprint so the Run→Stop swap never shifts the model picker. */}
       {busy ? (
         <button
           type="button"
           onClick={handleStop}
           aria-label="Stop generating"
-          className="flex shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg bg-white px-2.5 py-1 caption-small-medium text-black hover:bg-neutral-200"
+          className="flex h-7 w-19 shrink-0 cursor-pointer items-center justify-center gap-x-1.5 rounded-lg bg-white caption-small-medium text-black hover:bg-neutral-200"
         >
           <SquareIcon className="size-3 fill-current" />
           Stop
@@ -104,7 +105,7 @@ const DiagramAiBar = ({ diagramId, getApi, onApplied }: DiagramAiBarProps) => {
           type="button"
           onClick={run}
           title="Apply the instruction to the diagram"
-          className="flex shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1 caption-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+          className="flex h-7 w-19 shrink-0 cursor-pointer items-center justify-center gap-x-1.5 rounded-lg caption-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
         >
           <WandSparklesIcon className="size-3.5" />
           Run
