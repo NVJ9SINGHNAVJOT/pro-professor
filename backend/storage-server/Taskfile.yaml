@@ -8,32 +8,20 @@ tasks:
       - task --list
 
   build:
-    desc: Build server and web dashboard binaries to bin/
+    desc: Build the server binary to bin/
     cmds:
       - go build -o bin/server ./cmd/server/
-      - go build -o bin/dashboard ./cmd/web/
 
   run:
     desc: Run the server
     cmds:
       - go run ./cmd/server/
 
-  web:
-    desc: Run the web dashboard (requires the API server to be running)
-    cmds:
-      - go run ./cmd/web/
-
   start:
     desc: Build and run the compiled server binary
     deps: [build]
     cmds:
       - ./bin/server
-
-  start-web:
-    desc: Build and run the compiled web dashboard binary
-    deps: [build]
-    cmds:
-      - ./bin/dashboard
 
   clean:
     desc: Remove build artifacts

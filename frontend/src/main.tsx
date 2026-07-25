@@ -52,6 +52,10 @@ const router = createBrowserRouter([
       },
       {
         path: "settings",
+        element: <Navigate to={ROUTES.SETTINGS_NOTES} replace />,
+      },
+      {
+        path: "settings/:section",
         element: <SettingsPage />,
       },
       {

@@ -2,12 +2,16 @@ package com.proprofessor.server.media;
 
 import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.exception.AppException;
+import com.proprofessor.server.media.dto.MediaItem;
+import com.proprofessor.server.media.dto.MediaListResponse;
 import com.proprofessor.server.media.dto.MediaResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -20,6 +24,9 @@ import java.util.Optional;
 public class MediaService {
 
     private static final Logger log = LoggerFactory.getLogger(MediaService.class);
+
+    /** Usage for a file with no reference row — nothing in the app can be pointing at it. */
+    private static final MediaRepository.Usage NOT_USED = new MediaRepository.Usage(0, 0);
 
     private final StorageClient storageClient;
     private final MediaRepository mediaRepository;
@@ -59,6 +66,86 @@ public class MediaService {
                 filename, System.currentTimeMillis() - start,
                 row.id(), row.storageId(), row.mimeType(), row.size());
         return toResponse(row);
+    }
+
+    /**
+     * One page of stored files for the Settings → Storage browser. The listing comes from the
+     * storage-server (the filesystem is the source of truth), so files with no Postgres reference
+     * row are included too; every argument is optional and forwarded as-is.
+     */
+    public MediaListResponse list(String category, String sortBy, String order, Integer limit, Integer offset) {
+        StorageClient.Paged<StorageClient.StorageMedia> page =
+                storageClient.list(category, sortBy, order, limit, offset);
+
+        Map<String, MediaRepository.Usage> usage = mediaRepository.usageByStorageIds(
+                page.data().stream().map(StorageClient.StorageMedia::id).toList());
+
+        List<MediaItem> items = page.data().stream()
+                .map(m -> {
+                    MediaRepository.Usage used = usage.getOrDefault(m.id(), NOT_USED);
+                    return new MediaItem(
+                            m.id(),
+                            storageClient.fileUrl(m.id()),
+                            m.originalFilename(),
+                            m.mimeType(),
+                            m.size(),
+                            m.category(),
+                            m.createdAt(),
+                            new MediaItem.Usage(used.chatMessages(), used.notes()));
+                })
+                .toList();
+
+        StorageClient.Pagination p = page.pagination();
+        return new MediaListResponse(
+                items,
+                new MediaListResponse.PaginationDto(p.total(), p.limit(), p.offset(), p.hasMore()));
+    }
+
+    /**
+     * Deletes a stored file and its reference row.
+     *
+     * <p>Refused with 409 while anything still points at the file — a chat attachment
+     * ({@code message_attachments} has no cascade, so the message would render a dead link) or a
+     * note {@code ![[image.png]]} embed (read from {@code note_links}, which every note save
+     * rebuilds). Only the upload an embed actually resolves to is protected: re-uploading a
+     * filename leaves the superseded copy free to delete.
+     *
+     * <p>Not covered: images embedded by URL ({@code ![alt](http://…/api/media/{uuid}/file)}),
+     * which are plain Markdown and leave no link row.
+     */
+    public void delete(String storageId) {
+        Optional<MediaRow> row = mediaRepository.findByStorageId(storageId);
+
+        row.ifPresent(r -> {
+            int attachments = mediaRepository.countAttachments(r.id());
+            if (attachments > 0) {
+                throw new AppException(HttpStatus.CONFLICT, "This file is attached to "
+                        + attachments + (attachments == 1 ? " chat message" : " chat messages")
+                        + " and can't be deleted.");
+            }
+            if (backsAnEmbed(r)) {
+                List<String> notes = mediaRepository.noteTitlesEmbedding(r.originalFilename());
+                if (!notes.isEmpty()) {
+                    throw new AppException(HttpStatus.CONFLICT, "This file is embedded in "
+                            + notes.size() + (notes.size() == 1 ? " note (" : " notes (")
+                            + String.join(", ", notes) + ") and can't be deleted.");
+                }
+            }
+        });
+
+        storageClient.delete(storageId);
+        row.ifPresent(r -> mediaRepository.deleteById(r.id()));
+        log.info("Deleted file: storageId={} mediaId={}", storageId, row.map(MediaRow::id).orElse(null));
+    }
+
+    /**
+     * Whether this row is the one a {@code ![[filename]]} embed resolves to — the newest upload
+     * with that filename, matching {@link #urlByFilename}. An older duplicate backs nothing.
+     */
+    private boolean backsAnEmbed(MediaRow row) {
+        return mediaRepository.findLatestByFilename(row.originalFilename())
+                .map(latest -> latest.id() == row.id())
+                .orElse(false);
     }
 
     /**

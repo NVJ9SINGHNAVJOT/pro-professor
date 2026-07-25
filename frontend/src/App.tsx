@@ -13,9 +13,9 @@ function App() {
   const { pathname } = useLocation();
   const { execute: fetchModels } = useApi(modelsRoute.getAllModels);
 
-  // chat/notes/diagrams mount the LeftNav header inside their own sidebar;
+  // chat/notes/diagrams/settings mount the LeftNav header inside their own sidebar;
   // every other screen gets the floating logo button instead
-  const hasSidebarNav = /^\/(chat|notes|diagrams)/.test(pathname);
+  const hasSidebarNav = /^\/(chat|notes|diagrams|settings)/.test(pathname);
 
   useEffect(() => {
     (async () => {

@@ -7,8 +7,9 @@ A lightweight personal file storage server written in Go using only the standard
 > Postgres; the browser then **downloads files directly from this service** using a URL that
 > `central-server` hands out — file bytes never round-trip through the Java gateway. Downloads are
 > plain public `GET`s by UUID with HTTP range support, so `<img>` / `<audio>` / `<video>` stream and
-> seek straight from here. The service also runs fully standalone (see the web dashboard below); it
-> has no dependency on `central-server`.
+> seek straight from here. It has no dependency on `central-server` and no UI of its own — files are
+> browsed and deleted from the React app under **Settings → Storage**, which reaches the endpoints
+> below through `central-server`.
 
 ## Tech Stack
 
@@ -43,26 +44,22 @@ The server starts on the port set in `.env` (default `9000`).
 
 Copy `.env.example` to `.env` and set the values:
 
-| Variable   | Default                 | Description                            |
-| ---------- | ----------------------- | -------------------------------------- |
-| `PORT`     | `9000`                  | Port the API server listens on         |
-| `WEB_PORT` | `9001`                  | Port the web dashboard listens on      |
-| `API_URL`  | `http://localhost:9000` | API base URL the dashboard proxies to  |
+| Variable | Default | Description                    |
+| -------- | ------- | ------------------------------ |
+| `PORT`   | `9000`  | Port the API server listens on |
 
 ## Available Tasks
 
-| Command          | Description                                               |
-| ---------------- | --------------------------------------------------------- |
-| `task run`       | Run the API server                                        |
-| `task web`       | Run the web dashboard (requires the API server running)   |
-| `task start`     | Build and run the compiled API server binary              |
-| `task start-web` | Build and run the compiled web dashboard binary           |
-| `task build`     | Build server and dashboard binaries to `bin/`             |
-| `task check`     | Format, vet, and build (run before committing)            |
-| `task fmt`       | Format all Go source files                                |
-| `task vet`       | Run `go vet` across all packages                          |
-| `task tidy`      | Tidy `go.mod`                                             |
-| `task clean`     | Remove build artifacts                                    |
+| Command      | Description                                    |
+| ------------ | ---------------------------------------------- |
+| `task run`   | Run the API server                             |
+| `task start` | Build and run the compiled API server binary   |
+| `task build` | Build the server binary to `bin/`              |
+| `task check` | Format, vet, and build (run before committing) |
+| `task fmt`   | Format all Go source files                     |
+| `task vet`   | Run `go vet` across all packages               |
+| `task tidy`  | Tidy `go.mod`                                  |
+| `task clean` | Remove build artifacts                         |
 
 ## Project Structure
 
@@ -72,12 +69,8 @@ nothing to fetch, no `go.sum`.
 ```text
 storage-server/
 ├── cmd/
-│   ├── server/          # API server entry point
-│   └── web/             # Dashboard: reverse proxy + its UI, embedded at build time
-│       ├── main.go      # Entry point (holds the //go:embed directive)
-│       ├── index.html   # Frontend (HTML, CSS, JS)
-│       └── fonts/       # Self-hosted woff2 (see its README)
-├── internal/            # Server-side logic — all of it used only by cmd/server
+│   └── server/          # API server entry point
+├── internal/            # Server-side logic
 │   ├── api/             # HTTP handlers (paginated list, metadata, download, delete)
 │   ├── middleware/      # Structured request logging with a correlation ID
 │   ├── models/          # Media struct
@@ -113,18 +106,12 @@ storage/
 
 If an upload fails midway, the partial directory is automatically cleaned up.
 
-## Web Dashboard
+## Browsing uploads
 
-The built-in web dashboard runs on port `9001` and proxies API calls to the server on port `9000`.
-
-**Features:**
-
-- **Infinite scroll** — loads 50 files at a time; scrolling near the bottom automatically fetches the next batch.
-- **3 view modes** — switch between compact, default, and large card layouts via the view toggle in the toolbar. Preference is saved in `localStorage`.
-- **Category filtering** — browse by All Files, Images, Videos, Audio, Documents, or Others.
-- **Sort controls** — sort by date or file size, ascending or descending.
-- **Lightbox** — click the view button on image/video cards to preview in a full-screen modal.
-- **Bulk delete** — delete all files in a category with a single action.
+There is no dashboard here. Uploaded files are browsed, previewed, downloaded and deleted from the
+React app at **Settings → Storage**, which calls `central-server`'s `GET /api/v1/media` and
+`DELETE /api/v1/media/{storageId}` — these forward to the endpoints below. Deleting a file that is
+still attached to a chat message is refused by `central-server`, not here.
 
 ## API
 

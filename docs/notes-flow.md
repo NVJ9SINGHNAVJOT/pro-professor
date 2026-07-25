@@ -23,7 +23,7 @@ The notes tables live in the consolidated `V1__init_schema.sql`:
 | --- | --- |
 | `notes` | id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb, generated `content_tsv` tsvector column + GIN index for full-text search |
 | `tags` / `note_tags` | `tags` (unique name) + `note_tags` link table |
-| `note_links` | source_note_id, target_ref, link_type `link\|embed` |
+| `note_links` | source_note_id, target_ref, link_type `link\|embed` — also read outside notes, by the media delete guard (see [project-flow.md](project-flow.md) §2.4) |
 | `note_revisions` | note_id, content snapshot, created_at — written before every AI overwrite/restore |
 
 Conventions that matter:

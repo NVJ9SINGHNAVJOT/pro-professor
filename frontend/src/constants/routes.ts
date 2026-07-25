@@ -8,5 +8,7 @@ export const ROUTES = {
   DIAGRAMS: "/diagrams",
   DIAGRAMS_DETAIL: (diagramId: number | string) => `/diagrams/${diagramId}`,
   SETTINGS: "/settings",
+  SETTINGS_NOTES: "/settings/notes",
+  SETTINGS_STORAGE: "/settings/storage",
   ERROR: "/error",
 } as const;
