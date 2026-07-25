@@ -211,11 +211,17 @@ const NotesScreen = () => {
     if (!heading || !note) return;
     if (viewMode === "source") setViewMode("split"); // the anchor lives in the preview
     const timer = setTimeout(() => {
+      const container = previewRef.current;
+      if (!container) return;
       const wanted = heading.trim().toLowerCase();
-      const headings = previewRef.current?.querySelectorAll("h1, h2, h3, h4, h5, h6") ?? [];
+      const headings = container.querySelectorAll("h1, h2, h3, h4, h5, h6");
       for (const element of headings) {
         if (element.textContent?.trim().toLowerCase() === wanted) {
-          element.scrollIntoView({ behavior: "smooth", block: "start" });
+          // scrollTo on the pane itself, not scrollIntoView — the latter scrolls EVERY
+          // scrollable ancestor, and App's <main> is one, so it would drag the toolbar
+          // off-screen by whatever slack the horizontal scrollbar leaves it.
+          const top = container.scrollTop + element.getBoundingClientRect().top - container.getBoundingClientRect().top;
+          container.scrollTo({ top, behavior: "smooth" });
           break;
         }
       }
