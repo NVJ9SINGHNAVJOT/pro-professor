@@ -24,13 +24,14 @@ public class NoteMapper {
         return new NoteSummary(note.id(), note.title(), tags, note.updatedAt());
     }
 
-    public NoteDetail toDetail(NoteRow note, List<String> tags) {
+    public NoteDetail toDetail(NoteRow note, List<String> tags, Map<String, String> embedUrls) {
         return new NoteDetail(
                 note.id(),
                 note.title(),
                 note.content(),
                 parseFrontmatter(note.frontmatterJson()),
                 tags,
+                embedUrls,
                 note.createdAt(),
                 note.updatedAt()
         );

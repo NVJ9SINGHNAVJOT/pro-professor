@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import Markdown, { type WikiHandlers } from "@/components/common/Markdown";
+import Markdown, { type WikiHandlers } from "@/components/common/markdown/Markdown";
 import { useApi } from "@/hooks/useApi";
 import { useAppSelector } from "@/redux/store";
 import { notesRoute } from "@/services/operations/notes/notes.route";
-import { mediaApi } from "@/services/operations/media/media.api";
 import { extractSection, isImageTarget, stripFrontmatter } from "@/modules/notes/utils";
 
 interface NoteEmbedProps {
@@ -33,7 +32,17 @@ const NoteEmbed = ({ target, heading, wiki }: NoteEmbedProps) => {
   }, [embeddedId]);
 
   if (isImageTarget(target)) {
-    return <img src={mediaApi.fileByNameUrl(target)} alt={target} className="my-2 max-h-96 max-w-full rounded-xl" />;
+    // The backend resolves image embeds to their direct storage URL at note load; a miss means the
+    // file isn't uploaded yet, or the embed was just typed and the note hasn't been saved.
+    const imageUrl = wiki.embedUrls?.[target];
+    if (imageUrl) {
+      return <img src={imageUrl} alt={target} className="my-2 max-h-96 max-w-full rounded-xl" />;
+    }
+    return (
+      <span className="my-2 block rounded-xl border border-dashed border-neutral-700 px-3 py-2 caption-small-regular text-neutral-500">
+        Unresolved image: ![[{target}]]
+      </span>
+    );
   }
   if (!embedded) {
     return (

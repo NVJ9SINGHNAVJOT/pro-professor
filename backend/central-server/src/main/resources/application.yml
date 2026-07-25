@@ -74,5 +74,7 @@ app:
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
     api-key: ${OLLAMA_API_KEY:ollama}
-  storage-service:
-    base-url: ${STORAGE_SERVICE_BASE_URL:http://127.0.0.1:9000}
+  storage-server:
+    # Also browser-facing: central-server hands this URL to the browser for direct downloads,
+    # so it must be reachable from the browser (on a single local machine, 127.0.0.1 is fine).
+    base-url: ${STORAGE_SERVER_BASE_URL:http://127.0.0.1:9000}

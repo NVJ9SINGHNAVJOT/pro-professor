@@ -22,8 +22,15 @@ your output into the app's source editor exactly as you produce it.
 - **Math (KaTeX)**: inline `$\varphi = \frac{1+\sqrt{5}}{2}$`, block `$$ … $$`.
 - **Wiki-links**: `[[Note Title]]` and `[[Note Title#Heading]]`. Links may point at notes that
   don't exist yet — clicking one creates the note.
-- **Embeds (transclusion)**: `![[Note Title]]` inlines another note, `![[Note Title#Heading]]`
-  inlines one section, and `![[image.png]]` embeds an uploaded image.
+- **Embeds (transclusion)**: `![[Note Title]]` inlines another note and `![[Note Title#Heading]]`
+  inlines one section of it.
+- **Images** — two forms, both render inline the same way:
+  - `![[image.png]]` embeds a file **already uploaded to the app**. Reference it by its exact
+    filename and the app resolves that to the image's URL when the note is opened. An unknown
+    filename shows an unresolved placeholder until that file is uploaded and the note is re-saved.
+  - `![alt text](https://…)` embeds an image by URL — plain Markdown, for a URL you were given.
+  - Only use image references the user actually gave you — never invent a filename or a URL.
+  - A URL inside `![[ ]]` does **not** work, and neither do `data:` base64 URIs.
 - **Diagram links**: `[[Title.diagram]]` is a link to a standalone diagram — clicking it opens that
   diagram in the app's diagram editor. (Diagrams are not embedded inline; use Mermaid for that.)
 - **Callouts**: blockquotes starting with a marker —
@@ -56,6 +63,8 @@ tags: [study, memory]
 > Review just before you forget — intervals grow with each success.
 
 The forgetting curve decays roughly as $R = e^{-t/S}$.
+
+![Forgetting curve](https://example.com/forgetting-curve.png)
 
 ## Schedule
 

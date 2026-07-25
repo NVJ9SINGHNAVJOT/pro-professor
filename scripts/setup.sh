@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# NOTE: Full project bootstrap for a fresh clone. Orchestrates the individual per-service setup
-# scripts (ai-service, storage-service) and installs dependencies + .env files for frontend and
-# backend/central-server. Fails fast on the first error.
+# NOTE: Full project bootstrap for a fresh clone. Runs the ai-service setup script and installs
+# dependencies + .env files for frontend and backend/central-server. The storage-server is
+# committed in-repo, so it needs no fetch step (run it with `task storage`). Fails fast on the
+# first error.
 
 set -u
 
@@ -23,7 +24,6 @@ for cmd in npm java; do
 done
 
 bash scripts/setup-ai-service.sh || die "ai-service setup failed."
-bash scripts/setup-storage-service.sh || die "storage-service setup failed."
 
 loginf "Installing frontend dependencies..."
 if ! (cd frontend && npm install); then
@@ -49,4 +49,12 @@ else
     loginf "Created 'backend/central-server/.env' from .env.example."
 fi
 
-logsuccess "Bootstrap complete. Next: 'task server' / 'task client' / 'task storage', and 'source backend/ai-service/.venv/bin/activate' for ai-service."
+if [ -f backend/storage-server/.env ]; then
+    loginf "'backend/storage-server/.env' already exists, leaving it as is."
+elif ! cp backend/storage-server/.env.example backend/storage-server/.env; then
+    die "Failed to create 'backend/storage-server/.env' from .env.example."
+else
+    loginf "Created 'backend/storage-server/.env' from .env.example."
+fi
+
+logsuccess "Bootstrap complete. Next: 'task frontend:dev' / 'task backend:dev' / 'task storage:run', and 'source backend/ai-service/.venv/bin/activate' for ai-service."

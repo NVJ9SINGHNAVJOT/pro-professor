@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "@/components/common/toast";
-import { type WikiHandlers } from "@/components/common/Markdown";
+import { type WikiHandlers } from "@/components/common/markdown/Markdown";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesSlice";
@@ -12,7 +12,7 @@ import { DIAGRAM_SUFFIX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 
 /** Navigation + existence checks for wiki-links; clicking a missing link creates the note. */
-function useWikiBase(): WikiHandlers {
+function useWikiBase(embedUrls?: Record<string, string>): WikiHandlers {
   const notes = useAppSelector((state) => state.notes.notes);
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
@@ -21,6 +21,7 @@ function useWikiBase(): WikiHandlers {
 
   return useMemo<WikiHandlers>(
     () => ({
+      embedUrls,
       linkExists: (target) => notes.some((note) => note.title.toLowerCase() === target.toLowerCase()),
       onLinkClick: async (target, heading) => {
         // `[[Title.diagram]]` is a link to a standalone diagram — resolve title→id and open the diagram page.
@@ -52,13 +53,13 @@ function useWikiBase(): WikiHandlers {
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [notes],
+    [notes, embedUrls],
   );
 }
 
 /** Full wiki handlers for the note preview: links + `![[...]]` transclusions. */
-export function useWikiHandlers(): WikiHandlers {
-  const base = useWikiBase();
+export function useWikiHandlers(embedUrls?: Record<string, string>): WikiHandlers {
+  const base = useWikiBase(embedUrls);
   return useMemo<WikiHandlers>(
     () => ({
       ...base,

@@ -29,7 +29,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "@/components/common/toast";
-import Markdown from "@/components/common/Markdown";
+import Markdown from "@/components/common/markdown/Markdown";
+import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import NotesBar from "@/modules/notes/components/NotesBar";
 import { useNoteAi, type AiBarCommand } from "@/modules/notes/hooks/useNoteAi";
 
@@ -101,7 +102,7 @@ const NotesScreen = () => {
   const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const wiki = useWikiHandlers();
+  const wiki = useWikiHandlers(note?.embedUrls);
 
   /** The AI action saved the note server-side — pull the fresh copy (title/tags may have changed). */
   const refetchAfterAi = async () => {
@@ -331,9 +332,9 @@ const NotesScreen = () => {
 
   const previewPane = (
     <div ref={previewRef} className="chat-scroll h-full overflow-y-auto p-4">
-      <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
+      <MarkdownBody className="para-regular text-neutral-100">
         <Markdown wiki={wiki}>{stripFrontmatter(content)}</Markdown>
-      </div>
+      </MarkdownBody>
     </div>
   );
 

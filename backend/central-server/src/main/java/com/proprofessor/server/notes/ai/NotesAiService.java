@@ -40,7 +40,10 @@ public class NotesAiService {
             Do not add explanations before or after it, and do not wrap the whole note in a code fence. \
             Preserve the YAML frontmatter block (--- ... ---) when present, updating it only when the task asks. \
             The app renders GitHub-flavored Markdown, KaTeX math ($...$), Obsidian-style [[wiki-links]] and \
-            ![[embeds]], > [!note] callouts, #tags, and ```mermaid diagram fences — use them where helpful.""";
+            ![[embeds]], > [!note] callouts, #tags, and ```mermaid diagram fences — use them where helpful. \
+            Images come in two forms: ![[file.png]] embeds a file already uploaded to the app, and \
+            ![alt](https://...) embeds one by URL. Only reference images that already appear in the note or \
+            that the task gives you — never invent a filename or a URL.""";
 
     private static final Pattern WRAPPING_FENCE =
             Pattern.compile("\\A```[a-zA-Z]*\\s*\\n(.*)\\n```\\s*\\z", Pattern.DOTALL);

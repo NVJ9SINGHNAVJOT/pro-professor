@@ -10,7 +10,7 @@ removed; it may return "some other day".)
 
 - One document format: the canonical **Excalidraw scene** JSON (`type: "excalidraw"`, `version`,
   `source`, `elements`, `appState`, `files`) — the whole document, no separate semantic model.
-- Stored **inline in Postgres like notes** (`content` jsonb + revisions), NOT as a storage-service
+- Stored **inline in Postgres like notes** (`content` jsonb + revisions), NOT as a storage-server
   blob — diagrams are editable documents, not immutable media.
 - Excalidraw (`@excalidraw/excalidraw`) is the editor. It owns scene state and undo/redo; it is
   lazy-loaded (a code-split chunk) so the runtime + CSS stay out of the main bundle.
@@ -66,6 +66,6 @@ embed.
 
 **Diagrams drawn *inside* a note** use **Mermaid**: a ```mermaid fenced block renders inline via
 [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx) (the `language-mermaid` case in
-[Markdown.tsx](../frontend/src/components/common/Markdown.tsx)). Mermaid is the tool for quick
+[Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx)). Mermaid is the tool for quick
 in-note diagrams; the Excalidraw `/diagrams` module is for standalone, hand-drawn diagrams linked
 from notes.

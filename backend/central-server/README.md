@@ -2,7 +2,7 @@
 
 The gateway and orchestration layer of **Pro Professor**, built with **Spring Boot 3.5**
 (**Java 25**). The browser talks only to this service; it fans out to PostgreSQL, Kafka,
-**Ollama**, the Python **AI service** (MLX), and the external Go **storage-service**. Chat,
+**Ollama**, the Python **AI service** (MLX), and the external Go **storage-server**. Chat,
 notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOOQ** over
 **Flyway**-migrated Postgres (no JPA).
 
@@ -58,7 +58,7 @@ com.proprofessor.server/
 ├── config/            # CORS, WebSocket, executors, type-safe properties
 ├── diagram/           # diagram CRUD + AI edit route (see docs/diagram-flow.md)
 ├── health/            # /health + Kafka health indicator
-├── media/             # upload/download proxy to the storage-service
+├── media/             # upload/download proxy to the storage-server
 ├── model/             # model discovery/activation across Ollama + AI service
 ├── notes/             # notes CRUD, links/tags/search + AI note actions
 └── websocket/         # /ws notification channel
@@ -92,7 +92,7 @@ lets inference or storage be swapped without touching the client.
         │ jOOQ / JDBC          │ OpenAI-compatible    │ HTTP
         ▼                      ▼ /v1/chat/completions ▼
 ┌───────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
-│ PostgreSQL    │   │ AI Service (:8000)   │   │ Storage Service      │
+│ PostgreSQL    │   │ AI Service (:8000)   │   │ Storage Server       │
 │               │   │ FastAPI · MLX-LM     │   │ (:9000) Go, stdlib   │
 │ conversations │   │ MLX-VLM · Whisper    │   │                      │
 │ messages      │   │ STT/TTS · model mgmt │   │ file bytes on disk   │
@@ -134,10 +134,10 @@ multiplexes the whole turn without out-of-band coordination:
 | `chat.done`      | terminal success                                               |
 | `chat.error`     | user-facing message + `requestId` for log correlation          |
 
-**Bytes and references are stored separately.** Uploads are proxied to the storage service, which
+**Bytes and references are stored separately.** Uploads are proxied to the storage server, which
 returns a UUID; PostgreSQL persists only a `media` reference row plus a `message_attachments` link.
 Downloads are proxied back through `GET /api/v1/media/{id}/file`, so the browser never addresses
-the storage service directly and the blob layer stays swappable (local disk today, object storage
+the storage server directly and the blob layer stays swappable (local disk today, object storage
 tomorrow) behind a stable API.
 
 **Multimodal input without a new wire format.** An audio-capable model receives the spoken clip

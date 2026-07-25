@@ -16,7 +16,7 @@ import java.io.IOException;
  * <p>The id is read from the SLF4J {@link MDC} (populated by {@link RequestIdFilter}) and, when
  * present, attached as the {@value #HEADER} header. Unlike {@code X-Request-Id} — which each hop
  * regenerates for its own logs — this header is set once at the origin and forwarded unchanged, so
- * a single user action can be traced across the central server, AI service, and storage service.
+ * a single user action can be traced across the central server, AI service, and storage server.
  */
 public class CorrelationIdInterceptor implements ClientHttpRequestInterceptor {
 

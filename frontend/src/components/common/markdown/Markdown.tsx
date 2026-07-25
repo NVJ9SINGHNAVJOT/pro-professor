@@ -129,6 +129,8 @@ export interface WikiHandlers {
   linkExists: (target: string) => boolean;
   /** Renders a `![[target]]`/`![[target#Heading]]` transclusion; omit to fall back to a plain wiki-link. */
   renderEmbed?: (target: string, heading?: string) => ReactNode;
+  /** Image `![[file.png]]` embed filename → direct storage-server URL, resolved by the backend at note load. */
+  embedUrls?: Record<string, string>;
 }
 
 const WIKI_LINK_PREFIX = "#wiki:";

@@ -8,8 +8,8 @@ includes:
     taskfile: backend/central-server/Taskfile.yaml
     dir: backend/central-server
   storage:
-    taskfile: backend/storage-service/Taskfile.yml
-    dir: backend/storage-service
+    taskfile: backend/storage-server/Taskfile.yaml
+    dir: backend/storage-server
   ai:
     taskfile: backend/ai-service/Taskfile.yaml
     dir: backend/ai-service
@@ -23,14 +23,9 @@ tasks:
     cmd: task -l
 
   init:
-    desc: Bootstrap a fresh clone (ai-service, storage-service, frontend, backend — deps + .env files)
+    desc: Bootstrap a fresh clone (ai-service, frontend, backend — deps + .env files)
     cmds:
       - bash scripts/setup.sh
-
-  setup:storage:
-    desc: Fetch storage-service (and its shared modules) from the external micro-yard repo
-    cmds:
-      - bash scripts/setup-storage-service.sh
 
   setup:ai:
     desc: Set up ai-service (submodule, venv, dependencies, .env)

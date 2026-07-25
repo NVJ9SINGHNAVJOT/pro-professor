@@ -2,25 +2,18 @@ import { BASE_URL_SERVER } from "@/services/client/config";
 import { rawFetch } from "@/services/client/rawFetch";
 
 /**
- * Media endpoints. Like {@link "@/services/operations/audio/audio.api"}, these bypass the generic
- * {@link fetchApi} helper because uploads post raw multipart files. They hit the
- * central-server pass-through, never the storage-service directly.
+ * Media endpoints. Uploads post raw multipart files through central-server (which records a
+ * reference row and returns metadata) — so they bypass the generic {@link fetchApi} helper.
+ * The returned {@link MediaAttachment.url} is a <em>direct</em> storage-server URL: `<img>` /
+ * `<audio>` / download links point straight at storage, never through central-server.
  */
 export interface MediaAttachment {
   id: number;
+  /** Direct storage-server URL to stream the file from (`<img src>`, `<audio src>`, downloads). */
+  url: string;
   originalFilename: string;
   mimeType: string;
   size: number;
-}
-
-/** Absolute URL central-server streams a stored file from (for `<img src>` / downloads). */
-function fileUrl(id: number): string {
-  return `${BASE_URL_SERVER}/media/${id}/file`;
-}
-
-/** Absolute URL for the newest upload with this original filename (note `![[image.png]]` embeds). */
-function fileByNameUrl(filename: string): string {
-  return `${BASE_URL_SERVER}/media/by-filename/${encodeURIComponent(filename)}/file`;
 }
 
 /** Upload a single file and return its stored reference. */
@@ -38,4 +31,4 @@ async function upload(file: File, signal?: AbortSignal): Promise<MediaAttachment
   return json.data as MediaAttachment;
 }
 
-export const mediaApi = { fileUrl, fileByNameUrl, upload };
+export const mediaApi = { upload };

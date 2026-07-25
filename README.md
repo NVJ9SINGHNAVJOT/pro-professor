@@ -6,7 +6,7 @@ your own machine, no cloud provider, no API keys, no data leaving the device.
 
 Pro Professor is a polyglot monorepo: a React 19 SPA, a Spring Boot (Java 25) orchestration
 gateway, and a Python/FastAPI inference service running MLX models on Apple Silicon, backed by
-PostgreSQL and a standalone Go file-storage service. The browser talks to exactly one backend;
+PostgreSQL and a standalone Go file-storage server. The browser talks to exactly one backend;
 the gateway fans out to everything else.
 
 ---
@@ -22,8 +22,9 @@ the gateway fans out to everything else.
   local speech synthesis, and a live mic-reactive waveform. Zero network round-trips.
 - **Native multimodal input** — for audio-capable models the raw clip is passed straight to the
   model as an OpenAI `input_audio` content part, skipping transcription entirely.
-- **Attachment pipeline** — uploads stream through the gateway to a dedicated storage service;
-  PostgreSQL holds only a reference row, never the bytes.
+- **Attachment pipeline** — uploads stream through the gateway to a local Go storage server, which
+  returns a direct URL; PostgreSQL holds only a reference row, never the bytes. Downloads then
+  stream **straight from storage to the browser** — file bytes never pass through the JVM heap.
 - **Per-conversation inference settings** — sampling parameters are persisted per chat, restored
   on reopen, and mid-conversation changes are diffed and rendered as inline markers in the
   transcript.
@@ -61,10 +62,11 @@ pro-professor/
 ├── frontend/                 # React 19 + Vite + TypeScript SPA
 ├── backend/
 │   ├── central-server/       # Spring Boot 3.5 (Java 25) — API gateway / orchestrator
-│   └── ai-service/           # Python + FastAPI — local MLX inference (git submodule)
+│   ├── ai-service/           # Python + FastAPI — local MLX inference (git submodule)
+│   └── storage-server/       # Go 1.25 — local file storage (uploads + direct downloads)
 ├── docs/                     # system architecture + notes/diagram flow docs
 ├── skills/                   # paste-ready authoring packs for external AI models
-├── scripts/                  # setup + storage-service bootstrap
+├── scripts/                  # per-service setup scripts
 └── AGENTS.md                 # orientation pointer table for AI coding tools
 ```
 
@@ -73,11 +75,11 @@ pro-professor/
 | `frontend`        | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client / chat UI                                     |
 | `central-server`  | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | API gateway; REST + SSE + WebSocket, PostgreSQL          |
 | `ai-service`      | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + STT/TTS (Apple Silicon)            |
-| `storage-service` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | File upload / retrieval (external; from `micro-yard`)    |
+| `storage-server`  | Go 1.25 (stdlib only)                  | `http://localhost:9000` | Local file storage — uploads + direct browser downloads  |
 
-**`ai-service`** is a git submodule maintained in its own repository. **`storage-service`** lives in
-the external **`micro-yard`** monorepo and is fetched into `backend/storage-service/` (git-ignored)
-by `task setup`.
+**`ai-service`** is a git submodule maintained in its own repository. **`storage-server`** is a
+first-class service committed in this repo under `backend/storage-server/` (the browser downloads
+files directly from it; central-server only records the reference and never proxies the bytes).
 
 ---
 
@@ -91,35 +93,33 @@ Silicon Mac (for MLX inference).
 git clone --recurse-submodules <repo-url>
 cd pro-professor
 
-# 2. Fetch the storage-service out of micro-yard
-task setup
+# 2. Install dependencies + create each service's .env from its .env.example
+task init
 
-# 3. Configure — every service ships a .env.example
-cp .env.example .env   # repeat per service, then adjust
+# 3. Adjust the generated .env files as needed (ports, DB, model paths, storage dir)
 ```
 
-`task setup` sparse-fetches the three subtrees storage-service needs from `micro-yard` (the service
-itself, the `go-shared` module it imports, and the `ui-shared` assets its dashboard embeds),
-assembles them into `backend/storage-service/`, and generates a `go.work` so the modules resolve in
-the flat layout. Re-run it any time to pull the latest; your `.env` and uploaded files under
-`storage/` are preserved. If the `micro-yard` layout changes, update the config block at the top of
-[scripts/setup-storage-service.sh](scripts/setup-storage-service.sh) — the script fails loudly when
-a subtree it expects is gone.
+`task init` sets up the ai-service (submodule venv + dependencies) and installs the frontend and
+central-server dependencies, creating each service's `.env` from its `.env.example` (existing
+`.env` files are left untouched). The storage-server is committed in-repo and needs no fetch step —
+it is a single Go module with zero external dependencies, so `task storage:run` builds it straight
+from source.
 
 ### Run (each in its own terminal)
 
 ```bash
-cd frontend               && npm install && npm run dev
-cd backend/central-server && ./mvnw spring-boot:run      # requires Postgres
-cd backend/ai-service     && python -m app.main          # Apple Silicon
-cd backend/storage-service && task run
+task frontend:dev     # Vite dev server               → http://localhost:5173
+task backend:dev      # Spring Boot (needs Postgres)   → http://localhost:4000
+task ai:run:api       # FastAPI inference (Apple Silicon) → http://localhost:8000
+task storage:run      # Go storage server            → http://localhost:9000
 ```
 
-A root [Taskfile.yaml](Taskfile.yaml) provides shortcuts: `task setup`, `task server`,
-`task client`, `task storage`, plus `task migrate` / `task codegen` for Flyway + jOOQ.
+Other handy shortcuts from the root [Taskfile.yaml](Taskfile.yaml): `task backend:migrate` /
+`task backend:codegen` (Flyway + jOOQ), `task storage:build`, `task db:backup` / `task db:restore`.
+Run `task -l` for the full list.
 
-Per-service setup details:
+Per-service details:
 [frontend](frontend/README.md) ·
 [central-server](backend/central-server/README.md) ·
 [ai-service](backend/ai-service/README.md) ·
-`storage-service` (see its README after `task setup`)
+[storage-server](backend/storage-server/README.md)

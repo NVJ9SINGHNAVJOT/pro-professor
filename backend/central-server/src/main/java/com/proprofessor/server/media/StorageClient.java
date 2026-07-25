@@ -12,10 +12,12 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 /**
- * Talks to the Go storage-service so the frontend never calls it directly.
+ * Talks to the Go storage-server. Uploads still flow through central-server (so we can
+ * record a reference row), but downloads no longer proxy bytes: {@link #fileUrl(String)}
+ * builds the storage-server URL the browser fetches directly.
  *
- * <p>The storage-service behaves like an object store: upload bytes and get back
- * a UUID, fetch them by that UUID, delete by UUID. Every storage-service
+ * <p>The storage-server behaves like an object store: upload bytes and get back
+ * a UUID, fetch them by that UUID, delete by UUID. Every storage-server
  * response is wrapped in a {@code { "data": ... }} envelope.
  */
 @Component
@@ -24,9 +26,21 @@ public class StorageClient {
     private static final String DEFAULT_FILENAME = "upload.bin";
 
     private final RestClient restClient;
+    private final String baseUrl;
 
     public StorageClient(AppProperties appProperties) {
-        this.restClient = HttpClientFactory.forBaseUrl(appProperties.storageService().baseUrl());
+        String configured = appProperties.storageServer().baseUrl();
+        this.baseUrl = configured.endsWith("/") ? configured.substring(0, configured.length() - 1) : configured;
+        this.restClient = HttpClientFactory.forBaseUrl(configured);
+    }
+
+    /**
+     * The storage-server URL that streams this file's bytes. Handed to the browser (via
+     * {@code MediaResponse.url}) so downloads go straight to storage — never through the JVM.
+     * This base URL must therefore be reachable from the browser, not just from central-server.
+     */
+    public String fileUrl(String storageId) {
+        return baseUrl + "/api/media/" + storageId + "/file";
     }
 
     /** Uploads bytes and returns the stored file's metadata. */
@@ -53,7 +67,7 @@ public class StorageClient {
                 .toEntity(byte[].class);
     }
 
-    /** Permanently deletes the file from the storage-service. */
+    /** Permanently deletes the file from the storage-server. */
     public void delete(String storageId) {
         restClient.delete()
                 .uri("/api/media/{id}", storageId)
@@ -61,7 +75,7 @@ public class StorageClient {
                 .toBodilessEntity();
     }
 
-    /** Storage-service media object (subset of fields we use). */
+    /** Storage-server media object (subset of fields we use). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StorageMedia(
             String id,
@@ -72,7 +86,7 @@ public class StorageClient {
     ) {
     }
 
-    /** The {@code { "data": ... }} envelope every storage-service response uses. */
+    /** The {@code { "data": ... }} envelope every storage-server response uses. */
     private record Envelope<T>(T data) {
     }
 

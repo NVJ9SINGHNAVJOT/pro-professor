@@ -55,12 +55,14 @@ Standard vertical: [NotesController](../backend/central-server/src/main/java/com
    `![[embeds]]`, `[text](Note)` and inline `#tags`, then rebuilds `note_links` + `note_tags`.
 
 **Endpoints** (`/api/v1/notes`): CRUD, `GET ?tag=` filter, `GET /search?q=`
-(`websearch_to_tsquery` + `ts_rank` over the V4 tsvector), `GET /{id}/backlinks` (join on
+(`websearch_to_tsquery` + `ts_rank` over the note-content tsvector), `GET /{id}/backlinks` (join on
 `lower(target_ref) = lower(title)`), `GET /links` (edge list feeding the graph view),
 `GET /{id}/revisions`, `POST /{id}/revisions/{revId}/restore`.
 
-One media addition: `GET /api/v1/media/by-filename/{name}/file` resolves `![[image.png]]` embeds
-to the newest upload with that original filename.
+One media addition: the note detail payload (`GET /api/v1/notes/{id}`) carries an `embedUrls` map —
+each `![[image.png]]` embed target resolved to the newest matching upload's **direct storage-server
+URL**. The frontend renders embedded images straight from storage; central-server never proxies the
+bytes. (A freshly-typed embed resolves on the next save, when the note is re-read.)
 
 ## 4. Frontend (`modules/notes`)
 
@@ -89,7 +91,7 @@ each pane scrolls independently:
   Mermaid/React Flow templates, AI actions. AI commands reach the AiBar via a `pendingCommand`
   prop signal, not a ref (react-compiler lint forbids ref access in render paths).
 
-## 5. Shared rendering ([components/common/Markdown.tsx](../frontend/src/components/common/Markdown.tsx))
+## 5. Shared rendering ([components/common/markdown/Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx))
 
 The `Markdown` component was **extracted from ChatMessages** and is shared by chat and notes:
 `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex`, plus hand-rolled remark
@@ -103,7 +105,8 @@ transforms (no `unist-util-visit` dependency):
   render dimmed/dashed. Chat passes no `wiki` prop, so this stays inert there.
 - **Embeds** — `![[Note]]` / `![[Note#Heading]]` render [NoteEmbed](../frontend/src/modules/notes/components/NoteEmbed.tsx):
   fetches the target and transcludes the body (or just that heading's section via
-  `extractSection`); image filenames render via the media by-filename endpoint. Depth is capped at
+  `extractSection`); image embeds render from the note's `embedUrls` map (direct storage URLs the
+  backend resolves at load). Depth is capped at
   1 — nested embeds fall back to plain links. A `[[Title.diagram]]` **link** (not an embed) opens
   the standalone diagram page: `onLinkClick` resolves the title→id and navigates to `/diagrams/:id`
   (see [diagram-flow.md](diagram-flow.md) §5).

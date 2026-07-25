@@ -6,6 +6,7 @@
 **/dist
 **/target
 !**/.mvn/wrapper/maven-wrapper.jar
+**/bin
 
 # environment
 *.env
@@ -20,17 +21,8 @@
 **/logs
 **/*.log
 
-# service configs
-**/service.json
-
-# upload directories
-**/upload-storage
-
-# database migration
-**/migration
-
-# storage-service, fetched from the external micro-yard repo by `task setup`
-backend/storage-service/
+# storage-server runtime output (the service itself is committed to this repo)
+backend/storage-server/storage/
 
 # docs
 plans/

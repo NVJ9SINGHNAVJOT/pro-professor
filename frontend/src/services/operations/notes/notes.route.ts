@@ -27,6 +27,8 @@ export interface NoteDetail {
   content: string;
   frontmatter: Record<string, unknown>;
   tags: string[];
+  /** Image `![[file.png]]` embed filename → its direct storage-server URL (empty when the note has none). */
+  embedUrls: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }

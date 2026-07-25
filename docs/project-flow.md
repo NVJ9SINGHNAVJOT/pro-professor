@@ -7,21 +7,21 @@ The project is a multi-tier, all-local AI chat application:
 1. **Frontend**: React (Vite) Single Page Application.
 2. **Central Server**: Java Spring Boot backend acting as the API gateway and orchestration layer. The browser only ever talks to this tier.
 3. **AI Service**: Python FastAPI backend (git submodule) for running local ML models via `mlx-lm` / `mlx-vlm`, plus local speech-to-text and text-to-speech.
-4. **Storage Service**: external local service (in the `micro-yard` repo) that stores uploaded file bytes; Central Server keeps only a reference to them.
+4. **Storage Server**: a local Go service (in this repo, under `backend/storage-server/`) that stores uploaded file bytes; Central Server keeps only a reference (storage UUID + metadata) and hands the browser a direct URL to download from.
 5. **Ollama**: external local inference engine for standard open-source models.
 
 **Supporting infrastructure (used by Central Server):**
 - **Postgres** — conversations, messages, model rows, and media references. Persistence uses **jOOQ** (generated sources under `target/generated-sources/jooq`), not JPA.
 - **Kafka** — health-checked via `KafkaHealthIndicator` (event plumbing).
 
-Every request from the browser hits Central Server, which fans out to the AI Service, Storage Service, or Ollama. The frontend never calls those services directly.
+Every request from the browser hits Central Server, which fans out to the AI Service, Storage Server, or Ollama. The one exception is media **downloads**: Central Server hands the browser a direct Storage Server URL, so file bytes stream straight from storage (never through the JVM). Everything else the browser reaches only through Central Server.
 
-> **Repository boundaries.** `frontend/` and `backend/central-server/` live in *this* repo and
-> are edited directly. `backend/ai-service/` is a **git submodule with its own repository and its
-> own agent config**, and the Go **storage-service** now lives in the external **`micro-yard`**
-> repo (no longer in this repo) — from a `pro-professor` session you **plan** changes to them (a
-> task-requirements markdown spec under `plans/`), you don't edit their files. See
-> [project-rules.md](project-rules.md) § Repository boundaries for the full workflow.
+> **Repository boundaries.** `frontend/`, `backend/central-server/`, and `backend/storage-server/`
+> live in *this* repo and are edited directly. `backend/ai-service/` is the only exception — a
+> **git submodule with its own repository and its own agent config** — so from a `pro-professor`
+> session you **plan** changes to it (a task-requirements markdown spec under `plans/`) rather than
+> editing its files. See [project-rules.md](project-rules.md) § Repository boundaries for the full
+> workflow.
 
 ## 2. Component Interactions
 
@@ -56,9 +56,9 @@ A WebSocket lives at `/ws` ([AppWebSocketHandler.java](../backend/central-server
 ### 2.4 Media Upload & Attachments
 
 1. **Frontend** uploads a file to `POST /api/v1/media/upload` ([MediaController.java](../backend/central-server/src/main/java/com/proprofessor/server/media/MediaController.java)).
-2. **MediaService** forwards bytes to the **Storage Service**, then persists only a reference row (storage UUID + metadata) in Postgres and returns an id + proxy URL.
+2. **MediaService** forwards the bytes to the **Storage Server**, then persists only a reference row (storage UUID + metadata) in Postgres and returns the media id + a **direct Storage Server URL** ([`MediaService.toResponse`](../backend/central-server/src/main/java/com/proprofessor/server/media/MediaService.java)). The same `toResponse` also serializes attachments on chat-history load ([`ChatMapper`](../backend/central-server/src/main/java/com/proprofessor/server/chat/mapper/ChatMapper.java)), so every attachment the frontend sees already carries its download URL.
 3. The returned media id is passed as `attachmentIds` in a subsequent chat send; `ChatService` links it to the user message.
-4. Downloads are proxied back through `GET /api/v1/media/{id}/file` (Storage Service is never hit directly by the browser).
+4. Downloads are **not proxied**: the browser streams bytes straight from the Storage Server using the `url` from step 2 (range requests supported). Note `![[image.png]]` embeds resolve by *filename*, which storage can't look up — so Central Server resolves them **when it serves the note** and returns an `embedUrls` map (filename → direct storage URL) on the note payload; the frontend renders `<img>` straight from storage. Either way, file bytes never pass through the JVM.
 
 ### 2.5 Voice Chat (implemented)
 
@@ -80,7 +80,7 @@ The reply is always text → TTS, because **no model in this stack emits audio**
 For audio-capable models, the spoken utterance reaches the model directly as an OpenAI `input_audio` content part instead of being transcribed to text first:
 
 1. The clip arrives at the gateway through the **existing media-upload path** — no new wire field. `ChatService.streamReply` links it to the user message like any attachment.
-2. `ChatService.withCurrentTurnAudio` runs **only when `provider == AI_SERVICE`**: it scans the current turn's attachments for `audio/*` media, fetches the bytes from the Storage Service, base64-encodes them, and rebuilds the **last (current)** user message in the history to carry one `AudioPart` per clip. Earlier history turns stay text-only — matching `mlx-vlm`'s "most recent media only" behavior.
+2. `ChatService.withCurrentTurnAudio` runs **only when `provider == AI_SERVICE`**: it scans the current turn's attachments for `audio/*` media, fetches the bytes from the Storage Server, base64-encodes them, and rebuilds the **last (current)** user message in the history to carry one `AudioPart` per clip. Earlier history turns stay text-only — matching `mlx-vlm`'s "most recent media only" behavior.
 3. [ChatCompletionClient.appendUserMessage](../backend/central-server/src/main/java/com/proprofessor/server/chat/provider/ChatCompletionClient.java) emits a multimodal user message (a text part when present, plus an `input_audio` part per clip via the OpenAI Java SDK) instead of the plain-string overload.
 
 The spoken user turn is stored with **empty text content** (audio attachment only) — it is not also transcribed for storage. Gating is defensive: the frontend only takes the direct path for audio-capable models, and the gateway only forwards audio when the provider is `AI_SERVICE`, so a stray audio attachment can never reach a text-only provider. **Image** attachments are stored and displayed but still not forwarded to the model (a parallel gap that can reuse this same multimodal plumbing).

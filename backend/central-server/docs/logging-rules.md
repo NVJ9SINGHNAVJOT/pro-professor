@@ -29,15 +29,18 @@ automatically. A new controller needs **no** logging code to get all of the abov
 
 **Never buffer the response to log it.** Do **not** add `ContentCachingResponseWrapper` (or any
 response-wrapping filter). It would stall the SSE chat stream — the client would receive nothing
-until generation finished — and would pull whole media files (up to 25MB) into memory. Response
-bodies are logged from `ResponseBodyAdvice`, which sees the object *before* serialization. The
-non-JSON endpoints are handled deliberately:
+until generation finished. Response bodies are logged from `ResponseBodyAdvice`, which sees the
+object *before* serialization. The non-JSON endpoints are handled deliberately:
 
 | Endpoint | Logged as |
 | --- | --- |
 | SSE streams (`/chats/send`, notes AI routes) | frames accumulated in the controller, logged once on completion as a JSON **array** |
-| `POST /audio/speech`, `GET /media/{id}/file` (`byte[]`) | a **byte count**, never the bytes |
+| `POST /audio/speech` (`byte[]` WAV) | a **byte count**, never the bytes |
 | everything else (JSON) | the body as a JSON **object** |
+
+Media **downloads** are not in this table: central-server no longer streams file bytes. Uploads
+still flow through it (logged by `MediaService`, bytes never logged), but the browser downloads
+files **directly from the storage-server** using the URL central-server returns.
 
 **Never log raw bytes or secrets.** Multipart bodies are logged as a summary
 (`<multipart/form-data, content-length=N>`) and the stream is left unread — reading it would break

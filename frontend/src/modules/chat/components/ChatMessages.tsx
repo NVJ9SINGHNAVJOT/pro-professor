@@ -16,7 +16,8 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import Markdown from "@/components/common/Markdown";
+import Markdown from "@/components/common/markdown/Markdown";
+import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
 import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";
@@ -81,9 +82,9 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
         Thinking{isStreaming && "…"}
       </button>
       {open && (
-        <div className="chat-markdown wrap-break-word px-3 pb-2.5 para-small-regular text-neutral-400">
+        <MarkdownBody className="px-3 pb-2.5 para-small-regular text-neutral-400">
           <Markdown>{isStreaming ? hideUnclosedMath(thinking) : thinking}</Markdown>
-        </div>
+        </MarkdownBody>
       )}
     </div>
   );
@@ -201,7 +202,7 @@ const AssistantMessage = ({
     <div className="flex">
       <div className="flex-1 min-w-0">
         {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
-        <div className="chat-markdown wrap-break-word para-regular text-neutral-100">
+        <MarkdownBody className="para-regular text-neutral-100">
           <Markdown>{isStreaming ? hideUnclosedMath(content) : content}</Markdown>
           {isStreaming && (
             <span aria-hidden className="ct-wave ml-1 text-neutral-400">
@@ -211,7 +212,7 @@ const AssistantMessage = ({
               <span />
             </span>
           )}
-        </div>
+        </MarkdownBody>
         {metrics && <MetricsLine metrics={metrics} />}
         {!isStreaming && content && (
           <button
@@ -243,19 +244,19 @@ const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] })
     <div className="mb-1.5 flex flex-wrap justify-end gap-2">
       {attachments.map((a) =>
         a.mimeType.startsWith("image/") ? (
-          <a key={a.id} href={mediaApi.fileUrl(a.id)} target="_blank" rel="noreferrer">
+          <a key={a.id} href={a.url} target="_blank" rel="noreferrer">
             <img
-              src={mediaApi.fileUrl(a.id)}
+              src={a.url}
               alt={a.originalFilename}
               className="max-h-48 max-w-64 rounded-2xl object-cover"
             />
           </a>
         ) : a.mimeType.startsWith("audio/") ? (
-          <AudioPlayer key={a.id} src={mediaApi.fileUrl(a.id)} />
+          <AudioPlayer key={a.id} src={a.url} />
         ) : (
           <a
             key={a.id}
-            href={mediaApi.fileUrl(a.id)}
+            href={a.url}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 rounded-2xl bg-neutral-700 px-3 py-2 para-small-medium text-neutral-100 hover:bg-neutral-600"
@@ -926,7 +927,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                     >
                       {a.mimeType.startsWith("image/") ? (
                         <img
-                          src={mediaApi.fileUrl(a.id)}
+                          src={a.url}
                           alt={a.originalFilename}
                           className="size-9 rounded-lg object-cover"
                         />

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.proprofessor.server.common.db.NoteRow;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
+import com.proprofessor.server.media.MediaService;
 import com.proprofessor.server.notes.dto.NoteCreateRequest;
 import com.proprofessor.server.notes.dto.NoteDetail;
 import com.proprofessor.server.notes.dto.NoteLinkDto;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -37,11 +39,14 @@ public class NotesService {
     private final NotesRepository notesRepository;
     private final NoteMapper noteMapper;
     private final ObjectMapper objectMapper;
+    private final MediaService mediaService;
 
-    public NotesService(NotesRepository notesRepository, NoteMapper noteMapper, ObjectMapper objectMapper) {
+    public NotesService(NotesRepository notesRepository, NoteMapper noteMapper, ObjectMapper objectMapper,
+                        MediaService mediaService) {
         this.notesRepository = notesRepository;
         this.noteMapper = noteMapper;
         this.objectMapper = objectMapper;
+        this.mediaService = mediaService;
     }
 
     /** All notes, or only those carrying {@code tag} when it is given. */
@@ -82,7 +87,23 @@ public class NotesService {
 
     public NoteDetail getNote(long id) {
         NoteRow note = requireNote(id);
-        return noteMapper.toDetail(note, notesRepository.findTagsByNoteId(id));
+        return noteMapper.toDetail(note, notesRepository.findTagsByNoteId(id), resolveEmbedUrls(note.content()));
+    }
+
+    /**
+     * Direct storage-server URLs for the note's image {@code ![[file.png]]} embeds, resolved once
+     * at read time so the frontend renders embedded images straight from storage (no per-image
+     * round-trip). Note-to-note embeds don't match an uploaded filename and are skipped.
+     */
+    private Map<String, String> resolveEmbedUrls(String content) {
+        Map<String, String> urls = new LinkedHashMap<>();
+        for (LinkParser.Link link : LinkParser.parse(Frontmatter.parse(content).body()).links()) {
+            if (LinkParser.TYPE_EMBED.equals(link.type())) {
+                mediaService.urlByFilename(link.targetRef())
+                        .ifPresent(url -> urls.put(link.targetRef(), url));
+            }
+        }
+        return urls;
     }
 
     @Transactional

@@ -47,7 +47,7 @@ src/
 ├── redux/               # Global state management (store setup, global slices)
 ├── services/            # API route definitions and network utility wrappers (e.g., fetch setup)
 ├── socket/              # Global WebSocket configuration and event definitions
-├── styles/              # Global CSS files and Tailwind configurations
+├── styles/              # Global CSS files and Tailwind configurations (feature-scoped CSS lives beside its component, `@import`ed from index.css)
 ├── types/               # Global TypeScript definitions used across the entire app
 └── utils/               # Global helper functions (e.g., tailwind `cn` merger, date formatters)
 ```
