@@ -1,0 +1,14 @@
+/* Library button, top-right */
+.excalidraw .default-sidebar-trigger {
+  display: none;
+}
+
+/* Library tab in the sidebar header */
+.excalidraw .sidebar-tab-trigger[id$="-trigger-library"] {
+  display: none;
+}
+
+/* "Browse libraries" link */
+.excalidraw .library-menu-browse-button {
+  display: none;
+}

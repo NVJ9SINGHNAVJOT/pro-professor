@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Excalidraw, getSceneVersion, restore, serializeAsJSON } from "@excalidraw/excalidraw";
+import { Excalidraw, MainMenu, getSceneVersion, restore, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
+import "@/modules/diagram/components/diagramEditor.css";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
@@ -73,10 +74,10 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
       const elements = api.getSceneElements();
       const content = JSON.parse(serializeAsJSON(elements, api.getAppState(), api.getFiles(), "database"));
       setSaveState("saving");
-      
+
       const titleToSave = typeof overrideTitle === "string" ? overrideTitle : titleRef.current;
       const res = await updateDiagram(diagramId, { title: titleToSave, content });
-      
+
       if (res.error) {
         setSaveState("idle");
         toast.error("Failed to save diagram");
@@ -130,7 +131,19 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
                 apiRef.current = api;
               }}
               onChange={onChange}
-            />
+            >
+              <MainMenu>
+                <MainMenu.DefaultItems.LoadScene />
+                <MainMenu.DefaultItems.SaveToActiveFile />
+                <MainMenu.DefaultItems.Export />
+                <MainMenu.DefaultItems.SaveAsImage />
+                <MainMenu.DefaultItems.SearchMenu />
+                <MainMenu.DefaultItems.Help />
+                <MainMenu.DefaultItems.ClearCanvas />
+                <MainMenu.Separator />
+                <MainMenu.DefaultItems.ChangeCanvasBackground />
+              </MainMenu>
+            </Excalidraw>
           ) : (
             <span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>
           )}

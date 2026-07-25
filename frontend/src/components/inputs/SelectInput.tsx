@@ -21,6 +21,7 @@ interface SelectInputProps {
   dropdownClassName?: string;
   optionClassName?: string;
   defaultOpen?: boolean;
+  align?: "start" | "center" | "end";
 }
 
 export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
@@ -39,6 +40,7 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
       dropdownClassName,
       optionClassName,
       defaultOpen,
+      align = "start",
     },
     ref,
   ) => {
@@ -62,15 +64,20 @@ export const SelectInput = forwardRef<HTMLDivElement, SelectInputProps>(
           >
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
-          <SelectContent className={cn("border-neutral-700 bg-chat-input text-white", dropdownClassName)}>
+          <SelectContent
+            position="popper"
+            side="bottom"
+            align={align}
+            className={cn(
+              "border-neutral-700 bg-chat-input text-white [--accent-foreground:var(--color-white)] [--accent:var(--color-neutral-700)]",
+              dropdownClassName,
+            )}
+          >
             {options.map((o) => (
               <SelectItem
                 key={o.value}
                 value={o.value}
-                className={cn(
-                  "para-small-medium text-neutral-100 focus:bg-neutral-700 focus:text-white",
-                  optionClassName,
-                )}
+                className={cn("para-small-medium text-neutral-100", optionClassName)}
               >
                 {o.label}
               </SelectItem>

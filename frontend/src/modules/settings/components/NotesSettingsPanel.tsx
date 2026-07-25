@@ -43,8 +43,8 @@ const NotesSettingsPanel = () => {
   const ready = notesParams != null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 pb-16 pt-6">
-      <header className="mb-8">
+    <>
+      <header className="mb-6">
         <h1 className="heading-semibold text-white">Notes</h1>
         <p className="mt-1.5 para-small-regular text-neutral-400">
           Default inference parameters applied to the Notes AI actions. Chat keeps its own per-conversation settings.
@@ -78,7 +78,7 @@ const NotesSettingsPanel = () => {
       ) : (
         <p className="para-small-regular text-neutral-500">Couldn't load settings. Try reloading.</p>
       )}
-    </div>
+    </>
   );
 };
 

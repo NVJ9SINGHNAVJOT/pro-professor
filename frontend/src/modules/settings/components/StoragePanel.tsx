@@ -103,7 +103,7 @@ const StoragePanel = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 pb-16 pt-6">
+    <>
       <header className="mb-6">
         <h1 className="heading-semibold text-white">Storage</h1>
         <p className="mt-1.5 para-small-regular text-neutral-400">
@@ -243,7 +243,7 @@ const StoragePanel = () => {
           )}
         </>
       )}
-    </div>
+    </>
   );
 };
 
