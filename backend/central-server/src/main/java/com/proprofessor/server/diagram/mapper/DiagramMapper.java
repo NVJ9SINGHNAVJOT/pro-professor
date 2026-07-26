@@ -3,8 +3,10 @@ package com.proprofessor.server.diagram.mapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.proprofessor.server.common.db.DiagramFolderRow;
 import com.proprofessor.server.common.db.DiagramRow;
 import com.proprofessor.server.diagram.dto.DiagramDetail;
+import com.proprofessor.server.diagram.dto.DiagramFolderSummary;
 import com.proprofessor.server.diagram.dto.DiagramSummary;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +20,7 @@ public class DiagramMapper {
     }
 
     public DiagramSummary toSummary(DiagramRow diagram) {
-        return new DiagramSummary(diagram.id(), diagram.title(), diagram.updatedAt());
+        return new DiagramSummary(diagram.id(), diagram.title(), diagram.folderId(), diagram.updatedAt());
     }
 
     public DiagramDetail toDetail(DiagramRow diagram) {
@@ -26,9 +28,14 @@ public class DiagramMapper {
                 diagram.id(),
                 diagram.title(),
                 parseContent(diagram.contentJson()),
+                diagram.folderId(),
                 diagram.createdAt(),
                 diagram.updatedAt()
         );
+    }
+
+    public DiagramFolderSummary toFolderSummary(DiagramFolderRow folder) {
+        return new DiagramFolderSummary(folder.id(), folder.name(), folder.parentId());
     }
 
     private JsonNode parseContent(String json) {

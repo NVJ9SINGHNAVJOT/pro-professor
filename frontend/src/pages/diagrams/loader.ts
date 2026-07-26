@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { NEW_ITEM_ID } from "@/constants/routes";
 import store from "@/redux/store";
 import { setDiagrams } from "@/redux/slices/diagramListSlice";
+import { setDiagramFolders } from "@/redux/slices/diagramFolderListSlice";
 import { load } from "@/services/client/loadRoute";
 import { diagramsRoute, type DiagramDetail } from "@/services/operations/diagrams/diagrams.route";
 
@@ -11,13 +12,16 @@ export type DiagramDetailLoaderData = {
 };
 
 /**
- * Parent `/diagrams` route: the sidebar list. It seeds `diagramList` rather than returning loader
- * data — the editor autosaves every ~800ms while you draw, and each save patches that row's title
- * and position from its own response instead of refetching the list. Runs once per entry into the
- * section (`shouldRevalidate: () => false`).
+ * Parent `/diagrams` route: the sidebar list. It seeds `diagramList` and `diagramFolderList` rather
+ * than returning loader data — the editor autosaves every ~800ms while you draw, and each save
+ * patches that row's title and position from its own response instead of refetching the list. Runs
+ * once per entry into the section (`shouldRevalidate: () => false`).
+ *
+ * Folders ride along in the same response, so the whole sidebar still costs one request.
  */
 export async function diagramsListLoader({ request }: LoaderFunctionArgs) {
   const diagrams = await load(request.signal, diagramsRoute.getDiagrams);
+  store.dispatch(setDiagramFolders(diagrams.data.folders));
   store.dispatch(setDiagrams(diagrams.data.diagrams));
   return null;
 }

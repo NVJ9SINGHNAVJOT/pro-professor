@@ -8,6 +8,7 @@ public record DiagramDetail(
         long id,
         String title,
         JsonNode content,
+        Long folderId,
         Instant createdAt,
         Instant updatedAt
 ) {

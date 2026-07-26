@@ -21,23 +21,55 @@ removed; it may return "some other day".)
 
 ## 2. Database
 
-A single `diagrams` table lives in the consolidated `V1__init_schema.sql` (id BIGSERIAL,
-**title UNIQUE**, content jsonb, timestamps + updated_at trigger). Same conventions as notes: titles
-are the diagram's identity (`[[Title.diagram]]` links resolve by title, case-insensitively; clashes
-get a numeric suffix); the table is listed in the jOOQ `<includes>` in
-[pom.xml](../backend/central-server/pom.xml). There is no revisions table — diagrams are drawn
-directly, with no snapshot/undo-on-server machinery.
+Two tables in the consolidated `V1__init_schema.sql`, both listed in the jOOQ `<includes>` in
+[pom.xml](../backend/central-server/pom.xml):
+
+- **`diagrams`** — id BIGSERIAL, **title UNIQUE**, content jsonb, `folder_id`, timestamps +
+  updated_at trigger. Same conventions as notes: titles are the diagram's identity
+  (`[[Title.diagram]]` links resolve by title, case-insensitively; clashes get a numeric suffix).
+  There is no revisions table — diagrams are drawn directly, with no snapshot/undo-on-server
+  machinery.
+- **`diagram_folders`** — id, name, self-referencing `parent_id`, created_at. Declared *above*
+  `diagrams`, which references it. Folders are addressed by id and never by name, so sibling names
+  may repeat; no `updated_at`, since nothing reads it and folders sort by name.
+
+`folder_id` and `parent_id` are nullable on purpose — NULL is the root level, the one genuinely
+absent value, not a legacy-row accommodation. Both are indexed (Postgres does not index FK columns
+automatically, and the cascade deletes walk them). Deleting a folder cascades to its subfolders and
+their diagrams, but only after the service has cleared the note-link guard (§3).
 
 ## 3. Backend (`com.proprofessor.server.diagram`)
 
-Pure CRUD vertical: [DiagramController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramController.java)
+Two verticals in one package: [DiagramController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramController.java)
 → [DiagramService](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramService.java)
-→ [DiagramRepository](../backend/central-server/src/main/java/com/proprofessor/server/diagram/repository/DiagramRepository.java), plus `dto/` and `mapper/`.
+→ [DiagramRepository](../backend/central-server/src/main/java/com/proprofessor/server/diagram/repository/DiagramRepository.java),
+and [DiagramFolderController](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramFolderController.java)
+→ [DiagramFolderService](../backend/central-server/src/main/java/com/proprofessor/server/diagram/DiagramFolderService.java)
+→ [DiagramFolderRepository](../backend/central-server/src/main/java/com/proprofessor/server/diagram/repository/DiagramFolderRepository.java),
+plus shared `dto/` and `mapper/`.
 
-- CRUD at `/api/v1/diagrams`: list, `GET /{id}`, `GET /by-title/{title}` (for `[[Title.diagram]]`
-  link resolution), `POST`, `PUT /{id}`, `DELETE /{id}`.
+- Diagrams at `/api/v1/diagrams`: list (folders **and** diagrams, so the sidebar is one request),
+  `GET /{id}`, `GET /by-title/{title}` (for `[[Title.diagram]]` link resolution), `POST`,
+  `PUT /{id}`, `PUT /{id}/folder`, `DELETE /{id}`.
+- Folders at `/api/v1/diagram-folders`: `POST`, `PUT /{id}` (rename), `PUT /{id}/parent` (move),
+  `DELETE /{id}`. Its own path rather than `/diagrams/folders`, which would sit under the
+  `/diagrams/{id}` path variable. There is no list endpoint — folders ride with the diagram list.
 - `content` rides as a Jackson `JsonNode` and is stored as jsonb; the server only requires it to be
   a JSON object — there is no server-side scene schema (Excalidraw's `restore` normalises on load).
+
+**Moves are their own endpoints, never part of `PUT /{id}`.** That route is the editor's ~800ms
+autosave, which sends only title + content. A `folderId` field there would deserialize an absent
+value to null on every save (a Java record cannot tell "absent" from "explicitly null") and drag the
+open diagram back to the root. `DiagramCreateRequest`/`DiagramUpdateRequest` therefore carry no
+folder at all; `DiagramMoveRequest` and `DiagramFolderMoveRequest` do, with null meaning root.
+
+**Deleting is guarded by note links.** `DiagramService.requireNoNoteReferences` joins `note_links`
+against `diagrams.title || '.diagram'` (case-insensitively; embeds count too) and throws **409**
+naming the diagrams and the notes holding the links. `DiagramFolderService.deleteFolder` runs it
+over the folder's whole subtree, so a folder delete is all-or-nothing: one still-linked diagram
+anywhere beneath it and nothing is deleted. `DELETE /api/v1/diagrams/{id}` runs the same check for a
+single diagram. Moving a folder into itself or a descendant is rejected with 400; descendants are
+resolved by walking the flat folder list in memory rather than with a recursive CTE.
 
 ## 4. Frontend (`src/modules/diagram/`)
 
@@ -48,8 +80,10 @@ layering (Excalidraw is the model + renderer).
 | --- | --- | --- |
 | `types/` | `index.ts` | the `DiagramScene` document type |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
+| `utils/` | `folderTree.ts` | pure tree helpers (`childFolders`, `diagramsIn`, `descendantIds`, `isDescendant`) — the drag guards are testable without a DOM |
 | `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) |
-| `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | diagram list + `<DiagramEditor>` |
+| `components/` | `DiagramTree.tsx` | one level of the sidebar tree, recursing into expanded folders |
+| `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | folder tree + `<DiagramEditor>`, and every mutation handler |
 
 Save/load: `DiagramEditor` loads a scene with `restore(content)`, seeds the professional tool
 defaults, and mounts `<Excalidraw>`. `onChange` is debounced (~800ms) and skipped when the scene
@@ -70,7 +104,45 @@ a route of its own. The button issues **no request**; the editor mounts on `make
 as "Untitled Diagram" server-side), then replaces the URL with `/diagrams/:id`. The editor holds its
 id in a ref, and both the route and the screen's `key` are kept stable across that hop on purpose —
 remounting `<Excalidraw>` mid-drawing would reset the scene, the viewport and the undo history.
-Drawing nothing leaves nothing behind.
+Drawing nothing leaves nothing behind. A new diagram always lands at the **root** level — it is
+moved into a folder by dragging, which keeps the draft path free of any folder plumbing.
+
+**The sidebar tree.** The server sends folders flat, each with a `parentId`; the tree is assembled
+at render time, sorting folders A→Z and diagrams by last-updated at every level. The root is split
+into two collapsible `SidebarSection`s — **Diagrams** (the loose ones, `folderId === null`) above
+**Folders** (the tree) — via `DiagramTree`'s `only` prop; the two partition the list, so a diagram
+shows in exactly one. Nested levels render both kinds together. Folders live in
+their own `diagramFolderList` slice beside `diagramList` — a second `createListSlice` rather than
+one slice holding both, so the diagram rows keep the upsert-to-front behavior the autosave relies
+on. `diagramsListLoader` seeds both from the single list response.
+
+**Drag and drop** is HTML5-native. The dragged row is held in a `useRef`, not in `dataTransfer`,
+whose payload is unreadable during `dragover` — which is exactly when a folder drop has to be judged
+valid. The native drag ghost is suppressed in favour of a custom preview that follows the cursor
+(see the frontend conventions doc — browsers rasterize that ghost at 1×, so it is always blurry on a
+HiDPI screen). **A folder's drop target is its whole block** — the row plus everything nested under
+it when open — so dropping onto a folder's visible contents means "put it in this folder"; nested
+blocks stop propagation so the innermost still wins, and diagram rows carry no handlers, so they
+bubble to whichever folder encloses them. The highlighted target is one shared value, not per-row
+state: dropping into a nested folder never fires `dragleave` on its ancestors, so their highlights
+would otherwise stay lit. **Getting back to the top level is a drag to the far-left gutter**, the way
+VS Code's explorer un-nests — a 16px overlay strip that appears only while a nested row is in
+flight, showing a hairline that thickens on approach. It replaced three worse designs: the whole
+scroll area (any stray release pulled a diagram out of its folder), the Diagrams section
+(undiscoverable, and semantically wrong for a folder), and a banner above the list (shifted the list
+mid-gesture). A drop into a collapsed folder expands it, or the row would appear to vanish. Moves apply locally first and roll back on error, so
+the row doesn't sit under the cursor waiting on the round-trip. Dropping a folder into itself or a descendant is refused on both
+tiers. After a folder delete succeeds the client prunes the same subtree locally (`descendantIds`)
+instead of refetching, since the server already cascaded; a 409 leaves the tree untouched and
+surfaces the server's message.
+
+**Which folders are open lives in Redux** (`diagramSidebar`), not in `DiagramsScreen`. `/diagrams`
+and `/diagrams/:diagramId` are two route entries rendering two separate `<DiagramsPage>` elements,
+so the first click on a diagram remounts the screen — with the state local, the folder you had just
+opened snapped shut as you clicked into it. (The notes explorer's tag expansion sits on the same
+route shape and has the same behavior.) Arriving on `/diagrams/:id` cold — a reload, or a
+`[[Title.diagram]]` link — reveals the whole `ancestorIds` chain down to the open diagram, keyed on
+the diagram's id so a later collapse isn't undone by an unrelated autosave.
 
 ## 5. Referencing a diagram from a note
 
@@ -79,6 +151,11 @@ A note references a standalone diagram with a **link**, not an inline render:
 `onLinkClick` detects the `.diagram` suffix (`DIAGRAM_SUFFIX`), resolves the title→id via
 `diagramsRoute.getDiagramByTitle`, and navigates to `/diagrams/:id`. There is no inline diagram
 embed.
+
+Because that link resolves by **title**, deleting the diagram behind one would silently turn a
+working link into a dead one — which is what the delete guard in §3 exists to prevent, for a single
+diagram and for a whole folder subtree alike. (Renaming a diagram still orphans links pointing at
+the old title; that is unchanged and unguarded.)
 
 **Diagrams drawn *inside* a note** use **Mermaid**: a ```mermaid fenced block renders inline via
 [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx) (the `language-mermaid` case in

@@ -157,7 +157,7 @@ Each conversation persists its current inference settings on the `conversations`
 
 ### 2.8 Database schema & migrations
 
-Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), `diagrams` (see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
+Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
 
 ### 2.9 Notes module
 
@@ -172,8 +172,10 @@ architecture and flow: [notes-flow.md](notes-flow.md).
 A manual diagram editor at `/diagrams` (backend vertical `com.proprofessor.server.diagram`,
 frontend `modules/diagram`): the user draws in an **Excalidraw** canvas and the scene JSON
 (`{ type, elements, appState, files }`) is stored inline in Postgres like a note, with debounced
-autosave and professional (non-hand-drawn) styling defaults. Notes reference a standalone diagram
-with a `[[Title.diagram]]` link that opens the diagram page; inline note diagrams use Mermaid.
+autosave and professional (non-hand-drawn) styling defaults. The sidebar organizes diagrams into
+nested folders (`diagram_folders`) with drag-and-drop; deleting a folder or a diagram is refused
+while any note still links to a diagram involved. Notes reference a standalone diagram with a
+`[[Title.diagram]]` link that opens the diagram page; inline note diagrams use Mermaid.
 There is no AI in diagrams. Full architecture and flow: [diagram-flow.md](diagram-flow.md).
 
 ## 3. Related Docs

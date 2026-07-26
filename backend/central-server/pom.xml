@@ -165,7 +165,7 @@
                         <database>
                             <name>org.jooq.meta.postgres.PostgresDatabase</name>
                             <inputSchema>public</inputSchema>
-                            <includes>conversations|messages|models|media|message_attachments|notes|tags|note_tags|note_links|note_revisions|diagrams|app_settings</includes>
+                            <includes>conversations|messages|models|media|message_attachments|notes|tags|note_tags|note_links|note_revisions|diagram_folders|diagrams|app_settings</includes>
                         </database>
                         <generate>
                             <records>true</records>

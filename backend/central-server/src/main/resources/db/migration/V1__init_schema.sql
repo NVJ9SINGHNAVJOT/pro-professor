@@ -183,20 +183,39 @@ CREATE TABLE note_revisions
 
 CREATE INDEX note_revisions_note_id_idx ON note_revisions (note_id, created_at DESC);
 
+-- ── diagram_folders ───────────────────────────────────────────────────────────
+-- Nested folders for the diagram sidebar. Addressed by id, never by name, so
+-- sibling names may repeat (unlike diagram titles, which back `[[Title.diagram]]`).
+-- NULL parent_id = root level. No updated_at: nothing reads it, folders sort by name.
+CREATE TABLE diagram_folders
+(
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(255) NOT NULL,
+    parent_id  BIGINT       REFERENCES diagram_folders (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX diagram_folders_parent_id_idx ON diagram_folders (parent_id);
+
 -- ── diagrams ──────────────────────────────────────────────────────────────────
 -- User-drawn diagrams. The full Excalidraw scene JSON lives in `content`
 -- ({ type, elements, appState, files }) — an editable document stored inline
 -- like notes, NOT a storage-server blob.
 -- Titles are unique so `[[Title.diagram]]` links resolve by title.
+-- NULL folder_id = root level. Deleting a folder deletes the diagrams inside it,
+-- but only once the service has verified no note links to any of them.
 CREATE TABLE diagrams
 (
     id         BIGSERIAL PRIMARY KEY,
     title      VARCHAR(255) NOT NULL,
     content    JSONB        NOT NULL,
+    folder_id  BIGINT       REFERENCES diagram_folders (id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT diagrams_title_unique UNIQUE (title)
 );
+
+CREATE INDEX diagrams_folder_id_idx ON diagrams (folder_id);
 
 CREATE TRIGGER trg_diagrams_updated_at
     BEFORE UPDATE ON diagrams

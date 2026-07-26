@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, HashIcon, SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import LeftNav from "@/components/common/LeftNav";
+import SidebarRowMenu from "@/components/common/SidebarRowMenu";
+import SidebarSection from "@/components/common/SidebarSection";
+import { SIDEBAR_LIST, SIDEBAR_ROW_WRAPPER, sidebarRow } from "@/components/common/sidebarRow";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -78,9 +81,7 @@ const NoteList = ({ notes, onCreate, creating }: NoteListProps) => {
     });
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDelete = async (id: number) => {
     const res = await deleteNote(id);
     if (res.error) {
       toast.error("Failed to delete note");
@@ -91,40 +92,37 @@ const NoteList = ({ notes, onCreate, creating }: NoteListProps) => {
   };
 
   const noteEntry = (note: NoteSummary, options?: { compact?: boolean }) => (
-    <NavLink
-      key={note.id}
-      to={ROUTES.NOTES_DETAIL(note.id)}
-      // Re-navigating to the note we're already on reads as a revalidation and refetches the
-      // explorer, so swallow that click.
-      onClick={(e) => noteId === String(note.id) && e.preventDefault()}
-      className={({ isActive }) =>
-        cn("group flex flex-col gap-y-1 rounded-lg px-2 py-1.5 hover:bg-neutral-800", isActive && "bg-neutral-800")
-      }
-    >
-      <div className="flex items-center justify-between gap-x-1">
-        <span className="truncate para-small-medium">{note.title}</span>
-        <button
-          type="button"
-          onClick={(e) => handleDelete(e, note.id)}
-          aria-label="Delete note"
-          className="shrink-0 cursor-pointer rounded p-1 text-neutral-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-        >
-          <Trash2Icon className="size-4" />
-        </button>
-      </div>
-      {!options?.compact && note.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {note.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-neutral-800 px-1.5 py-0.5 caption-small-regular text-neutral-400 group-hover:bg-neutral-700"
-            >
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-    </NavLink>
+    <div key={note.id} className={SIDEBAR_ROW_WRAPPER}>
+      <NavLink
+        to={ROUTES.NOTES_DETAIL(note.id)}
+        // Re-navigating to the note we're already on reads as a revalidation and refetches the
+        // explorer, so swallow that click.
+        onClick={(e) => noteId === String(note.id) && e.preventDefault()}
+        // Tags stack under the title, so this row is a column — the one place the shared row
+        // deviates, hence `flex-col items-start`.
+        className={({ isActive }) => sidebarRow(isActive, "flex-col items-start gap-y-1")}
+      >
+        <span className="w-full truncate">{note.title}</span>
+        {!options?.compact && note.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {note.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-neutral-800 px-1.5 py-0.5 caption-small-regular text-neutral-400 group-hover:bg-neutral-700"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </NavLink>
+      <SidebarRowMenu
+        label={note.title}
+        actions={[
+          { label: "Delete", icon: Trash2Icon, destructive: true, onSelect: () => handleDelete(note.id) },
+        ]}
+      />
+    </div>
   );
 
   const searching = query.trim().length > 0;
@@ -162,48 +160,46 @@ const NoteList = ({ notes, onCreate, creating }: NoteListProps) => {
       <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {/* Tag browser — collapsible tree of notes grouped by tag (hidden while searching) */}
         {!searching && notesByTag.length > 0 && (
-          <div className="mb-3">
-            <button
-              type="button"
-              onClick={() => setTagsOpen((open) => !open)}
-              className="flex w-full cursor-pointer items-center gap-x-1.5 rounded px-2 pb-1 caption-small-medium text-neutral-500 hover:text-neutral-300"
-            >
-              {tagsOpen ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
-              Tags
-              <span className="text-neutral-600">{notesByTag.length}</span>
-            </button>
-            {tagsOpen &&
-              notesByTag.map(([tag, tagNotes]) => (
-                <div key={tag}>
-                  <button
-                    type="button"
-                    onClick={() => toggleTag(tag)}
-                    className="flex w-full cursor-pointer items-center gap-x-1.5 rounded-lg px-2 py-1 para-small-medium text-neutral-300 hover:bg-neutral-800"
-                  >
-                    {expandedTags.has(tag) ? (
-                      <ChevronDownIcon className="size-3.5 shrink-0 text-neutral-500" />
-                    ) : (
-                      <ChevronRightIcon className="size-3.5 shrink-0 text-neutral-500" />
+          <SidebarSection
+            label="Tags"
+            count={notesByTag.length}
+            open={tagsOpen}
+            onToggle={() => setTagsOpen((open) => !open)}
+          >
+            <div className={SIDEBAR_LIST}>
+              {notesByTag.map(([tag, tagNotes]) => (
+                  <div key={tag}>
+                    <button
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      // No overflow menu on a tag, so it reclaims the menu's reserved lane.
+                      className={sidebarRow(false, "gap-x-1.5 pr-2")}
+                    >
+                      {expandedTags.has(tag) ? (
+                        <ChevronDownIcon className="size-4 shrink-0 text-neutral-500" />
+                      ) : (
+                        <ChevronRightIcon className="size-4 shrink-0 text-neutral-500" />
+                      )}
+                      <HashIcon className="size-4 shrink-0 text-neutral-400" />
+                      <span className="truncate">{tag}</span>
+                      <span className="ml-auto caption-small-regular text-neutral-600">{tagNotes.length}</span>
+                    </button>
+                    {expandedTags.has(tag) && (
+                      <div className={cn("ml-4 mt-1 border-l border-neutral-800 pl-1", SIDEBAR_LIST)}>
+                        {tagNotes.map((note) => noteEntry(note, { compact: true }))}
+                      </div>
                     )}
-                    <HashIcon className="size-3.5 shrink-0 text-neutral-500" />
-                    <span className="truncate">{tag}</span>
-                    <span className="ml-auto caption-small-regular text-neutral-600">{tagNotes.length}</span>
-                  </button>
-                  {expandedTags.has(tag) && (
-                    <div className="ml-4 border-l border-neutral-800 pl-1">
-                      {tagNotes.map((note) => noteEntry(note, { compact: true }))}
-                    </div>
-                  )}
-                </div>
-              ))}
-          </div>
+                  </div>
+                ))}
+            </div>
+          </SidebarSection>
         )}
 
         {/* Flat note list, newest-edited first */}
         {filtered.length === 0 && (
           <div className="px-2 caption-regular text-neutral-500">{searching ? "No notes found" : "No notes yet"}</div>
         )}
-        <div className="flex flex-col gap-y-0.5">{filtered.map((note) => noteEntry(note))}</div>
+        <div className={SIDEBAR_LIST}>{filtered.map((note) => noteEntry(note))}</div>
       </div>
     </aside>
   );

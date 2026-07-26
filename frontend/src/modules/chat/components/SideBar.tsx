@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import LeftNav from "@/components/common/LeftNav";
+import SidebarRowMenu from "@/components/common/SidebarRowMenu";
+import { SIDEBAR_LIST, SIDEBAR_ROW_WRAPPER, sidebarRow } from "@/components/common/sidebarRow";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
@@ -42,9 +44,7 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
     }));
   }, [conversations, query]);
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDelete = async (id: number) => {
     const res = await deleteConversation(id);
     if (res.error) {
       toast.error("Failed to delete chat");
@@ -113,31 +113,32 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
             {grouped.map((group) => (
               <div key={group.label} className="mb-4">
                 <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
-                {group.chats.map((chat) => (
-                  <NavLink
-                    key={chat.id}
-                    to={ROUTES.CHAT_DETAIL(chat.id)}
-                    // Re-navigating to the chat we're already on reads as a revalidation and
-                    // refetches the list, so swallow that click.
-                    onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
-                    className={({ isActive }) =>
-                      cn(
-                        "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 para-small-medium hover:bg-neutral-800",
-                        isActive && "bg-neutral-800",
-                      )
-                    }
-                  >
-                    <span className="truncate">{chat.title}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDelete(e, chat.id)}
-                      aria-label="Delete chat"
-                      className="shrink-0 cursor-pointer rounded p-1 text-neutral-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-                    >
-                      <Trash2Icon className="size-4" />
-                    </button>
-                  </NavLink>
-                ))}
+                <div className={SIDEBAR_LIST}>
+                  {group.chats.map((chat) => (
+                    <div key={chat.id} className={SIDEBAR_ROW_WRAPPER}>
+                      <NavLink
+                        to={ROUTES.CHAT_DETAIL(chat.id)}
+                        // Re-navigating to the chat we're already on reads as a revalidation and
+                        // refetches the list, so swallow that click.
+                        onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
+                        className={({ isActive }) => sidebarRow(isActive)}
+                      >
+                        <span className="truncate">{chat.title}</span>
+                      </NavLink>
+                      <SidebarRowMenu
+                        label={chat.title}
+                        actions={[
+                          {
+                            label: "Delete",
+                            icon: Trash2Icon,
+                            destructive: true,
+                            onSelect: () => handleDelete(chat.id),
+                          },
+                        ]}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

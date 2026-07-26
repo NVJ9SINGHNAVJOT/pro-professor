@@ -69,6 +69,75 @@ src/
    rather than relative paths (e.g., `../types`), even when importing between files within the
    same module.
 
+## Sidebar list rows
+
+The three left sidebars — chat history, the note explorer, the diagram tree — are separate
+components that must read as **one control**. Their rows are structurally different (a `NavLink`, a
+`NavLink` with tag chips, a draggable tree node), so they do not share a row component. What they
+share lives in [components/common/sidebarRow.ts](../src/components/common/sidebarRow.ts) (the style
+tokens) and [SidebarRowMenu.tsx](../src/components/common/SidebarRowMenu.tsx) (the menu — kept in
+its own file because a module mixing components with constants breaks Fast Refresh). A new sidebar
+list **must** use them rather than restyling rows by hand:
+
+| Export | Use |
+| --- | --- |
+| `SIDEBAR_LIST` | on the list wrapper — the vertical gap that keeps adjacent hover states from merging into one block |
+| `SIDEBAR_ROW_WRAPPER` | on each row's wrapper — establishes the positioning context and the `group` the menu's hover reveal keys off |
+| `sidebarRow(isActive, extra?)` | on the clickable element — padding, radius, truncation lane, hover and active fills |
+| `<SidebarRowMenu>` | the `⋯` overflow menu holding that row's actions |
+| `<SidebarSection>` | a collapsible group of rows under a small header + count (the note explorer's "Tags", the diagram sidebar's "Diagrams" / "Folders") |
+
+**Row actions go in the overflow menu, not inline.** One `⋯` per row, revealed on hover, with the
+destructive action marked `destructive: true` (and last). Inline icon buttons per action do not
+scale past one and make rows noisy.
+
+**The menu is a sibling of the row, never a child.** The row is already a link or a button, and
+nesting a button inside either is invalid HTML — so `SidebarRowMenu` is positioned over the row
+instead. That is what `sidebarRow`'s right padding reserves space for; a row that opts out of the
+menu (the tag browser) reclaims that lane with `pr-2`.
+
+The menu stays visible while it is open (`data-[state=open]`), not only on hover — otherwise it
+disappears the moment the pointer leaves the row to reach it.
+
+**Never transition the reveal.** `opacity-0 → group-hover:opacity-100` must snap. Animating opacity
+promotes the icon onto its own compositing layer, which loses subpixel antialiasing and renders it
+visibly blurry for the length of the fade.
+
+**Draggable rows suppress the native drag ghost.** The browser rasterizes that ghost at 1×
+regardless of device pixel ratio, so on a HiDPI display the dragged row is always upscaled and soft
+— no amount of row styling fixes it. Call `setDragImage` with a 1×1 transparent GIF (held at module
+scope so it is decoded before any drag starts; an unloaded image silently falls back to the default
+ghost), then render your own preview: a `fixed`, `pointer-events-none` element following the cursor
+from the `drag` event's coordinates, with the source row dimmed and the drop target ringed. Ignore
+the `(0, 0)` coordinates Chrome reports on the final `drag` event of a gesture.
+
+**Move that preview imperatively.** `drag` fires ~60×/s; routing it through state re-renders the
+whole list every frame and the drop visibly lags the mouse. Keep one state change per gesture (what
+is being dragged) and write `style.left`/`style.top` on the node directly — seeding the first
+position from a **callback ref**, since reading a ref during render is the stale-value trap
+`react-hooks/refs` rejects.
+
+**Drops apply optimistically.** Dispatch the local move first, then call the server and roll back on
+error. Awaiting the round-trip before redrawing leaves the row parked under the cursor after release.
+
+Two Chrome behaviors that make a drag feel broken, both easy to reintroduce:
+
+- **Never mutate the DOM inside `dragstart`.** Chrome cancels the drag outright — the row simply
+  won't move. React flushes discrete events synchronously, so a `setState` in that handler counts:
+  dimming the row or revealing a drop zone kills the gesture. Set refs synchronously (`dragover`
+  needs them on the next event) and defer the state change with `requestAnimationFrame`. For the
+  same reason, a drop zone that appears mid-drag must be **overlaid**, never inserted into the flow,
+  or it shifts the list out from under the cursor.
+- **`preventDefault` on `dragover` everywhere the drag can land**, including rows that will refuse
+  the drop, and including dead space. Releasing over ground that never accepted the drag makes
+  Chrome animate the row back to its origin and withhold `dragend` until that finishes — which reads
+  as the UI sticking on release. Express refusal by not highlighting and by checking in `onDrop`,
+  not by declining the `dragover`.
+
+**shadcn/ui components need `.dark` on `<html>`.** They resolve colours from the `.dark` token block
+in `index.css`; the app is dark-only and never toggles a theme, so the class is set statically in
+[index.html](../index.html). Without it every popover renders on a white surface.
+
 ## Route data loading
 
 **A page's on-arrival data is fetched by its route loader, never by a `useEffect` on mount.**

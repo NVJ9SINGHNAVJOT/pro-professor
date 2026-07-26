@@ -4,6 +4,7 @@ import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.diagram.dto.DiagramCreateRequest;
 import com.proprofessor.server.diagram.dto.DiagramDetail;
 import com.proprofessor.server.diagram.dto.DiagramListResponse;
+import com.proprofessor.server.diagram.dto.DiagramMoveRequest;
 import com.proprofessor.server.diagram.dto.DiagramUpdateRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,14 +24,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class DiagramController {
 
     private final DiagramService diagramService;
+    private final DiagramFolderService diagramFolderService;
 
-    public DiagramController(DiagramService diagramService) {
+    public DiagramController(DiagramService diagramService, DiagramFolderService diagramFolderService) {
         this.diagramService = diagramService;
+        this.diagramFolderService = diagramFolderService;
     }
 
+    /** The whole sidebar — folders and diagrams — so entering the section is one request. */
     @GetMapping
     public ApiResponse<DiagramListResponse> list() {
-        return ApiResponse.ok(new DiagramListResponse(diagramService.listDiagrams()));
+        return ApiResponse.ok(new DiagramListResponse(
+                diagramFolderService.listFolders(),
+                diagramService.listDiagrams()
+        ));
     }
 
     @GetMapping("/{id}")
@@ -52,6 +59,12 @@ public class DiagramController {
     @PutMapping("/{id}")
     public ApiResponse<DiagramDetail> update(@PathVariable Long id, @RequestBody DiagramUpdateRequest request) {
         return ApiResponse.ok("Diagram updated.", diagramService.updateDiagram(id, request));
+    }
+
+    /** Separate from {@link #update} so the editor's autosave never carries a folder. */
+    @PutMapping("/{id}/folder")
+    public ApiResponse<DiagramDetail> move(@PathVariable Long id, @RequestBody DiagramMoveRequest request) {
+        return ApiResponse.ok("Diagram moved.", diagramService.moveDiagram(id, request.folderId()));
     }
 
     @DeleteMapping("/{id}")
