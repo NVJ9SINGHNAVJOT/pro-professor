@@ -83,14 +83,6 @@ export const VOICE_BAR_COUNT = 80;
 /** Characters that mark text inside `$…$` as a LaTeX expression rather than plain prose/currency. */
 export const MATH_HINT = /[\\{}^_]/;
 
-/** Friendly labels for the inference params, used to render legacy JSON settings markers. */
-export const SETTINGS_FIELD_LABELS: Record<string, string> = {
-  maxTokens: "Max tokens",
-  temperature: "Temperature",
-  topP: "Top P",
-  repetitionPenalty: "Repetition penalty",
-};
-
 /** Composite key separator used to encode `provider::model` into a single Select value. */
 export const MODEL_SEPARATOR = "::";
 

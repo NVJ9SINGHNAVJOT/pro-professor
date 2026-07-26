@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { DownloadIcon, FileIcon, FileTextIcon, LockIcon, MusicIcon, Trash2Icon } from "lucide-react";
 import { toast } from "@/components/common/toast";
 import Tooltip from "@/components/common/Tooltip";
@@ -6,7 +7,6 @@ import { SelectInput } from "@/components/inputs/SelectInput";
 import { useApi } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 import {
-  MEDIA_CATEGORIES,
   mediaRoute,
   type ListMediaParams,
   type MediaCategory,
@@ -15,8 +15,7 @@ import {
   type MediaUsage,
 } from "@/services/operations/media/media.route";
 import { formatBytes } from "@/modules/settings/utils";
-
-const PAGE_SIZE = 50;
+import { CATEGORY_FILTERS, STORAGE_PAGE_SIZE, asCategoryFilter } from "@/modules/settings/constants";
 
 const SORT_OPTIONS = [
   { label: "Newest first", value: "created_at:desc" },
@@ -24,8 +23,6 @@ const SORT_OPTIONS = [
   { label: "Largest first", value: "size:desc" },
   { label: "Smallest first", value: "size:asc" },
 ];
-
-const CATEGORY_FILTERS = ["all", ...MEDIA_CATEGORIES] as const;
 
 /** Category icon for files with no visual preview. */
 const iconFor = (category: MediaCategory) => {
@@ -47,26 +44,50 @@ const usageLabel = ({ notes, chatMessages }: MediaUsage) =>
  * Browses everything stored in the storage-server. The listing is filesystem-backed (proxied
  * through central-server, which is also where the delete guard lives), while previews and
  * downloads hit the storage-server directly via each file's `url`.
+ *
+ * The first page arrives from the route loader; the filter/sort chips write search params, which
+ * re-run it. Only "Load more" fetches from here.
  */
-const StoragePanel = () => {
+const StoragePanel = ({
+  initialMedia,
+  initialPagination,
+}: {
+  initialMedia: MediaFile[];
+  initialPagination: MediaPagination;
+}) => {
   const { execute: listMedia, loading } = useApi(mediaRoute.listMedia);
   const { execute: deleteMedia } = useApi(mediaRoute.deleteMedia);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [files, setFiles] = useState<MediaFile[]>([]);
-  const [pagination, setPagination] = useState<MediaPagination | null>(null);
-  const [category, setCategory] = useState<(typeof CATEGORY_FILTERS)[number]>("all");
-  const [sort, setSort] = useState(SORT_OPTIONS[0].value);
+  const sortByParam = searchParams.get("sortBy");
+  const orderParam = searchParams.get("order");
+
+  const category = asCategoryFilter(searchParams.get("category"));
+  const sortValue = sortByParam && orderParam ? `${sortByParam}:${orderParam}` : SORT_OPTIONS[0].value;
+  const sort = SORT_OPTIONS.some((o) => o.value === sortValue) ? sortValue : SORT_OPTIONS[0].value;
+
+  const [files, setFiles] = useState<MediaFile[]>(initialMedia);
+  const [pagination, setPagination] = useState<MediaPagination | null>(initialPagination);
+
+  // A filter/sort change is a navigation: the loader hands over a fresh first page, which replaces
+  // whatever "Load more" had accumulated.
+  useEffect(() => {
+    setFiles(initialMedia);
+    setPagination(initialPagination);
+  }, [initialMedia, initialPagination]);
+
   // the card whose trash button was clicked once — a second click confirms
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const load = async (offset: number) => {
+  const loadMore = async () => {
+    const offset = files.length;
     const [sortBy, order] = sort.split(":") as [ListMediaParams["sortBy"], ListMediaParams["order"]];
     const res = await listMedia({
       category: category === "all" ? undefined : category,
       sortBy,
       order,
-      limit: PAGE_SIZE,
+      limit: STORAGE_PAGE_SIZE,
       offset,
     });
     if (res.error) {
@@ -74,14 +95,21 @@ const StoragePanel = () => {
       return;
     }
     const { media, pagination: page } = res.response.data;
-    setFiles((prev) => (offset === 0 ? media : [...prev, ...media]));
+    setFiles((prev) => [...prev, ...media]);
     setPagination(page);
   };
 
-  useEffect(() => {
-    load(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, sort]);
+  const setParam = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
 
   const handleDelete = async (file: MediaFile) => {
     if (confirmingId !== file.storageId) {
@@ -104,14 +132,15 @@ const StoragePanel = () => {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="heading-semibold text-white">Storage</h1>
-        <p className="mt-1.5 para-small-regular text-neutral-400">
-          Every file uploaded through chat and notes. Deleting one removes it from disk for good.
-        </p>
-      </header>
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 bg-grey px-6 pb-6 pt-6">
+        <header className="mb-6">
+          <h1 className="heading-semibold text-white">Storage</h1>
+          <p className="mt-1.5 para-small-regular text-neutral-400">
+            Every file uploaded through chat and notes. Deleting one removes it from disk for good.
+          </p>
+        </header>
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
           {CATEGORY_FILTERS.map((option) => (
             <button
@@ -119,7 +148,7 @@ const StoragePanel = () => {
               type="button"
               onClick={() => {
                 setConfirmingId(null);
-                setCategory(option);
+                setParam({ category: option === "all" ? null : option });
               }}
               className={cn(
                 "cursor-pointer rounded-lg px-3 py-1.5 para-small-medium capitalize text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white",
@@ -136,11 +165,17 @@ const StoragePanel = () => {
           value={sort}
           onChange={(value) => {
             setConfirmingId(null);
-            setSort(value);
+            const isDefault = value === SORT_OPTIONS[0].value;
+            const [sortBy, order] = value.split(":");
+            setParam({
+              sortBy: isDefault ? null : sortBy,
+              order: isDefault ? null : order,
+            });
           }}
           className="w-44"
           buttonClassName="h-9 rounded-lg"
         />
+      </div>
       </div>
 
       {files.length === 0 ? (
@@ -233,7 +268,7 @@ const StoragePanel = () => {
             <div className="mt-6 flex justify-center">
               <button
                 type="button"
-                onClick={() => load(files.length)}
+                onClick={() => loadMore()}
                 disabled={loading}
                 className="cursor-pointer rounded-lg border border-neutral-800 px-4 py-2 para-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >

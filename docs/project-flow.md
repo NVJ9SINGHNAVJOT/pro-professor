@@ -25,6 +25,64 @@ Every request from the browser hits Central Server, which fans out to the AI Ser
 
 ## 2. Component Interactions
 
+### 2.0 Frontend page data (React Router loaders)
+
+Every page's on-arrival data is fetched by a **route loader**, before the screen renders — not by a
+`useEffect` after mount. Loaders live beside their page wrapper (`src/pages/<area>/loader.ts`) and
+are attached to the routes in [main.tsx](../frontend/src/main.tsx).
+
+1. A navigation to `/notes/:noteId` (or chat / diagrams / settings) runs that route's loader first.
+   It calls the same `ApiRoute` descriptors as the rest of the app through
+   [loadRoute.ts](../frontend/src/services/client/loadRoute.ts), which adapts `fetchApi`'s
+   `{ error, response }` contract into throw-on-failure and forwards the loader's `request.signal`
+   so an interrupted navigation cancels its fetches.
+2. **Chat, notes and diagrams are each a parent route owning the section list plus a child route
+   owning the open item.** React Router revalidates every matched loader by default, so a single
+   loader for both would refetch the whole list every time you clicked an item. The parent carries
+   `shouldRevalidate: () => false` — its list loader runs once per entry into the section and never
+   again, because mutations patch the slice row directly (point 7), leaving a revalidation nothing
+   to do. The child carries `detailShouldRevalidate(<param>)`, so the open item reloads only when
+   the URL names a *different* one. Entering a section from elsewhere is a *new* match, so its
+   loader always runs.
+   - `/notes` → `GET /notes`
+   - `/notes` → `/notes/3` → `GET /notes/3` + `GET /notes/3/backlinks` only
+   - `/notes/3` → `/notes/4` → the same two, no list refetch
+3. Navigation **blocks** until the data is in. [RouteProgress](../frontend/src/components/common/RouteProgress.tsx)
+   shows a top bar meanwhile, driven by `useNavigation`.
+4. A failed loader renders [RouteError](../frontend/src/components/common/RouteError.tsx) — the
+   server's message plus a Retry that calls `revalidate()`. It is attached per **child** route, so
+   the error renders into `App`'s `<Outlet/>`.
+5. The root route loads the models list and sets `shouldRevalidate: () => false` — once per page
+   load, not per navigation. Because it runs before first paint it also needs a `HydrateFallback`
+   ([AppSplash](../frontend/src/components/common/AppSplash.tsx)).
+6. Loaders **seed Redux** for state that outlives a single navigation: the models list
+   (`setModels`, read from every route) and the three sidebar lists (`setItems` on `notesList` /
+   `chatList` / `diagramList`). Those parent loaders return `null` and carry
+   `shouldRevalidate: () => false`, so each runs once per entry into its section. **Detail data is
+   returned** as ordinary loader data, and the page wrapper passes list + detail into the screen as
+   props.
+7. After a mutation, components **patch the sidebar row** from the response they already have —
+   `upsertItem` / `removeItem` — instead of refetching the list, hand-rolling a refresh callback,
+   or prop-drilling a counter. `upsertItem` moves the row to the front, which matches the server's
+   `updated_at DESC` ordering (a DB trigger stamps that column on every write). This is what lets a
+   note save cost exactly one `PUT`, and a diagram autosave re-sort the list without a request.
+
+Not everything moves: `useApi` remains the tool for **mutations** and **on-demand** fetches —
+note search, the revision-history popover, the graph view, `![[…]]` transclusions, the storage
+browser's pagination, and the SSE chat stream. The rule is *on arrival → loader; on demand →
+`useApi`*.
+
+> The chat stream self-navigates `/chat/new → /chat/:id` when a new conversation is created. Both
+> are the **same** route (`NEW_ITEM_ID`), so the screen is not remounted mid-stream — a remount
+> would run `ChatMessages`' unmount cleanup, which aborts the SSE request and kills the very
+> generation the user just started. The hop also skips the detail loader — `markDraftCreated`
+> ([loadRoute.ts](../frontend/src/services/client/loadRoute.ts)) marks the id, and
+> `detailShouldRevalidate` consumes that mark — so it is a pure param swap: no request, no pending
+> navigation, nothing that could clobber the in-flight stream. Notes and diagrams take the same
+> route for their own first save. Reaching the same conversation any other way still loads it, and
+> `ChatMessages`' `loadedRef` guard discards a load that lands on the conversation it is already
+> streaming.
+
 ### 2.1 Model Discovery & Loading
 
 1. **Frontend** calls `GET /api/v1/models/all` on **Central Server** ([ModelController.java](../backend/central-server/src/main/java/com/proprofessor/server/model/ModelController.java)).
@@ -42,6 +100,7 @@ Chat streaming uses **Server-Sent Events**, not WebSockets.
 2. **Central Server** ([ChatController.java](../backend/central-server/src/main/java/com/proprofessor/server/chat/ChatController.java)) returns an `SseEmitter` and runs generation on the `chatStreamExecutor` thread pool.
 3. **ChatService**:
    - Resolves or creates the conversation (deriving a title from the first message), persists the user message to Postgres, and links any uploaded attachments. On create, the turn's inference settings are stored on the conversation row; on an existing conversation, a change to the sampling params is detected and recorded (see §2.7).
+   - Touches the conversation row (`ConversationRepository.touch`) right after the user message lands, so its `updated_at` — and therefore its position in the history list — moves for **every** turn, including ones that are later stopped or fail. Messages live in their own table, so nothing else would bump it.
    - Loads conversation history and streams a completion via `ChatCompletionClient`, which drives **both Ollama and AI Service through the OpenAI Java SDK** (OpenAI-compatible `POST /v1/chat/completions`), switching only the base URL by provider.
    - Persists the assembled assistant reply.
 4. The reply streams back as SSE frames discriminated by `type`: `chat.start` / `chat.chunk` / `chat.settings` / `chat.thinking` / `chat.metrics` / `chat.done` / `chat.error` (plus `chat.title` / `chat.transcript` on voice turns).

@@ -44,7 +44,8 @@ src/
 ├── hooks/               # Custom React hooks used across multiple features (e.g., useApi)
 ├── modules/             # [Feature Modules - see above]
 ├── pages/               # Top-level route components that render specific Module Screens and inject global context.
-├── redux/               # Global state management (store setup, global slices)
+│                        # Each area also holds its route `loader.ts` (see "Route data loading" below).
+├── redux/               # Global state management: `modelsSlice` + the three sidebar lists (createListSlice) — all other page data lives in route loaders
 ├── services/            # API route definitions and network utility wrappers (e.g., fetch setup)
 ├── socket/              # Global WebSocket configuration and event definitions
 ├── styles/              # Global CSS files and Tailwind configurations (feature-scoped CSS lives beside its component, `@import`ed from index.css)
@@ -67,3 +68,59 @@ src/
 4. **Absolute Imports**: Always use global absolute imports (e.g., `@/modules/chat/types`)
    rather than relative paths (e.g., `../types`), even when importing between files within the
    same module.
+
+## Route data loading
+
+**A page's on-arrival data is fetched by its route loader, never by a `useEffect` on mount.**
+
+- Loaders live at `src/pages/<area>/loader.ts` (plus `src/pages/rootLoader.ts` for the layout) and
+  are attached to the routes in `src/main.tsx`. Modules stay free of loader code.
+- **A section with a list and a detail view is two routes**: a parent owning the list
+  (`notesListLoader`) and a child owning the open item (`noteDetailLoader`). React Router
+  revalidates every matched loader on navigation, so a single loader would refetch the list each
+  time an item is opened. The parent gets `shouldRevalidate: () => false` — its loader seeds the
+  sidebar slice once per entry into the section, and mutations patch that slice directly. The child
+  gets `detailShouldRevalidate(<param>)` from `services/client/loadRoute.ts`: the open item reloads
+  only when the URL names a *different* one, so a same-URL navigation carrying router state leaves
+  it alone. The `new → :id` hop *is* a different id, so a screen that saved its draft calls
+  `markDraftCreated(<param>, id)` before navigating — it already holds what the server returned.
+  That mark is consumed once, because opening an *existing* item from the draft screen is the same
+  param hop and must still load.
+- Write them with `load` / `loadOptional` from `src/services/client/loadRoute.ts` — they take the
+  loader's `request.signal` and reuse the same `ApiRoute` descriptors as everything else. `load`
+  throws on failure so the route's `errorElement` (`RouteError`) renders; `loadOptional` falls back
+  to a default for data that must not fail the page.
+- The **page wrapper** calls `useLoaderData()` for the detail and `useAppSelector` for the sidebar
+  list, then passes both into the screen as props; the screen reads neither the router nor the
+  store itself.
+- **The three sidebar lists are the exception to "page data lives in loader data".** They are Redux
+  state (`redux/createListSlice.ts` → `notesList`, `chatList`, `diagramList`), because a mutation
+  has to patch a single row and React Router can't write back into a loader's result. The list
+  loader still does the fetching — it dispatches `setItems` and returns `null`, the same shape as
+  `rootLoader` → `setModels`.
+- **After a mutation, patch the row — don't refetch the list.** Every create/save/delete response
+  already contains the whole row, so dispatch `upsertItem` / `removeItem` with it. `upsertItem`
+  moves the row to the front, which reproduces the server's `updated_at DESC` ordering exactly (a
+  DB trigger stamps that column on every write). `revalidator.revalidate()` appears nowhere outside
+  `RouteError`'s retry button, and there are no refresh-callback props or cache-bust counters.
+- **"New X" costs no request.** Each section has a draft that no loader fetches for — `/chat/new`,
+  `/notes/new`, `/diagrams/new` — which are *values of the item route's `:id` param*
+  (`NEW_ITEM_ID`), not routes of their own (`/chat` redirects to `/chat/new`). That matters: a
+  separate route would make React Router swap the element when the first save turns `new` into a
+  real id, remounting the screen and throwing away the editor buffer, Excalidraw's undo history, or
+  chat's in-flight SSE stream — the unmount aborts it, killing the generation the first turn just
+  started. The row is created by the first save (first stroke, first turn), which dispatches it into
+  the list and then `navigate(detail, { replace: true })`. The screen keeps an applied-id guard across that hop
+  (chat's `loadedRef`, notes' `appliedIdRef`) so the loader's copy of the item it just created
+  doesn't re-seed the buffer and drop what was typed during the round trip — and `markDraftCreated`
+  keeps the loader from running on that hop at all, so it costs no request and no pending
+  navigation. A screen therefore has to cope with `/section/:id` and **no** loader item: that is
+  the hop, and what it holds locally is the truth (`NotesScreen`'s seeding effect bails out,
+  `DiagramsScreen` keeps the canvas up via `showingDraftId`).
+- A "New X" button, and a sidebar link to the item already open, must **no-op instead of
+  re-navigating** to the URL they're on: React Router treats a same-URL navigation as a
+  revalidation and re-runs the loaders that allow it.
+
+`useApi` is still correct for **mutations** and **on-demand** fetches: search-as-you-type, panels
+behind a toggle (revision history, graph view), `![[…]]` transclusions, paginated lists, and SSE
+streams. The rule is **on arrival → loader; on demand → `useApi`**.

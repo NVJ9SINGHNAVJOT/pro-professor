@@ -1,46 +1,75 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Trash2, SquarePenIcon } from "lucide-react";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
-import { ROUTES } from "@/constants/routes";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
-import { diagramsRoute, type DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
-import { makeEmptyScene } from "@/modules/diagram/persistence/sceneIO";
+import { useAppDispatch } from "@/redux/store";
+import { removeDiagram, upsertDiagram } from "@/redux/slices/diagramListSlice";
+import { diagramsRoute, type DiagramDetail, type DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
+import { markDraftCreated } from "@/services/client/loadRoute";
 import { cn } from "@/lib/utils";
 
 // Lazy: the editor carries the Excalidraw runtime + styles.
 const DiagramEditor = lazy(() => import("@/modules/diagram/components/DiagramEditor"));
 
-/** Diagram list + Excalidraw editor. New diagrams start from an empty scene. */
-const DiagramsScreen = () => {
-  const navigate = useNavigate();
-  const { diagramId } = useParams();
-  const openId = diagramId && Number.isFinite(Number(diagramId)) ? Number(diagramId) : null;
-  const [diagrams, setDiagrams] = useState<DiagramSummary[]>([]);
+/** The list row hiding inside a full diagram — a row is a strict subset of the detail. */
+const summaryOf = (detail: DiagramDetail): DiagramSummary => ({
+  id: detail.id,
+  title: detail.title,
+  updatedAt: detail.updatedAt,
+});
 
-  const { execute: fetchDiagrams } = useApi(diagramsRoute.getDiagrams);
-  const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
+interface DiagramsScreenProps {
+  diagrams: DiagramSummary[];
+  /** The diagram named in the URL; null on `/diagrams` and `/diagrams/new`. */
+  diagram: DiagramDetail | null;
+}
+
+/** Diagram list + Excalidraw editor. New diagrams start from an empty scene. */
+const DiagramsScreen = ({ diagrams, diagram }: DiagramsScreenProps) => {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  // `/diagrams/new` — an empty canvas with no row behind it. Like a new chat, it costs no
+  // request: the diagram is created by its first autosave, which turns this into `/diagrams/:id`
+  // *without* remounting the screen (same route, see NEW_ITEM_ID).
+  const diagramId = useParams().diagramId;
+  const isDraft = diagramId === NEW_ITEM_ID;
+
   const { execute: deleteDiagram } = useApi(diagramsRoute.deleteDiagram);
 
-  const refreshList = async () => {
-    const res = await fetchDiagrams();
-    if (!res.error) setDiagrams(res.response.data.diagrams);
+  // The id a draft was born as. The editor reads its scene once per mount, so it must keep the
+  // key it was mounted under — remounting it onto `/diagrams/:id` mid-drawing would reset
+  // Excalidraw's scene and undo history.
+  const [draftId, setDraftId] = useState<number | null>(null);
+  const [draftGen, setDraftGen] = useState(0);
+  // On that hop the loader is skipped (`markDraftCreated`), so the URL names a diagram the loader
+  // never fetched — the editor holds it, and it is what the list should highlight.
+  const showingDraftId = draftId !== null && diagramId === String(draftId);
+  const openId = diagram?.id ?? (showingDraftId ? draftId : null);
+  const editorKey = diagram === null || showingDraftId ? `new-${draftGen}` : diagram.id;
+
+  /**
+   * New diagram = an empty draft canvas. A no-op when one is already open: re-navigating to the
+   * URL we're on reads as a revalidation and would refetch the list on every click.
+   */
+  const create = () => {
+    if (isDraft) return;
+    // Forget the diagram the last draft became and bump the key, or the canvas would be reused
+    // as-is and the new draft would open on the previous drawing.
+    setDraftId(null);
+    setDraftGen((n) => n + 1);
+    navigate(ROUTES.DIAGRAMS_NEW);
   };
 
-  useEffect(() => {
-    refreshList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const create = async () => {
-    const res = await createDiagram({ title: "Untitled Diagram", content: makeEmptyScene() });
-    if (res.error) {
-      toast.error("Failed to create diagram");
-      return;
-    }
-    await refreshList();
-    navigate(ROUTES.DIAGRAMS_DETAIL(res.response.data.id));
+  /** The draft's first autosave created it — give it a real URL (`onSaved` already listed it). */
+  const handleCreated = (id: number) => {
+    setDraftId(id);
+    // Same route, so the canvas isn't remounted; the marker also keeps the loader from refetching
+    // the scene the autosave just wrote.
+    markDraftCreated("diagramId", id);
+    navigate(ROUTES.DIAGRAMS_DETAIL(id), { replace: true });
   };
 
   const remove = async (id: number) => {
@@ -49,8 +78,8 @@ const DiagramsScreen = () => {
       toast.error("Failed to delete diagram");
       return;
     }
+    dispatch(removeDiagram(id));
     if (openId === id) navigate(ROUTES.DIAGRAMS);
-    refreshList();
   };
 
   return (
@@ -77,7 +106,7 @@ const DiagramsScreen = () => {
               <button
                 key={diagram.id}
                 type="button"
-                onClick={() => navigate(ROUTES.DIAGRAMS_DETAIL(diagram.id))}
+                onClick={() => openId !== diagram.id && navigate(ROUTES.DIAGRAMS_DETAIL(diagram.id))}
                 className={cn(
                   "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-neutral-800",
                   openId === diagram.id && "bg-neutral-800"
@@ -103,9 +132,14 @@ const DiagramsScreen = () => {
 
       {/* ── Editor ── */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {openId !== null ? (
+        {diagram !== null || isDraft || showingDraftId ? (
           <Suspense fallback={<span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>}>
-            <DiagramEditor key={openId} diagramId={openId} onSaved={refreshList} />
+            <DiagramEditor
+              key={editorKey}
+              diagram={diagram}
+              onCreated={handleCreated}
+              onSaved={(saved) => dispatch(upsertDiagram(summaryOf(saved)))}
+            />
           </Suspense>
         ) : (
           <div className="flex flex-1 items-center justify-center caption-small-regular text-neutral-500">

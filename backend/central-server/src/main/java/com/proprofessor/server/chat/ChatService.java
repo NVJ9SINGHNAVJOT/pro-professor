@@ -139,6 +139,10 @@ public class ChatService {
 
         MessageRow userMessage = messageRepository.insert(conversation.id(), ROLE_USER, command.content());
         linkAttachments(userMessage.id(), command.attachmentIds());
+        // Messages live in their own table, so persisting one leaves the conversation row (and its
+        // updated_at) untouched. Bump it here, before the reply is generated, so the history list
+        // sorts this chat to the top whether the turn finishes, fails, or is stopped.
+        conversationRepository.touch(conversation.id());
 
         List<ChatMessage> history = messageRepository.findHistory(conversation.id(), MODEL_ROLES);
         List<MediaRow> audioClips = provider == ModelProvider.AI_SERVICE

@@ -49,12 +49,28 @@ layering (Excalidraw is the model + renderer).
 | `types/` | `index.ts` | the `DiagramScene` document type |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
 | `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) |
-| `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/:diagramId`) | diagram list + `<DiagramEditor>` |
+| `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | diagram list + `<DiagramEditor>` |
 
 Save/load: `DiagramEditor` loads a scene with `restore(content)`, seeds the professional tool
 defaults, and mounts `<Excalidraw>`. `onChange` is debounced (~800ms) and skipped when the scene
 version (`getSceneVersion`) is unchanged, so selection/pointer events don't trigger saves. Save
-serialises with `serializeAsJSON(..., "database")` and `PUT`s the scene.
+serialises with `serializeAsJSON(..., "database")` and `PUT`s the scene. The version being sent is
+claimed *before* the request, not read back off the snapshot afterwards — Excalidraw replaces
+element objects as it finalises an edit, so the later read can return a stale number and fire a
+second, identical save.
+
+Every successful save calls `onSaved(detail)`, which patches the list row (`upsertDiagram`) — the
+title *and* the position, since `updatedAt` moved and the list is ordered by it. That's a local
+dispatch, not a refetch, which is why it can run on every content autosave; the list has no loader
+of its own after the section is entered.
+
+**New diagram** is `/diagrams/new`, a *value* of the `:diagramId` param (`NEW_ITEM_ID`) rather than
+a route of its own. The button issues **no request**; the editor mounts on `makeEmptyScene()` with
+`diagram = null`, and the first debounced autosave `POST`s instead of `PUT`ting (a blank title lands
+as "Untitled Diagram" server-side), then replaces the URL with `/diagrams/:id`. The editor holds its
+id in a ref, and both the route and the screen's `key` are kept stable across that hop on purpose —
+remounting `<Excalidraw>` mid-drawing would reset the scene, the viewport and the undo history.
+Drawing nothing leaves nothing behind.
 
 ## 5. Referencing a diagram from a note
 

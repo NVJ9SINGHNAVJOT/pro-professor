@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
+import { useOnClickOutside } from "@/hooks/useOnClickOutside";
 import { notesRoute, type NoteDetail, type NoteRevision } from "@/services/operations/notes/notes.route";
 
 interface RevisionListProps {
@@ -9,10 +10,15 @@ interface RevisionListProps {
   /** Bump to refetch after an AI edit added a snapshot. */
   refreshKey: number;
   onRestored: (detail: NoteDetail) => void;
+  onClose: () => void;
+  /** Ref to the toolbar toggle button — clicks on it should not count as "outside". */
+  excludeRef: RefObject<HTMLButtonElement | null>;
 }
 
 /** Dropdown panel listing a note's revision snapshots with per-entry restore. */
-const RevisionList = ({ noteId, refreshKey, onRestored }: RevisionListProps) => {
+const RevisionList = ({ noteId, refreshKey, onRestored, onClose, excludeRef }: RevisionListProps) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(panelRef, onClose, excludeRef);
   const { execute: fetchRevisions } = useApi(notesRoute.getRevisions);
   const { execute: restoreRevision, loading: restoring } = useApi(notesRoute.restoreRevision);
   const [revisions, setRevisions] = useState<NoteRevision[]>([]);
@@ -35,7 +41,7 @@ const RevisionList = ({ noteId, refreshKey, onRestored }: RevisionListProps) => 
   };
 
   return (
-    <div className="absolute right-4 top-12 z-30 w-72 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-2xl">
+    <div ref={panelRef} className="absolute right-4 top-12 z-30 w-72 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-2xl">
       <div className="px-2 pb-1.5 caption-small-medium text-neutral-500">Revisions</div>
       {revisions.length === 0 ? (
         <div className="px-2 pb-1 caption-regular text-neutral-600">No revisions yet — AI edits create them</div>

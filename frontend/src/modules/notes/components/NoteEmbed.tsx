@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import Markdown, { type WikiHandlers } from "@/components/common/markdown/Markdown";
 import { useApi } from "@/hooks/useApi";
-import { useAppSelector } from "@/redux/store";
-import { notesRoute } from "@/services/operations/notes/notes.route";
+import { notesRoute, type NoteSummary } from "@/services/operations/notes/notes.route";
 import { extractSection, isImageTarget, stripFrontmatter } from "@/modules/notes/utils";
 
 interface NoteEmbedProps {
@@ -11,11 +10,12 @@ interface NoteEmbedProps {
   heading?: string;
   /** Depth-1 handlers (no renderEmbed) — nested embeds render as plain wiki-links. */
   wiki: WikiHandlers;
+  /** The explorer list, for resolving the target title to an id. */
+  notes: NoteSummary[];
 }
 
 /** `![[target]]` transclusion: an image via the media service, or another note's body inline. */
-const NoteEmbed = ({ target, heading, wiki }: NoteEmbedProps) => {
-  const notes = useAppSelector((state) => state.notes.notes);
+const NoteEmbed = ({ target, heading, wiki, notes }: NoteEmbedProps) => {
   const { execute: fetchNote } = useApi(notesRoute.getNote);
   const [body, setBody] = useState<string | null>(null);
 

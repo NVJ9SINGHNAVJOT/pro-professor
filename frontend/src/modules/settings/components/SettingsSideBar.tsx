@@ -5,8 +5,8 @@ import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
 const sections = [
-  { label: "Notes", path: ROUTES.SETTINGS_NOTES, icon: NotebookPenIcon },
   { label: "Storage", path: ROUTES.SETTINGS_STORAGE, icon: HardDriveIcon },
+  { label: "Notes", path: ROUTES.SETTINGS_NOTES, icon: NotebookPenIcon },
 ] as const;
 
 /**
@@ -17,10 +17,6 @@ const SettingsSideBar = () => {
   return (
     <aside className="z-40 flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden bg-chat-sidebar text-white">
       <LeftNav />
-      {/* Shares the content pane's top bar height for a uniform top band */}
-      <div className="flex h-11.5 shrink-0 items-center px-4">
-        <span className="para-semibold">Settings</span>
-      </div>
 
       <div className="flex flex-col gap-y-1 px-2">
         {sections.map((section) => (

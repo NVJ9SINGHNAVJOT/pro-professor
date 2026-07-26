@@ -6,61 +6,62 @@ import "@excalidraw/excalidraw/index.css";
 import "@/modules/diagram/components/diagramEditor.css";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
-import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
-import { PRO_FONT_FAMILY, PRO_ROUGHNESS } from "@/modules/diagram/persistence/sceneIO";
+import { diagramsRoute, type DiagramDetail } from "@/services/operations/diagrams/diagrams.route";
+import { makeEmptyScene, PRO_FONT_FAMILY, PRO_ROUGHNESS } from "@/modules/diagram/persistence/sceneIO";
 
 interface DiagramEditorProps {
-  diagramId: number;
-  /** Called after a successful save so the list can refresh its ordering. */
-  onSaved?: () => void;
+  /**
+   * Loaded by the route loader; the parent remounts this component per diagram via `key`.
+   * `null` on `/diagrams/new` — an unsaved draft, created by its first autosave.
+   */
+  diagram: DiagramDetail | null;
+  /** Called with the new id once a draft's first autosave has created it. */
+  onCreated?: (id: number) => void;
+  /**
+   * Called after every successful save with the server's copy of the row. The list shows the title
+   * and orders by `updatedAt`, both of which move on a content save, so this fires per save — it
+   * only patches local state, it doesn't refetch anything.
+   */
+  onSaved?: (diagram: DiagramDetail) => void;
 }
 
 type SaveState = "idle" | "saving" | "saved";
 
 /**
- * The editable diagram: an Excalidraw scene loaded from / saved to the diagram
- * row. Excalidraw owns the scene state and undo history; we debounce-save on
+ * The editable diagram: an Excalidraw scene handed in by the route loader and saved back to
+ * the diagram row. Excalidraw owns the scene state and undo history; we debounce-save on
  * change. Diagrams are drawn by the user — there is no AI generation/editing.
  */
-const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
+const DiagramEditor = ({ diagram, onCreated, onSaved }: DiagramEditorProps) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const savedVersion = useRef(-1);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [initialData, setInitialData] = useState<ExcalidrawInitialDataState | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(diagram?.title ?? "");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // null until a draft's first save creates the row; the prop can't carry it, since the parent
+  // deliberately keeps this component mounted across that transition.
+  const idRef = useRef<number | null>(diagram?.id ?? null);
 
-  const { execute: fetchDiagram } = useApi(diagramsRoute.getDiagram);
+  // Derived once per mount — the parent's `key` remounts on a switch, which is
+  // also what resets Excalidraw's own scene and undo history.
+  const [initialData] = useState<ExcalidrawInitialDataState>(() => {
+    const restored = restore((diagram?.content ?? makeEmptyScene()) as ExcalidrawInitialDataState, null, null);
+    // Default the tools to a professional (non-hand-drawn) look every session.
+    return {
+      ...restored,
+      appState: { ...restored.appState, currentItemRoughness: PRO_ROUGHNESS, currentItemFontFamily: PRO_FONT_FAMILY },
+      scrollToContent: true,
+    };
+  });
+  const savedVersion = useRef(getSceneVersion(initialData.elements ?? []));
+
+  const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
   const { execute: updateDiagram } = useApi(diagramsRoute.updateDiagram);
 
-  // Load (and reload on diagram switch). A remount via key also resets Excalidraw.
   useEffect(() => {
-    let alive = true;
-    setInitialData(null);
-    (async () => {
-      const res = await fetchDiagram(diagramId);
-      if (!alive) return;
-      if (res.error) {
-        toast.error("Failed to load diagram");
-        return;
-      }
-      const detail = res.response.data;
-      setTitle(detail.title);
-      const restored = restore(detail.content as ExcalidrawInitialDataState, null, null);
-      savedVersion.current = getSceneVersion(restored.elements);
-      // Default the tools to a professional (non-hand-drawn) look every session.
-      setInitialData({
-        ...restored,
-        appState: { ...restored.appState, currentItemRoughness: PRO_ROUGHNESS, currentItemFontFamily: PRO_FONT_FAMILY },
-        scrollToContent: true,
-      });
-    })();
     return () => {
-      alive = false;
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diagramId]);
+  }, []);
 
   const titleRef = useRef(title);
   useEffect(() => {
@@ -75,20 +76,42 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
       const content = JSON.parse(serializeAsJSON(elements, api.getAppState(), api.getFiles(), "database"));
       setSaveState("saving");
 
+      // Claim the version we're about to send *now*, not after the round trip: Excalidraw replaces
+      // element objects as it finalises an edit, so reading it back off this snapshot afterwards
+      // can yield a stale number — which reads as "still unsaved" and fires a second, identical
+      // save. Anything drawn while the request is in flight moves past this and saves next tick.
+      const sentVersion = getSceneVersion(elements);
+      const previousVersion = savedVersion.current;
+      savedVersion.current = sentVersion;
+
       const titleToSave = typeof overrideTitle === "string" ? overrideTitle : titleRef.current;
-      const res = await updateDiagram(diagramId, { title: titleToSave, content });
+      // A draft's first save is the create — a blank title lands as "Untitled Diagram" server-side.
+      const res =
+        idRef.current === null
+          ? await createDiagram({ title: titleToSave, content })
+          : await updateDiagram(idRef.current, { title: titleToSave, content });
 
       if (res.error) {
+        savedVersion.current = previousVersion; // nothing landed — let the next change retry
         setSaveState("idle");
         toast.error("Failed to save diagram");
         return;
       }
-      savedVersion.current = getSceneVersion(elements);
+      const saved = res.response.data;
       setSaveState("saved");
-      onSaved?.();
+      const created = idRef.current === null;
+      if (created) {
+        idRef.current = saved.id;
+        // The server named it ("Untitled Diagram", or a de-duplicated title); adopt that unless
+        // the user has typed on since.
+        if (titleRef.current === titleToSave) setTitle(saved.title);
+      }
+      // Every save moves the row: `updatedAt` changed, so the list re-sorts it to the top.
+      onSaved?.(saved);
+      if (created) onCreated?.(saved.id);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [diagramId],
+    [],
   );
 
   // Excalidraw fires onChange for selection/pointer too; the scene version only
@@ -123,30 +146,28 @@ const DiagramEditor = ({ diagramId, onSaved }: DiagramEditorProps) => {
       {/* Pin Excalidraw to an absolutely-filled box so it fills the canvas area. */}
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0">
-          {initialData ? (
-            <Excalidraw
-              theme="dark"
-              initialData={initialData}
-              excalidrawAPI={(api) => {
-                apiRef.current = api;
-              }}
-              onChange={onChange}
-            >
-              <MainMenu>
-                <MainMenu.DefaultItems.LoadScene />
-                <MainMenu.DefaultItems.SaveToActiveFile />
-                <MainMenu.DefaultItems.Export />
-                <MainMenu.DefaultItems.SaveAsImage />
-                <MainMenu.DefaultItems.SearchMenu />
-                <MainMenu.DefaultItems.Help />
-                <MainMenu.DefaultItems.ClearCanvas />
-                <MainMenu.Separator />
-                <MainMenu.DefaultItems.ChangeCanvasBackground />
-              </MainMenu>
-            </Excalidraw>
-          ) : (
-            <span className="p-4 caption-small-regular text-neutral-500">Loading canvas…</span>
-          )}
+          <Excalidraw
+            theme="dark"
+            initialData={initialData}
+            excalidrawAPI={(api) => {
+              apiRef.current = api;
+            }}
+            onChange={onChange}
+          >
+            {/* Replaces Excalidraw's default menu; listing the items ourselves
+                is the only way to drop its "Excalidraw links" (socials) group. */}
+            <MainMenu>
+              <MainMenu.DefaultItems.LoadScene />
+              <MainMenu.DefaultItems.SaveToActiveFile />
+              <MainMenu.DefaultItems.Export />
+              <MainMenu.DefaultItems.SaveAsImage />
+              <MainMenu.DefaultItems.SearchMenu />
+              <MainMenu.DefaultItems.Help />
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.Separator />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+            </MainMenu>
+          </Excalidraw>
         </div>
       </div>
     </div>

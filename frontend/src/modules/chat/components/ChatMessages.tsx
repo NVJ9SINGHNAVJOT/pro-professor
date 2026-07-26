@@ -21,16 +21,16 @@ import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
 import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";
-import { useApi } from "@/hooks/useApi";
-import { chatsRoute } from "@/services/operations/chats/chats.route";
+import type { ConversationDetail } from "@/services/operations/chats/chats.route";
+import { markDraftCreated } from "@/services/client/loadRoute";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { addConversation, renameConversation } from "@/redux/slices/chatSlice";
+import { upsertConversation } from "@/redux/slices/chatListSlice";
 import ModelSelector from "@/components/common/ModelSelector";
 import ChatSettings from "@/modules/chat/components/ChatSettings";
 import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import AudioPlayer from "@/modules/chat/components/AudioPlayer";
 import { blobToWav } from "@/modules/chat/wav";
-import { ROUTES } from "@/constants/routes";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/services/operations/models/models.route";
 import {
@@ -76,7 +76,7 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left caption-small-regular text-neutral-400 hover:text-neutral-200"
+        className="cursor-pointer flex w-full items-center gap-1.5 px-3 py-2 text-left caption-small-regular text-neutral-400 hover:text-neutral-200"
       >
         {open ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
         Thinking{isStreaming && "…"}
@@ -245,11 +245,7 @@ const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] })
       {attachments.map((a) =>
         a.mimeType.startsWith("image/") ? (
           <a key={a.id} href={a.url} target="_blank" rel="noreferrer">
-            <img
-              src={a.url}
-              alt={a.originalFilename}
-              className="max-h-48 max-w-64 rounded-2xl object-cover"
-            />
+            <img src={a.url} alt={a.originalFilename} className="max-h-48 max-w-64 rounded-2xl object-cover" />
           </a>
         ) : a.mimeType.startsWith("audio/") ? (
           <AudioPlayer key={a.id} src={a.url} />
@@ -271,15 +267,19 @@ const MessageAttachments = ({ attachments }: { attachments: MediaAttachment[] })
 };
 
 interface ChatMessagesProps {
+  /** The conversation for the current route, loaded by the route loader; null on `/chat`. */
+  conversation: ConversationDetail | null;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
 
-const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
+const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const chatId = useParams().chatId;
+  // A new chat until its first turn creates the conversation; `chatId` then becomes the real id
+  // *without* remounting the screen — and so without killing the stream (same route, NEW_ITEM_ID).
+  const isDraft = chatId === NEW_ITEM_ID;
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { execute: fetchConversation } = useApi(chatsRoute.getConversation);
   const { models, loaded: modelsLoaded } = useAppSelector((state) => state.models);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -304,7 +304,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
   const inputDisabled =
     modelsLoaded &&
     (models.length === 0 ||
-      (Boolean(chatId) &&
+      (!isDraft &&
         selected !== null &&
         !models.some((m) => m.provider === selected.provider && m.name === selected.model)));
 
@@ -357,11 +357,11 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     setStreaming(false);
   };
 
-  // load (or reset) conversation when the route param changes
+  // Seed (or reset) the conversation from the route loader's data when the route changes.
   useEffect(() => {
     autoScrollRef.current = true;
 
-    if (!chatId) {
+    if (isDraft) {
       abortActiveStream();
       setMessages([]);
       setSelected(null);
@@ -375,57 +375,52 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
       return;
     }
 
-    const id = Number(chatId);
+    const detail = conversation;
+    if (!detail) return;
+
     // already loaded (or currently streaming this one) — don't clobber live messages.
-    // This guard also short-circuits the new-chat self-navigation (/chat → /chat/:id),
-    // so the abort below only fires on a real switch to a different conversation.
-    if (loadedRef.current === id) return;
+    // This guard also short-circuits the new-chat self-navigation (/chat/new → /chat/:id): the
+    // loader refetches, but the stream already claimed this id, so its data is discarded here
+    // and the abort below only fires on a real switch to a different conversation.
+    if (loadedRef.current === detail.id) return;
 
     // Switching to a different chat while one is streaming: cancel the old generation
-    // (per the abort-and-discard behavior) before loading the new conversation.
+    // (per the abort-and-discard behavior) before showing the new conversation.
     abortActiveStream();
 
     isNewChatRef.current = false;
-    (async () => {
-      const res = await fetchConversation(id);
-      if (res.error) {
-        toast.error("Failed to load conversation");
-        return;
-      }
-      const detail = res.response.data;
-      setMessages(
-        // The persona is stored as a system row; it's an instruction, not a chat bubble.
-        detail.messages
-          .filter((m) => m.role !== "system")
-          .map((m) => ({
-            // "system" rows are filtered out above, so the role is never "system".
-            role: m.role as UiMessage["role"],
-            content: m.content,
-            attachments: m.attachments,
-          })),
-      );
-      // Restore the conversation's persisted inference settings + display toggles.
-      setParams({
-        maxTokens: detail.maxTokens,
-        temperature: detail.temperature,
-        topP: detail.topP,
-        repetitionPenalty: detail.repetitionPenalty,
-      });
-      setVerbose(detail.verbose);
-      setThinkingEnabled(detail.thinkingEnabled);
-      setUsedTokens(detail.lastContextTokens);
-      setSelected({
-        provider: detail.provider as ModelProvider,
-        model: detail.model,
-        inputModalities: findModalities(detail.provider as ModelProvider, detail.model),
-        maxContextTokens: findMaxContextTokens(detail.provider as ModelProvider, detail.model),
-        supportsThinking: findSupportsThinking(detail.provider as ModelProvider, detail.model),
-      });
-      convIdRef.current = id;
-      loadedRef.current = id;
-    })();
+    setMessages(
+      // The persona is stored as a system row; it's an instruction, not a chat bubble.
+      detail.messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({
+          // "system" rows are filtered out above, so the role is never "system".
+          role: m.role as UiMessage["role"],
+          content: m.content,
+          attachments: m.attachments,
+        })),
+    );
+    // Restore the conversation's persisted inference settings + display toggles.
+    setParams({
+      maxTokens: detail.maxTokens,
+      temperature: detail.temperature,
+      topP: detail.topP,
+      repetitionPenalty: detail.repetitionPenalty,
+    });
+    setVerbose(detail.verbose);
+    setThinkingEnabled(detail.thinkingEnabled);
+    setUsedTokens(detail.lastContextTokens);
+    setSelected({
+      provider: detail.provider as ModelProvider,
+      model: detail.model,
+      inputModalities: findModalities(detail.provider as ModelProvider, detail.model),
+      maxContextTokens: findMaxContextTokens(detail.provider as ModelProvider, detail.model),
+      supportsThinking: findSupportsThinking(detail.provider as ModelProvider, detail.model),
+    });
+    convIdRef.current = detail.id;
+    loadedRef.current = detail.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId]);
+  }, [chatId, conversation]);
 
   // auto-scroll on new content unless the user scrolled away from the bottom
   useEffect(() => {
@@ -642,23 +637,30 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         onStart: ({ conversationId, title }) => {
           convIdRef.current = conversationId;
           loadedRef.current = conversationId;
+          // The turn bumped the conversation's `updated_at` server-side, so the sidebar row moves
+          // to the top — for a new chat this is also what puts it there in the first place.
+          dispatch(
+            upsertConversation({
+              id: conversationId,
+              title,
+              model: selected.model,
+              provider: selected.provider,
+              updatedAt: new Date().toISOString(),
+            }),
+          );
           if (isNewChatRef.current) {
             isNewChatRef.current = false;
-            dispatch(
-              addConversation({
-                id: conversationId,
-                title,
-                model: selectedRef.current?.model ?? "",
-                updatedAt: new Date().toISOString(),
-              }),
-            );
+            // Relabel `/chat/new` as the conversation the turn just created. Same route, so the
+            // screen isn't remounted (which would abort this very stream), and the marker keeps
+            // the detail loader from refetching a conversation we're already showing.
+            markDraftCreated("chatId", conversationId);
             navigate(ROUTES.CHAT_DETAIL(conversationId), { replace: true });
           }
         },
         onTitle: ({ conversationId, title }) => {
-          // A voice-started chat had no typed text to title itself — fill the sidebar entry
-          // (added empty in onStart) once the backend derives a title from the transcript.
-          dispatch(renameConversation({ id: conversationId, title }));
+          // A voice-started chat had no typed text to title itself — the backend derived one from
+          // the transcript (and bumped the row doing so).
+          dispatch(upsertConversation({ id: conversationId, title, updatedAt: new Date().toISOString() }));
         },
         onTranscript: ({ content }) => {
           // Audio turn: the model transcribed its own input. Fill the user bubble (sent with
@@ -819,7 +821,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
     }
   };
 
-  const showEmptyState = !chatId && messages.length === 0;
+  const showEmptyState = isDraft && messages.length === 0;
 
   // Paperclip is image-only: enable it only for image-capable models, and cap at MAX_IMAGES.
   // findModalities re-derives from the loaded list, so this is correct even on a cold reload.
@@ -844,7 +846,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
         >
           {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
         </button>
-        <ModelSelector value={selected} onChange={setSelected} disabled={Boolean(chatId)} />
+        <ModelSelector value={selected} onChange={setSelected} disabled={!isDraft} />
         <div className="ml-auto flex items-center gap-3">
           <ContextMeter
             used={usedTokens}
@@ -855,7 +857,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
             onParamsChange={setParams}
             systemPrompt={systemPrompt}
             onSystemPromptChange={setSystemPrompt}
-            canEditSystemPrompt={!chatId}
+            canEditSystemPrompt={isDraft}
             verbose={verbose}
             onVerboseChange={setVerbose}
             thinkingEnabled={thinkingEnabled}
@@ -926,11 +928,7 @@ const ChatMessages = ({ sidebarOpen, onToggleSidebar }: ChatMessagesProps) => {
                       className="group relative flex items-center gap-2 rounded-xl bg-neutral-700 py-1.5 pl-2 pr-1.5 caption-small-regular text-neutral-200"
                     >
                       {a.mimeType.startsWith("image/") ? (
-                        <img
-                          src={a.url}
-                          alt={a.originalFilename}
-                          className="size-9 rounded-lg object-cover"
-                        />
+                        <img src={a.url} alt={a.originalFilename} className="size-9 rounded-lg object-cover" />
                       ) : (
                         <FileIcon className="size-4 shrink-0" />
                       )}

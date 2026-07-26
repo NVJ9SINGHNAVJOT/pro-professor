@@ -58,7 +58,7 @@ src/
 ├── constants/      # global constants (routes, …)
 ├── context/        # global providers (SocketProvider)
 ├── hooks/          # shared hooks (useApi, …)
-├── redux/          # store + global slices
+├── redux/          # store + modelsSlice (page data lives in route loaders)
 ├── services/       # REST/SSE clients (client/ + operations/ per feature)
 ├── socket/         # WebSocket client
 ├── lib/            # small helpers (cn, …)

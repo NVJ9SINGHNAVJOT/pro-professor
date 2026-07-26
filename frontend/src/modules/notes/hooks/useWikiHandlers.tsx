@@ -3,20 +3,15 @@ import { useNavigate } from "react-router";
 import { toast } from "@/components/common/toast";
 import { type WikiHandlers } from "@/components/common/markdown/Markdown";
 import { useApi } from "@/hooks/useApi";
-import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { upsertNote } from "@/redux/slices/notesSlice";
-import { notesRoute } from "@/services/operations/notes/notes.route";
+import { type NoteSummary } from "@/services/operations/notes/notes.route";
 import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
 import NoteEmbed from "@/modules/notes/components/NoteEmbed";
 import { DIAGRAM_SUFFIX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 
-/** Navigation + existence checks for wiki-links; clicking a missing link creates the note. */
-function useWikiBase(embedUrls?: Record<string, string>): WikiHandlers {
-  const notes = useAppSelector((state) => state.notes.notes);
+/** Navigation + existence checks for wiki-links; clicking a missing link opens a draft for it. */
+function useWikiBase(notes: NoteSummary[], embedUrls?: Record<string, string>): WikiHandlers {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-  const { execute: createNote } = useApi(notesRoute.createNote);
   const { execute: fetchDiagramByTitle } = useApi(diagramsRoute.getDiagramByTitle);
 
   return useMemo<WikiHandlers>(
@@ -41,15 +36,9 @@ function useWikiBase(embedUrls?: Record<string, string>): WikiHandlers {
           navigate(ROUTES.NOTES_DETAIL(existing.id), { state: heading ? { heading } : undefined });
           return;
         }
-        // Obsidian behavior: clicking an unresolved link creates the note.
-        const res = await createNote({ title: target, content: `# ${target}\n\n` });
-        if (res.error) {
-          toast.error("Failed to create note");
-          return;
-        }
-        const detail = res.response.data;
-        dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
-        navigate(ROUTES.NOTES_DETAIL(detail.id));
+        // Obsidian behavior: clicking an unresolved link opens the note it would create — as a
+        // draft, so nothing is written (and nothing is fetched) until it's saved.
+        navigate(`${ROUTES.NOTES_NEW}?title=${encodeURIComponent(target)}`);
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,15 +47,15 @@ function useWikiBase(embedUrls?: Record<string, string>): WikiHandlers {
 }
 
 /** Full wiki handlers for the note preview: links + `![[...]]` transclusions. */
-export function useWikiHandlers(embedUrls?: Record<string, string>): WikiHandlers {
-  const base = useWikiBase(embedUrls);
+export function useWikiHandlers(notes: NoteSummary[], embedUrls?: Record<string, string>): WikiHandlers {
+  const base = useWikiBase(notes, embedUrls);
   return useMemo<WikiHandlers>(
     () => ({
       ...base,
       // `![[...]]` transcludes a note/image. Diagrams are referenced by LINK
       // (`[[Title.diagram]]`), handled in onLinkClick — not embedded inline.
-      renderEmbed: (target, heading) => <NoteEmbed target={target} heading={heading} wiki={base} />,
+      renderEmbed: (target, heading) => <NoteEmbed target={target} heading={heading} wiki={base} notes={notes} />,
     }),
-    [base],
+    [base, notes],
   );
 }

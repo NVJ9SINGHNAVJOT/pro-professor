@@ -11,7 +11,7 @@ const menuItems = [
   { label: "Chat", path: ROUTES.CHAT, icon: MessageSquareIcon },
   { label: "Notes", path: ROUTES.NOTES, icon: NotebookPenIcon },
   { label: "Diagrams", path: ROUTES.DIAGRAMS, icon: WorkflowIcon },
-  { label: "Settings", path: ROUTES.SETTINGS, icon: SettingsIcon },
+  { label: "Settings", path: ROUTES.SETTINGS_STORAGE, icon: SettingsIcon },
 ] as const;
 
 // Continuous stream of musical notes raining behind the logo (position/timing in index.css).
@@ -37,25 +37,12 @@ const LeftNav = ({ floating }: LeftNavProps) => {
 
   return (
     <>
-      {floating ? (
+      {!floating && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
-          className="fixed left-3 top-3 z-30 flex size-11 cursor-pointer items-center justify-center rounded-xl border border-neutral-800 bg-chat-sidebar transition-colors hover:bg-neutral-900"
-        >
-          <img
-            alt="Logo"
-            src="/images/title-logo.webp"
-            className="w-8 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
-          />
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          className="relative flex h-16 w-full shrink-0 cursor-pointer items-center border-b border-neutral-800 px-3 text-white transition-colors hover:bg-neutral-900"
+          className="relative flex h-16 w-full shrink-0 cursor-pointer items-center border-b border-neutral-800 px-4 text-white transition-colors hover:bg-neutral-900"
         >
           {/* Musical notes drift left to right behind the logo */}
           <div aria-hidden className="absolute inset-0 overflow-hidden">
@@ -65,11 +52,16 @@ const LeftNav = ({ floating }: LeftNavProps) => {
               </span>
             ))}
           </div>
-          <img
-            alt="Logo"
-            src="/images/title-logo.webp"
-            className="relative w-9 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
-          />
+          <div className="relative flex items-center gap-x-4">
+            <img
+              alt="Logo"
+              src="/images/title-logo.webp"
+              className="w-9 shrink-0 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
+            />
+            <span className="truncate bg-linear-to-br from-white to-neutral-400 bg-clip-text text-transparent para-medium-semibold tracking-wide">
+              {name}
+            </span>
+          </div>
         </button>
       )}
 
@@ -89,7 +81,7 @@ const LeftNav = ({ floating }: LeftNavProps) => {
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center gap-x-5 px-1 py-1">
+        <div className="flex items-center gap-x-4 px-1 py-1">
           <img
             alt="Logo"
             src="/images/title-logo.webp"

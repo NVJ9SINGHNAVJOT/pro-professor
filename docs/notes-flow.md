@@ -67,7 +67,7 @@ bytes. (A freshly-typed embed resolves on the next save, when the note is re-rea
 ## 4. Frontend (`modules/notes`)
 
 Follows the chat module's patterns: `pages/notes/index.tsx` → route in `main.tsx`,
-`redux/slices/notesSlice.ts` (list cache), `services/operations/notes/notes.route.ts` (REST via
+`pages/notes/loader.ts` (the explorer list), `services/operations/notes/notes.route.ts` (REST via
 `createRoute`/`useApi`) and `notes.stream.ts` (SSE via `rawFetch`, mirroring `chats.stream.ts`).
 
 [NotesScreen](../frontend/src/modules/notes/screens/NotesScreen.tsx) is the three-pane workspace;
@@ -76,10 +76,12 @@ each pane scrolls independently:
 - **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): collapsible **tag
   browser tree** (tag → its notes) above the flat newest-first list; the search box merges instant
   client title/tag matches with debounced server FTS results.
-- **Center** — toolbar (view toggle source/split/preview, graph view, revision history, context
-  panel), the [AiBar](../frontend/src/modules/notes/components/AiBar.tsx) (§6), then editor
+- **Center** — [NotesBar](../frontend/src/modules/notes/components/NotesBar.tsx): the toolbar (view
+  toggle source/split/preview, graph view, revision history, context panel) and the AI instruction
+  bar (§6) in one strip, then editor
   (plain `TextareaInput`) ⟷ preview split with a hand-rolled draggable divider
-  ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). Cmd/Ctrl+S saves;
+  ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). Cmd/Ctrl+S saves —
+  and on `/notes/new` that save is the `POST` that creates the note (see §"New note" below);
   the graph view ([GraphView](../frontend/src/modules/notes/components/GraphView.tsx)) renders
   `GET /notes/links` as a *generated Mermaid definition* — solid arrows = links, dashed = embeds,
   dashed nodes = unresolved targets.
@@ -87,9 +89,25 @@ each pane scrolls independently:
   backlinks (server), outgoing links + outline (parsed client-side from the live editor content,
   matching LinkParser's code-exclusion rules), tags.
 - **Command palette** — [CommandPalette](../frontend/src/modules/notes/components/CommandPalette.tsx),
-  Cmd/Ctrl+P (or +K), hand-rolled (no `cmdk`): open/create notes, view modes, graph, insert
-  Mermaid/React Flow templates, AI actions. AI commands reach the AiBar via a `pendingCommand`
-  prop signal, not a ref (react-compiler lint forbids ref access in render paths).
+  Cmd/Ctrl+P (or +K), hand-rolled (no `cmdk`): open/create notes, view modes, graph, line
+  formatting, insert a Mermaid template, AI actions. An AI command is stored as NotesScreen state
+  (`NotesBarCommand`) and run by an effect — state, not a ref, because react-compiler lint forbids
+  ref access in render paths.
+
+**New note** is `/notes/new` — an editor with no note behind it, exactly like a new chat. It is a
+*value* of the `:noteId` param (`NEW_ITEM_ID`), not a route of its own, so the screen isn't
+remounted when the save gives it a real id. Clicking "New note" issues **no request**; the first
+save `POST`s the note (the title still comes from the content's first heading), adds it to the
+explorer, then replaces the URL with `/notes/:id`. Leaving the draft unsaved leaves nothing behind.
+Revision history, backlinks and the NotesBar's AI actions need an id, so they stay inert until that
+first save.
+
+Everything else about the workspace is *arrival data* fetched by the route loaders
+(`pages/notes/loader.ts`): the open note + its backlinks on `/notes/:noteId`, and the explorer list,
+which the parent route's loader dispatches into the `notesList` slice. A save/create/delete then
+patches that one row from the response it already has (`upsertNote` / `removeNote`) — the note's new
+title, tags and position, with **no `GET /notes`**. Outline clicks in the context panel scroll the
+preview directly rather than re-navigating to the note's own URL.
 
 ## 5. Shared rendering ([components/common/markdown/Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx))
 
@@ -101,8 +119,9 @@ transforms (no `unist-util-visit` dependency):
 - **Wiki-links** — text nodes are rewritten to `#wiki:`/`#wiki-embed:` links; an `a` component
   override routes clicks to the notes module's [useWikiHandlers](../frontend/src/modules/notes/hooks/useWikiHandlers.tsx):
   existing title → navigate (a `#Heading` part rides along as router state and NotesScreen
-  smooth-scrolls the preview to it); missing title → **create the note on click**. Missing links
-  render dimmed/dashed. Chat passes no `wiki` prop, so this stays inert there.
+  smooth-scrolls the preview to it); missing title → **opens a draft** at
+  `/notes/new?title=<target>`, seeded with `# <target>` — the row is written by its first save,
+  not by the click. Missing links render dimmed/dashed. Chat passes no `wiki` prop, so this stays inert there.
 - **Embeds** — `![[Note]]` / `![[Note#Heading]]` render [NoteEmbed](../frontend/src/modules/notes/components/NoteEmbed.tsx):
   fetches the target and transcludes the body (or just that heading's section via
   `extractSection`); image embeds render from the note's `embedUrls` map (direct storage URLs the
@@ -132,7 +151,7 @@ runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` 
    → emit `note.done` with the revision id. A restore snapshots the current content first, so
    restores are themselves undoable. Nothing is persisted on error/abort.
 
-The AiBar's model picker lists the locally activated models and defaults to the active one; the
+The NotesBar's model picker lists the locally activated models and defaults to the active one; the
 frontend streams tokens straight into the editor and refetches the note on `note.done`.
 
 ## 7. Not implemented (by decision)

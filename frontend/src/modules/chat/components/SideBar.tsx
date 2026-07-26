@@ -1,47 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
-import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { removeConversation, setHistory, type ChatHistoryItem } from "@/redux/slices/chatSlice";
 import { useApi } from "@/hooks/useApi";
-import { chatsRoute } from "@/services/operations/chats/chats.route";
-import { ROUTES } from "@/constants/routes";
+import { useAppDispatch } from "@/redux/store";
+import { removeConversation } from "@/redux/slices/chatListSlice";
+import { chatsRoute, type ConversationSummary } from "@/services/operations/chats/chats.route";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import { GROUPS } from "@/modules/chat/constants";
 import type { Group } from "@/modules/chat/types";
 import { groupOf } from "@/modules/chat/utils";
 
 interface SideBarProps {
+  /** The history list, loaded by the parent `/chat` route. */
+  conversations: ConversationSummary[];
   isOpen: boolean;
   onToggle: () => void;
 }
 
-const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
-  const history = useAppSelector((state) => state.chat.history);
-  const dispatch = useAppDispatch();
+const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const chatId = useParams().chatId;
   const [query, setQuery] = useState("");
-  const { execute: fetchConversations } = useApi(chatsRoute.getConversations);
   const { execute: deleteConversation } = useApi(chatsRoute.deleteConversation);
-
-  useEffect(() => {
-    (async () => {
-      const res = await fetchConversations();
-      if (!res.error) {
-        dispatch(setHistory(res.response.data.conversations));
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // filter by search query, then bucket by recency
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q ? history.filter((chat) => chat.title.toLowerCase().includes(q)) : history;
-    const buckets = new Map<Group, ChatHistoryItem[]>();
+    const filtered = q ? conversations.filter((chat) => chat.title.toLowerCase().includes(q)) : conversations;
+    const buckets = new Map<Group, ConversationSummary[]>();
     filtered.forEach((chat) => {
       const group = groupOf(chat.updatedAt);
       buckets.set(group, [...(buckets.get(group) ?? []), chat]);
@@ -50,7 +40,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
       label: group,
       chats: buckets.get(group)!,
     }));
-  }, [history, query]);
+  }, [conversations, query]);
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.preventDefault();
@@ -61,7 +51,7 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
       return;
     }
     dispatch(removeConversation(id));
-    if (chatId === String(id)) navigate(ROUTES.CHAT);
+    if (chatId === String(id)) navigate(ROUTES.CHAT_NEW);
   };
 
   return (
@@ -92,7 +82,9 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
           <div className="flex h-11.5 shrink-0 items-center px-2">
             <button
               type="button"
-              onClick={() => navigate(ROUTES.CHAT)}
+              // Already on the new-chat screen: staying put costs nothing, whereas re-navigating
+              // to the URL we're on reads as a revalidation and refetches the list.
+              onClick={() => chatId !== NEW_ITEM_ID && navigate(ROUTES.CHAT_NEW)}
               className="flex w-full cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800"
             >
               <SquarePenIcon className="size-4.5" />
@@ -125,6 +117,9 @@ const SideBar = ({ isOpen, onToggle }: SideBarProps) => {
                   <NavLink
                     key={chat.id}
                     to={ROUTES.CHAT_DETAIL(chat.id)}
+                    // Re-navigating to the chat we're already on reads as a revalidation and
+                    // refetches the list, so swallow that click.
+                    onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
                     className={({ isActive }) =>
                       cn(
                         "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 para-small-medium hover:bg-neutral-800",

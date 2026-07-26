@@ -81,4 +81,6 @@ export const useNoteAi = (
     stop,
   };
 };
-export type AiBarCommand = NoteAiAction | "focus";
+
+/** A command the palette hands to NotesScreen: an AI action to run, or "focus" the instruction bar. */
+export type NotesBarCommand = NoteAiAction | "focus";

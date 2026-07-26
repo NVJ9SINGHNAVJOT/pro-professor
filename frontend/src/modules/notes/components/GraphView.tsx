@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import MermaidBlock from "@/components/common/MermaidBlock";
 import { useApi } from "@/hooks/useApi";
-import { useAppSelector } from "@/redux/store";
-import { notesRoute, type NoteLink } from "@/services/operations/notes/notes.route";
+import { notesRoute, type NoteLink, type NoteSummary } from "@/services/operations/notes/notes.route";
 
 /** Mermaid node label: quoted string, quotes stripped (they'd close the label). */
 const label = (text: string) => `"${text.replace(/"/g, "'")}"`;
@@ -12,8 +11,12 @@ const label = (text: string) => `"${text.replace(/"/g, "'")}"`;
  * same lazy Mermaid renderer as ```mermaid fences, so the graph view costs no
  * extra dependency. Non-interactive by design.
  */
-const GraphView = () => {
-  const notes = useAppSelector((state) => state.notes.notes);
+interface GraphViewProps {
+  /** The explorer list, loaded by the parent `/notes` route. */
+  notes: NoteSummary[];
+}
+
+const GraphView = ({ notes }: GraphViewProps) => {
   const { execute: fetchLinks } = useApi(notesRoute.getLinks);
   const [links, setLinks] = useState<NoteLink[] | null>(null);
 

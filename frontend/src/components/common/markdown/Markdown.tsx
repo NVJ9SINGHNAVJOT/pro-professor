@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -202,15 +202,23 @@ interface MarkdownProps {
  * doesn't change the string (e.g. while an unclosed math token is being withheld
  * during streaming) skips re-parsing.
  */
-const Markdown = memo(({ children, wiki }: MarkdownProps) => (
-  <ReactMarkdown
-    remarkPlugins={wiki ? [remarkGfm, remarkMath, remarkCallouts, remarkWikiLinks] : [remarkGfm, remarkMath, remarkCallouts]}
-    rehypePlugins={[rehypeKatex]}
-    components={wiki ? wikiComponents(wiki) : baseComponents}
-  >
-    {children}
-  </ReactMarkdown>
-));
+const Markdown = memo(({ children, wiki }: MarkdownProps) => {
+  // Tied to the handlers' identity, not built per render: a fresh components object is a fresh
+  // component *type*, so React remounts every node it owns — including the <NoteEmbed> behind a
+  // `![[…]]` transclusion, which would refetch its note on every keystroke.
+  const components = useMemo(() => (wiki ? wikiComponents(wiki) : baseComponents), [wiki]);
+  return (
+    <ReactMarkdown
+      remarkPlugins={
+        wiki ? [remarkGfm, remarkMath, remarkCallouts, remarkWikiLinks] : [remarkGfm, remarkMath, remarkCallouts]
+      }
+      rehypePlugins={[rehypeKatex]}
+      components={components}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+});
 Markdown.displayName = "Markdown";
 
 export default Markdown;

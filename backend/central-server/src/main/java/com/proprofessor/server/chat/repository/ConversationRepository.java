@@ -5,6 +5,7 @@ import com.proprofessor.server.common.db.ConversationSettings;
 import com.proprofessor.server.common.db.ModelRow;
 import org.jooq.DSLContext;
 import org.jooq.Record;
+import org.jooq.impl.DSL;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -66,6 +67,20 @@ public class ConversationRepository {
     public void updateLastContextTokens(long id, int tokens) {
         dsl.update(CONVERSATIONS)
                 .set(CONVERSATIONS.LAST_CONTEXT_TOKENS, tokens)
+                .where(CONVERSATIONS.ID.eq(id))
+                .execute();
+    }
+
+    /**
+     * Marks a conversation as just-used. The value set here is irrelevant — {@code
+     * trg_conversations_updated_at} overwrites it with {@code NOW()} — the point is that an UPDATE
+     * happens at all, so a turn always moves the conversation to the top of the history list. The
+     * other updates on this row are conditional (token metrics, changed settings, a derived title),
+     * so without this a stopped or failed turn would leave the row where it was.
+     */
+    public void touch(long id) {
+        dsl.update(CONVERSATIONS)
+                .set(CONVERSATIONS.UPDATED_AT, DSL.currentOffsetDateTime())
                 .where(CONVERSATIONS.ID.eq(id))
                 .execute();
     }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   ArrowRightIcon,
   CodeIcon,
@@ -32,13 +32,14 @@ import { toast } from "@/components/common/toast";
 import Markdown from "@/components/common/markdown/Markdown";
 import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import NotesBar from "@/modules/notes/components/NotesBar";
-import { useNoteAi, type AiBarCommand } from "@/modules/notes/hooks/useNoteAi";
+import { useNoteAi, type NotesBarCommand } from "@/modules/notes/hooks/useNoteAi";
 
 import { TextareaInput } from "@/components/inputs/TextareaInput";
 import { useApi } from "@/hooks/useApi";
-import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { upsertNote } from "@/redux/slices/notesSlice";
-import { notesRoute, type NoteDetail } from "@/services/operations/notes/notes.route";
+import { useAppDispatch } from "@/redux/store";
+import { upsertNote } from "@/redux/slices/notesListSlice";
+import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
+import { markDraftCreated } from "@/services/client/loadRoute";
 import NoteList from "@/modules/notes/components/NoteList";
 import ContextPanel from "@/modules/notes/components/ContextPanel";
 import SplitPane from "@/modules/notes/components/SplitPane";
@@ -70,25 +71,48 @@ import {
   
   type SlashCommand,
 } from "@/modules/notes/constants";
-import { ROUTES } from "@/constants/routes";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+
+interface NotesScreenProps {
+  /** The explorer list, loaded by the parent `/notes` route. */
+  notes: NoteSummary[];
+  /** The note named in the URL, loaded by the route loader; null on `/notes` and `/notes/new`. */
+  loadedNote: NoteDetail | null;
+  /** Notes linking to the open one, loaded alongside it. */
+  backlinks: NoteSummary[];
+}
+
+/** The explorer row hiding inside a full note — a list row is a strict subset of the detail. */
+const summaryOf = (detail: NoteDetail): NoteSummary => ({
+  id: detail.id,
+  title: detail.title,
+  tags: detail.tags,
+  updatedAt: detail.updatedAt,
+});
 
 /** Obsidian-like three-pane workspace: explorer | editor⟷preview | outline/tags. */
-const NotesScreen = () => {
+const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const noteId = useParams().noteId;
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const allNotes = useAppSelector((state) => state.notes.notes);
+  // `/notes/new` — an editor with no note behind it yet. Like a new chat, it costs no request:
+  // the note row is created by its first save, which turns this into `/notes/:id` *without*
+  // remounting the screen (same route, see NEW_ITEM_ID).
+  const isDraft = noteId === NEW_ITEM_ID;
+  // A draft opened from an unresolved `[[link]]` carries the title it should start with.
+  const [searchParams] = useSearchParams();
+  const draftTitle = isDraft ? searchParams.get("title") : null;
 
   const { execute: fetchNote } = useApi(notesRoute.getNote);
   const { execute: createNote, loading: creating } = useApi(notesRoute.createNote);
   const { execute: updateNote, loading: saving } = useApi(notesRoute.updateNote);
 
-  const [note, setNote] = useState<NoteDetail | null>(null);
-  const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-  const [title, setTitle] = useState("");
-  const [savedTitle, setSavedTitle] = useState("");
+  const [note, setNote] = useState<NoteDetail | null>(loadedNote);
+  const [content, setContent] = useState(loadedNote?.content ?? "");
+  const [savedContent, setSavedContent] = useState(loadedNote?.content ?? "");
+  const [title, setTitle] = useState(loadedNote?.title ?? "");
+  const [savedTitle, setSavedTitle] = useState(loadedNote?.title ?? "");
   const [viewMode, setViewMode] = useState<NoteViewMode>("split");
   const [contextOpen, setContextOpen] = useState(true);
   const [graphOpen, setGraphOpen] = useState(false);
@@ -96,84 +120,106 @@ const NotesScreen = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [revisionRefresh, setRevisionRefresh] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // A palette-issued AI command, handed to the AiBar via props (acknowledged when run).
-  const [aiCommand, setAiCommand] = useState<AiBarCommand | null>(null);
+  // A palette-issued AI command, run by an effect below (cleared once it has been acknowledged).
+  const [aiCommand, setAiCommand] = useState<NotesBarCommand | null>(null);
   // Active `/` block context: where the slash starts, what's typed after it, where the menu sits.
   const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const wiki = useWikiHandlers(note?.embedUrls);
+  const historyBtnRef = useRef<HTMLButtonElement | null>(null);
+  const wiki = useWikiHandlers(notes, note?.embedUrls);
 
-  /** The AI action saved the note server-side — pull the fresh copy (title/tags may have changed). */
-  const refetchAfterAi = async () => {
-    if (!noteId) return;
-    const res = await fetchNote(Number(noteId));
-    if (!res.error) applyDetail(res.response.data);
-  };
+  /** The note already in the buffer — see the seeding effect. */
+  const appliedIdRef = useRef<number | null>(loadedNote?.id ?? null);
 
-  const aiInputRef = useRef<HTMLInputElement | null>(null);
-  const ai = useNoteAi(
-    note?.id,
-    setContent,
-    refetchAfterAi,
-    setAiBusy
-  );
-
-  const dirty = note !== null && (content !== savedContent || title !== savedTitle) && !aiBusy;
-
-  /** Applies a fresh detail from the server (AI save, restore) to every bit of local state. */
-  const applyDetail = (detail: NoteDetail) => {
+  /** Puts a server copy of the note into every bit of editor state. */
+  const seedFromDetail = (detail: NoteDetail) => {
+    appliedIdRef.current = detail.id;
     setNote(detail);
     setContent(detail.content);
     setSavedContent(detail.content);
     setTitle(detail.title);
     setSavedTitle(detail.title);
-    dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
+  };
+
+  /** Applies a fresh detail from the server (save, AI save, restore) to every bit of local state. */
+  const applyDetail = (detail: NoteDetail) => {
+    seedFromDetail(detail);
+    // The explorer row is a subset of what we just got back — patch it (title, tags, and the new
+    // updatedAt, which floats the note to the top) rather than refetching the whole list.
+    dispatch(upsertNote(summaryOf(detail)));
     setRevisionRefresh((key) => key + 1);
   };
 
+  /** The AI action saved the note server-side — pull the fresh copy (title/tags may have changed). */
+  const refetchAfterAi = async () => {
+    if (!note) return; // the id, not the param — which is `new` on an unsaved draft
+    const res = await fetchNote(note.id);
+    if (!res.error) applyDetail(res.response.data);
+  };
+
+  const aiInputRef = useRef<HTMLInputElement | null>(null);
+  const ai = useNoteAi(note?.id, setContent, refetchAfterAi, setAiBusy);
+
+  const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle) && !aiBusy;
 
 
-  // Load (or reset) the note when the route param changes.
+  // Seed (or clear) the editor whenever the route hands over a different note. Keyed on the id,
+  // not the object: a revalidation of the explorer list re-runs the loader and would otherwise
+  // overwrite the buffer the user is typing into.
   useEffect(() => {
-    if (!noteId) {
-      setNote(null);
-      setContent("");
-      setSavedContent("");
-      setTitle("");
-      setSavedTitle("");
+    const id = loadedNote?.id ?? null;
+    if (id !== null && appliedIdRef.current === id) return;
+    // `/notes/:id` with nothing from the loader means the draft's first save just relabelled the
+    // URL and the loader was deliberately skipped (`markDraftCreated`) — the buffer already holds
+    // that note, so clearing it below would throw away what was typed during the round trip.
+    if (!isDraft && !loadedNote) return;
+    if (loadedNote) {
+      seedFromDetail(loadedNote);
       return;
     }
-    (async () => {
-      const res = await fetchNote(Number(noteId));
-      if (res.error) {
-        toast.error("Failed to load note");
-        navigate(ROUTES.NOTES);
-        return;
-      }
-      const detail = res.response.data;
-      setNote(detail);
-      setContent(detail.content);
-      setSavedContent(detail.content);
-      setTitle(detail.title);
-      setSavedTitle(detail.title);
-    })();
+    appliedIdRef.current = null;
+    setNote(null);
+    setContent(draftTitle ? `# ${draftTitle}\n\n` : "");
+    setSavedContent("");
+    setTitle(draftTitle ?? "");
+    setSavedTitle("");
+    // `noteId` is in here, not just the loaded note's id: after the save-hop above the route holds
+    // a real id with no loader note, so leaving that note for a fresh `/notes/new` would otherwise
+    // look like no change at all and keep the old buffer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId]);
+  }, [loadedNote?.id ?? null, draftTitle, noteId]);
 
-  const handleCreate = async () => {
-    const res = await createNote({ content: "" });
-    if (res.error) {
-      toast.error("Failed to create note");
-      return;
-    }
-    const detail = res.response.data;
-    dispatch(upsertNote({ id: detail.id, title: detail.title, tags: detail.tags, updatedAt: detail.updatedAt }));
-    navigate(ROUTES.NOTES_DETAIL(detail.id));
+  /**
+   * New note = an empty draft. Nothing is created until it's saved, so this costs no request —
+   * and it no-ops on a blank draft, since re-navigating to the URL we're on reads as a
+   * revalidation and would refetch the explorer on every click. (A *seeded* draft, opened from an
+   * unresolved `[[link]]`, still clears back to an empty one.)
+   */
+  const handleCreate = () => {
+    if (!isDraft || draftTitle) navigate(ROUTES.NOTES_NEW);
   };
 
   const handleSave = async () => {
-    if (!note || saving || aiBusy) return;
+    if (saving || creating || aiBusy) return;
+    if (!note) {
+      if (!isDraft) return;
+      // First save of a draft: the row is born here. The title comes from the content's first
+      // heading (or frontmatter), same as any other save.
+      const res = await createNote({ content });
+      if (res.error) {
+        toast.error(res.error.message || "Failed to create note");
+        return;
+      }
+      const detail = res.response.data;
+      seedFromDetail(detail);
+      dispatch(upsertNote(summaryOf(detail)));
+      // Same route, so the editor isn't remounted; the marker also keeps the loader from
+      // refetching the note this save just returned.
+      markDraftCreated("noteId", detail.id);
+      navigate(ROUTES.NOTES_DETAIL(detail.id), { replace: true });
+      return;
+    }
     const res = await updateNote(note.id, { title, content });
     if (res.error) {
       toast.error(res.error.message || "Failed to save note");
@@ -204,13 +250,13 @@ const NotesScreen = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // [[Note#Heading]] navigation: the heading arrives as router state; once the note's
-  // content is in the preview, scroll its matching heading into view.
-  useEffect(() => {
-    const heading = (location.state as { heading?: string } | null)?.heading;
-    if (!heading || !note) return;
+  /**
+   * Scrolls the preview to a heading. Deferred, because the anchor may not be painted yet —
+   * the view mode just switched, or the note itself just arrived.
+   */
+  const scrollToHeading = (heading: string) => {
     if (viewMode === "source") setViewMode("split"); // the anchor lives in the preview
-    const timer = setTimeout(() => {
+    return setTimeout(() => {
       const container = previewRef.current;
       if (!container) return;
       const wanted = heading.trim().toLowerCase();
@@ -226,6 +272,15 @@ const NotesScreen = () => {
         }
       }
     }, HEADING_SCROLL_DELAY_MS);
+  };
+
+  // [[Note#Heading]] navigation to ANOTHER note: the heading arrives as router state; once the
+  // note's content is in the preview, scroll its matching heading into view. (Headings of the
+  // open note scroll straight through `scrollToHeading` — no navigation, no reload.)
+  useEffect(() => {
+    const heading = (location.state as { heading?: string } | null)?.heading;
+    if (!heading || !note) return;
+    const timer = scrollToHeading(heading);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, note?.id, savedContent]);
@@ -384,7 +439,7 @@ const NotesScreen = () => {
           icon: WaypointsIcon,
           run: () => insertSnippet(MERMAID_TEMPLATE),
         },
-        // Line formatting (the old toolbar's actions) — applies to the editor's current line/selection.
+        // Line formatting — applies to the editor's current line/selection.
         { id: "fmt-h1", label: "Format: Heading 1", hint: "#", icon: Heading1Icon, run: () => applyTextAction((s) => setHeading(s, 1)) },
         { id: "fmt-h2", label: "Format: Heading 2", hint: "##", icon: Heading2Icon, run: () => applyTextAction((s) => setHeading(s, 2)) },
         { id: "fmt-h3", label: "Format: Heading 3", hint: "###", icon: Heading3Icon, run: () => applyTextAction((s) => setHeading(s, 3)) },
@@ -405,7 +460,7 @@ const NotesScreen = () => {
         { id: "ai-focus", label: "Focus AI instruction bar", icon: SparklesIcon, run: () => setAiCommand("focus") },
       );
     }
-    allNotes.forEach((item) => {
+    notes.forEach((item) => {
       commands.push({
         id: `open-${item.id}`,
         label: item.title,
@@ -434,24 +489,26 @@ const NotesScreen = () => {
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            <GraphView />
+            <GraphView notes={notes} />
           </div>
         </>
       );
     }
 
-    if (note) {
+    if (note || isDraft) {
       return (
         <>
           <NotesBar
             ai={ai}
             aiInputRef={aiInputRef}
+            hasNote={note !== null}
             dirty={dirty}
             saving={saving}
             viewMode={viewMode}
             setViewMode={setViewMode}
             historyOpen={historyOpen}
             setHistoryOpen={setHistoryOpen}
+            historyBtnRef={historyBtnRef}
             contextOpen={contextOpen}
             setContextOpen={setContextOpen}
             setGraphOpen={setGraphOpen}
@@ -465,7 +522,7 @@ const NotesScreen = () => {
               onSelect={handleSlashSelect}
               onClose={() => setSlash(null)}
             />
-            {historyOpen && (
+            {historyOpen && note && (
               <RevisionList
                 noteId={note.id}
                 refreshKey={revisionRefresh}
@@ -473,6 +530,8 @@ const NotesScreen = () => {
                   applyDetail(detail);
                   setHistoryOpen(false);
                 }}
+                onClose={() => setHistoryOpen(false)}
+                excludeRef={historyBtnRef}
               />
             )}
             {viewMode === "source" && editorPane}
@@ -503,13 +562,19 @@ const NotesScreen = () => {
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* eslint-disable-next-line react-hooks/refs -- the Format entries only touch textareaRef inside their run() callbacks (event time, not render) */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={buildPaletteCommands()} />
-      <NoteList onCreate={handleCreate} creating={creating} />
+      <NoteList notes={notes} onCreate={handleCreate} creating={creating} />
 
       {/* Center — toolbar + editor⟷preview (or the graph view) */}
       <section className="flex h-full min-w-0 flex-1 flex-col">{renderCenterSection()}</section>
 
-      {note && contextOpen && (
-        <ContextPanel noteId={note.id} content={content} tags={note.tags} onWikiClick={wiki.onLinkClick} />
+      {(note || isDraft) && contextOpen && (
+        <ContextPanel
+          backlinks={backlinks}
+          content={content}
+          tags={note?.tags ?? []}
+          onWikiClick={wiki.onLinkClick}
+          onHeadingClick={scrollToHeading}
+        />
       )}
     </div>
   );

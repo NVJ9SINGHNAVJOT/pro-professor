@@ -1,5 +1,5 @@
 import type { Group } from "@/modules/chat/types";
-import { MATH_HINT, SETTINGS_FIELD_LABELS } from "@/modules/chat/constants";
+import { MATH_HINT } from "@/modules/chat/constants";
 
 export const groupOf = (dateStr: string): Group => {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -56,21 +56,11 @@ export const hideUnclosedMath = (text: string): string => {
 };
 
 /**
- * Splits a settings marker's content into one entry per changed param.
- * Current markers store a readable summary ("Temperature 0.7 → 0.8 · Max tokens …");
- * markers saved before that change hold a JSON snapshot of the new params, parsed here so
- * they still render as tidy pills.
+ * Splits a settings marker's content into one entry per changed param. The server writes it as a
+ * readable summary ("Temperature 0.7 → 0.8 · Max tokens …"), one pill per entry.
  */
 export const parseSettingsChanges = (content: string): string[] => {
   const trimmed = content.trim();
   if (!trimmed) return [];
-  if (trimmed.startsWith("{")) {
-    try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      return Object.entries(obj).map(([k, v]) => `${SETTINGS_FIELD_LABELS[k] ?? k} → ${v}`);
-    } catch {
-      return [trimmed];
-    }
-  }
   return trimmed.split(" · ");
 };

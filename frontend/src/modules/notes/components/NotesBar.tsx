@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowRightIcon,
   HistoryIcon,
@@ -20,12 +21,15 @@ import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 interface NotesBarProps {
   ai: ReturnType<typeof useNoteAi>;
   aiInputRef: RefObject<HTMLInputElement | null>;
+  /** False on an unsaved draft: everything needing a note id is disabled until the first save. */
+  hasNote: boolean;
   dirty: boolean;
   saving: boolean;
   viewMode: NoteViewMode;
   setViewMode: (mode: NoteViewMode) => void;
   historyOpen: boolean;
   setHistoryOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  historyBtnRef: RefObject<HTMLButtonElement | null>;
   contextOpen: boolean;
   setContextOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setGraphOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
@@ -35,12 +39,14 @@ interface NotesBarProps {
 const NotesBar = ({
   ai,
   aiInputRef,
+  hasNote,
   dirty,
   saving,
   viewMode,
   setViewMode,
   historyOpen,
   setHistoryOpen,
+  historyBtnRef,
   contextOpen,
   setContextOpen,
   setGraphOpen,
@@ -106,12 +112,15 @@ const NotesBar = ({
             {saving ? "Saving…" : "Save"}
           </button>
           <button
+            ref={historyBtnRef}
             type="button"
             onClick={() => setHistoryOpen((open) => !open)}
+            disabled={!hasNote}
             aria-label="Revision history"
-            title="Revision history"
+            title={hasNote ? "Revision history" : "Save the note first"}
             className={cn(
               "cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800",
+              "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
               historyOpen && "bg-neutral-800 text-white",
             )}
           >
@@ -120,8 +129,12 @@ const NotesBar = ({
           <button
             type="button"
             onClick={() => setContextOpen((open) => !open)}
+            disabled={!hasNote}
             aria-label="Toggle context panel"
-            className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+            className={cn(
+              "cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800",
+              "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+            )}
           >
             {contextOpen ? (
               <PanelRightCloseIcon className="size-4.5" />
@@ -141,8 +154,12 @@ const NotesBar = ({
           onKeyDown={(e) => {
             if (e.key === "Enter") ai.runAction("ai-update", () => aiInputRef.current?.focus());
           }}
-          disabled={ai.busy}
-          placeholder="Ask AI to rewrite this note… (e.g. add a mermaid diagram of the flow)"
+          disabled={ai.busy || !hasNote}
+          placeholder={
+            hasNote
+              ? "Ask AI to rewrite this note… (e.g. add a mermaid diagram of the flow)"
+              : "Save the note to use AI on it"
+          }
           className="min-w-0 flex-1 bg-transparent para-small-medium outline-none placeholder:text-neutral-500 disabled:opacity-50"
         />
         {ai.busy ? (
@@ -162,21 +179,21 @@ const NotesBar = ({
               title="Apply the instruction to the note"
               icon={WandSparklesIcon}
               onClick={() => ai.runAction("ai-update", () => aiInputRef.current?.focus())}
-              disabled={ai.busy}
+              disabled={ai.busy || !hasNote}
             />
             <AiActionButton
               label="Summarize"
               title="Add or refresh a summary section"
               icon={ListPlusIcon}
               onClick={() => ai.runAction("summarize", () => aiInputRef.current?.focus())}
-              disabled={ai.busy}
+              disabled={ai.busy || !hasNote}
             />
             <AiActionButton
               label="Continue"
               title="Continue writing from the end"
               icon={ArrowRightIcon}
               onClick={() => ai.runAction("continue", () => aiInputRef.current?.focus())}
-              disabled={ai.busy}
+              disabled={ai.busy || !hasNote}
             />
           </div>
         )}
@@ -194,7 +211,7 @@ const AiActionButton = ({
 }: {
   label: string;
   title: string;
-  icon: any;
+  icon: LucideIcon;
   onClick: () => void;
   disabled?: boolean;
 }) => (

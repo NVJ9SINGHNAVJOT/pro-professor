@@ -1,25 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  HashIcon,
-  NotebookTextIcon,
-  SearchIcon,
-  SquarePenIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDownIcon, ChevronRightIcon, HashIcon, SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import LeftNav from "@/components/common/LeftNav";
 import { toast } from "@/components/common/toast";
-import { useAppDispatch, useAppSelector } from "@/redux/store";
-import { removeNote, setNotes, type NoteListItem } from "@/redux/slices/notesSlice";
 import { useApi } from "@/hooks/useApi";
+import { useDebounce } from "@/hooks/useDebounce";
+import { useAppDispatch } from "@/redux/store";
+import { removeNote } from "@/redux/slices/notesListSlice";
 import { notesRoute, type NoteSummary } from "@/services/operations/notes/notes.route";
 import { SEARCH_DEBOUNCE_MS } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
 interface NoteListProps {
+  /** The explorer list, loaded by the parent `/notes` route. */
+  notes: NoteSummary[];
   onCreate: () => void;
   creating: boolean;
 }
@@ -29,43 +24,27 @@ interface NoteListProps {
  * browser (notes grouped per tag, Obsidian-style), and the flat note list.
  * The whole pane scrolls on its own, independent of the editor and context panel.
  */
-const NoteList = ({ onCreate, creating }: NoteListProps) => {
-  const notes = useAppSelector((state) => state.notes.notes);
-  const dispatch = useAppDispatch();
+const NoteList = ({ notes, onCreate, creating }: NoteListProps) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const noteId = useParams().noteId;
   const [query, setQuery] = useState("");
   const [tagsOpen, setTagsOpen] = useState(true);
   const [expandedTags, setExpandedTags] = useState<Set<string>>(new Set());
-  const { execute: fetchNotes } = useApi(notesRoute.getNotes);
   const { execute: deleteNote } = useApi(notesRoute.deleteNote);
   const { execute: searchNotes } = useApi(notesRoute.searchNotes);
   const [searchResults, setSearchResults] = useState<NoteSummary[] | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const res = await fetchNotes();
-      if (!res.error) {
-        dispatch(setNotes(res.response.data.notes));
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Server keyword search (Postgres FTS over title + content), debounced.
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setSearchResults(null);
-      return;
-    }
-    const timer = setTimeout(async () => {
+  useDebounce(
+    query,
+    async (q) => {
       const res = await searchNotes(q);
       if (!res.error) setSearchResults(res.response.data.notes);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+    },
+    SEARCH_DEBOUNCE_MS,
+    () => setSearchResults(null),
+  );
 
   // Instant title/tag matches, merged with (ranked) server content matches once they arrive.
   const filtered = useMemo(() => {
@@ -83,7 +62,7 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
 
   // Tag browser data: tag → its notes, sorted by tag name.
   const notesByTag = useMemo(() => {
-    const map = new Map<string, NoteListItem[]>();
+    const map = new Map<string, NoteSummary[]>();
     notes.forEach((note) => {
       note.tags.forEach((tag) => map.set(tag, [...(map.get(tag) ?? []), note]));
     });
@@ -111,10 +90,13 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
     if (noteId === String(id)) navigate(ROUTES.NOTES);
   };
 
-  const noteEntry = (note: NoteSummary | NoteListItem, options?: { compact?: boolean }) => (
+  const noteEntry = (note: NoteSummary, options?: { compact?: boolean }) => (
     <NavLink
       key={note.id}
       to={ROUTES.NOTES_DETAIL(note.id)}
+      // Re-navigating to the note we're already on reads as a revalidation and refetches the
+      // explorer, so swallow that click.
+      onClick={(e) => noteId === String(note.id) && e.preventDefault()}
       className={({ isActive }) =>
         cn("group flex flex-col gap-y-1 rounded-lg px-2 py-1.5 hover:bg-neutral-800", isActive && "bg-neutral-800")
       }
@@ -218,18 +200,10 @@ const NoteList = ({ onCreate, creating }: NoteListProps) => {
         )}
 
         {/* Flat note list, newest-edited first */}
-        {!searching && (
-          <div className="flex items-center gap-x-1.5 px-2 pb-1 caption-small-medium text-neutral-500">
-            <NotebookTextIcon className="size-3.5" />
-            Notes
-          </div>
-        )}
         {filtered.length === 0 && (
           <div className="px-2 caption-regular text-neutral-500">{searching ? "No notes found" : "No notes yet"}</div>
         )}
-        <div className="flex flex-col gap-y-0.5">
-          {filtered.map((note) => noteEntry(note))}
-        </div>
+        <div className="flex flex-col gap-y-0.5">{filtered.map((note) => noteEntry(note))}</div>
       </div>
     </aside>
   );
