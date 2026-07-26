@@ -1,10 +1,7 @@
 import type { ComponentType } from "react";
 import { FileText, ImageIcon, Mic, Video } from "lucide-react";
 
-const MODALITY_META: Record<
-  string,
-  { icon: ComponentType<{ size?: number }>; label: string; className: string }
-> = {
+const MODALITY_META: Record<string, { icon: ComponentType<{ size?: number }>; label: string; className: string }> = {
   text: { icon: FileText, label: "Text", className: "bg-neutral-700 text-neutral-300" },
   image: { icon: ImageIcon, label: "Image", className: "bg-violet-900/60 text-violet-300" },
   audio: { icon: Mic, label: "Audio", className: "bg-blue-900/60 text-blue-300" },

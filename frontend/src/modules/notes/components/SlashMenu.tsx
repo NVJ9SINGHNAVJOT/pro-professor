@@ -76,7 +76,9 @@ const SlashMenu = ({ anchor, query, onSelect, onClose }: SlashMenuProps) => {
       style={{ top: anchor.top, left: anchor.left }}
     >
       <ul ref={listRef} className="chat-scroll max-h-64 overflow-y-auto p-1">
-        {filtered.length === 0 && <li className="px-2.5 py-2 caption-small-regular text-neutral-500">No matching blocks</li>}
+        {filtered.length === 0 && (
+          <li className="px-2.5 py-2 caption-small-regular text-neutral-500">No matching blocks</li>
+        )}
         {filtered.map((command, index) => (
           <li key={command.id}>
             <button
@@ -92,7 +94,9 @@ const SlashMenu = ({ anchor, query, onSelect, onClose }: SlashMenuProps) => {
             >
               <command.icon className="size-4 shrink-0 text-neutral-400" />
               <span className="truncate">{command.label}</span>
-              {command.hint && <span className="ml-auto shrink-0 caption-small-regular text-neutral-500">{command.hint}</span>}
+              {command.hint && (
+                <span className="ml-auto shrink-0 caption-small-regular text-neutral-500">{command.hint}</span>
+              )}
             </button>
           </li>
         ))}

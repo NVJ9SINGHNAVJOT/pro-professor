@@ -136,11 +136,7 @@ const NotesBar = ({
               "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
             )}
           >
-            {contextOpen ? (
-              <PanelRightCloseIcon className="size-4.5" />
-            ) : (
-              <PanelRightOpenIcon className="size-4.5" />
-            )}
+            {contextOpen ? <PanelRightCloseIcon className="size-4.5" /> : <PanelRightOpenIcon className="size-4.5" />}
           </button>
         </div>
       </div>

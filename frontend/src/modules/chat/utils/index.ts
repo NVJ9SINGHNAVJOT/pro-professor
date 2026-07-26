@@ -20,8 +20,7 @@ export const formatTime = (seconds: number): string => {
 };
 
 /** Compact token count, e.g. 1234 → "1.2k", 12345 → "12k". */
-export const formatTokens = (n: number): string =>
-  n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+export const formatTokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
 
 /** Pick the first MediaRecorder MIME type the browser supports (Chrome: webm, Safari: mp4). */
 export function pickMimeType(): string {

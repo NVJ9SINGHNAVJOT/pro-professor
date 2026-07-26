@@ -112,8 +112,7 @@ const InferenceParamsPanel = ({ title, description, params, onChange, onReset }:
                           isActive ? "text-richblue-300/70" : "text-neutral-500",
                         )}
                       >
-                        T: {preset.params.temperature} • P: {preset.params.topP} • R:{" "}
-                        {preset.params.repetitionPenalty}
+                        T: {preset.params.temperature} • P: {preset.params.topP} • R: {preset.params.repetitionPenalty}
                       </div>
                     </div>
                   </button>

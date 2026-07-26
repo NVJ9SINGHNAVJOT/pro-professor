@@ -41,14 +41,20 @@ const RevisionList = ({ noteId, refreshKey, onRestored, onClose, excludeRef }: R
   };
 
   return (
-    <div ref={panelRef} className="absolute right-4 top-12 z-30 w-72 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-2xl">
+    <div
+      ref={panelRef}
+      className="absolute right-4 top-12 z-30 w-72 rounded-xl border border-neutral-800 bg-neutral-900 p-2 shadow-2xl"
+    >
       <div className="px-2 pb-1.5 caption-small-medium text-neutral-500">Revisions</div>
       {revisions.length === 0 ? (
         <div className="px-2 pb-1 caption-regular text-neutral-600">No revisions yet — AI edits create them</div>
       ) : (
         <ul className="chat-scroll max-h-64 overflow-y-auto">
           {revisions.map((revision) => (
-            <li key={revision.id} className="flex items-center justify-between gap-x-2 rounded-lg px-2 py-1.5 hover:bg-neutral-800">
+            <li
+              key={revision.id}
+              className="flex items-center justify-between gap-x-2 rounded-lg px-2 py-1.5 hover:bg-neutral-800"
+            >
               <span className="caption-small-regular text-neutral-300">
                 {new Date(revision.createdAt).toLocaleString()}
               </span>

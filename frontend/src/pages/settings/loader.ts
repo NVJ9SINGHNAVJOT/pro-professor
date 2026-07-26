@@ -1,7 +1,12 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { load } from "@/services/client/loadRoute";
 import { settingsRoute, type AppSettings } from "@/services/operations/settings/settings.route";
-import { mediaRoute, type MediaFile, type MediaPagination, type ListMediaParams } from "@/services/operations/media/media.route";
+import {
+  mediaRoute,
+  type MediaFile,
+  type MediaPagination,
+  type ListMediaParams,
+} from "@/services/operations/media/media.route";
 import { STORAGE_PAGE_SIZE, asCategoryFilter } from "@/modules/settings/constants";
 
 export type SettingsLoaderData = {

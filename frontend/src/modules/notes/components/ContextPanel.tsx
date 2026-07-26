@@ -110,7 +110,10 @@ const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }:
         ) : (
           <div className="flex flex-wrap gap-1">
             {tags.map((tag) => (
-              <span key={tag} className="rounded-full bg-neutral-800 px-2 py-0.5 caption-small-regular text-neutral-300">
+              <span
+                key={tag}
+                className="rounded-full bg-neutral-800 px-2 py-0.5 caption-small-regular text-neutral-300"
+              >
                 #{tag}
               </span>
             ))}

@@ -98,9 +98,7 @@ const DiagramsScreen = ({ diagrams, diagram }: DiagramsScreenProps) => {
           </button>
         </div>
         <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {diagrams.length === 0 && (
-            <div className="px-2 caption-regular text-neutral-500">No diagrams yet</div>
-          )}
+          {diagrams.length === 0 && <div className="px-2 caption-regular text-neutral-500">No diagrams yet</div>}
           <div className="flex flex-col gap-y-0.5">
             {diagrams.map((diagram) => (
               <button
@@ -109,7 +107,7 @@ const DiagramsScreen = ({ diagrams, diagram }: DiagramsScreenProps) => {
                 onClick={() => openId !== diagram.id && navigate(ROUTES.DIAGRAMS_DETAIL(diagram.id))}
                 className={cn(
                   "group flex items-center justify-between gap-x-1 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-neutral-800",
-                  openId === diagram.id && "bg-neutral-800"
+                  openId === diagram.id && "bg-neutral-800",
                 )}
               >
                 <span className="truncate para-small-medium text-white">{diagram.title}</span>

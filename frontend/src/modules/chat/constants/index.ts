@@ -30,7 +30,8 @@ export const INFERENCE_PRESETS: InferencePreset[] = [
     id: "balanced",
     label: "Balanced",
     description: "General conversation",
-    tooltip: "A well-rounded setup for day-to-day chats, providing a good mix of creativity and focus without straying off-topic.",
+    tooltip:
+      "A well-rounded setup for day-to-day chats, providing a good mix of creativity and focus without straying off-topic.",
     icon: "Scale",
     params: { temperature: 0.7, topP: 0.9, repetitionPenalty: 1.1 },
   },
@@ -38,7 +39,8 @@ export const INFERENCE_PRESETS: InferencePreset[] = [
     id: "creative",
     label: "Creative",
     description: "Writing and storytelling",
-    tooltip: "Boosts randomness and vocabulary diversity. Ideal for brainstorming, creative writing, and generating highly varied responses.",
+    tooltip:
+      "Boosts randomness and vocabulary diversity. Ideal for brainstorming, creative writing, and generating highly varied responses.",
     icon: "Palette",
     params: { temperature: 1.2, topP: 0.95, repetitionPenalty: 1.0 },
   },
@@ -46,7 +48,8 @@ export const INFERENCE_PRESETS: InferencePreset[] = [
     id: "precise",
     label: "Precise",
     description: "Factual Q&A and code",
-    tooltip: "Highly deterministic and focused. Best used for exact factual answers, structured data generation, and strict code writing.",
+    tooltip:
+      "Highly deterministic and focused. Best used for exact factual answers, structured data generation, and strict code writing.",
     icon: "Target",
     params: { temperature: 0.3, topP: 0.8, repetitionPenalty: 1.2 },
   },
@@ -54,7 +57,8 @@ export const INFERENCE_PRESETS: InferencePreset[] = [
     id: "reasoning",
     label: "Reasoning",
     description: "Math and logic",
-    tooltip: "Optimized for logical deduction and mathematical problem-solving, keeping the model strictly analytical while preventing loops.",
+    tooltip:
+      "Optimized for logical deduction and mathematical problem-solving, keeping the model strictly analytical while preventing loops.",
     icon: "Brain",
     params: { temperature: 0.5, topP: 0.85, repetitionPenalty: 1.15 },
   },
@@ -62,7 +66,8 @@ export const INFERENCE_PRESETS: InferencePreset[] = [
     id: "research",
     label: "Research",
     description: "Deep analysis",
-    tooltip: "Balanced for comprehensive analysis and thorough research tasks, maintaining coherence over long, detailed explanations.",
+    tooltip:
+      "Balanced for comprehensive analysis and thorough research tasks, maintaining coherence over long, detailed explanations.",
     icon: "Microscope",
     params: { temperature: 0.6, topP: 0.9, repetitionPenalty: 1.1 },
   },

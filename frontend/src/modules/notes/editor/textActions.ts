@@ -62,7 +62,11 @@ function transformSelectedLines(state: TextState, map: (line: string, index: num
 
 /** Strips any list/quote/heading block prefix from a line, keeping the indent. */
 const stripBlockPrefix = (line: string) =>
-  line.replace(HEADING_PREFIX, "").replace(BULLET_PREFIX, "$1").replace(ORDERED_PREFIX, "$1").replace(QUOTE_PREFIX, "$1");
+  line
+    .replace(HEADING_PREFIX, "")
+    .replace(BULLET_PREFIX, "$1")
+    .replace(ORDERED_PREFIX, "$1")
+    .replace(QUOTE_PREFIX, "$1");
 
 const isBlank = (line: string) => line.trim() === "";
 
@@ -119,7 +123,9 @@ export function indent(state: TextState): TextState {
 
 /** Removes up to one indent level from the selected line(s). */
 export function outdent(state: TextState): TextState {
-  return transformSelectedLines(state, (line) => (line.startsWith(INDENT) ? line.slice(INDENT.length) : line.replace(/^ /, "")));
+  return transformSelectedLines(state, (line) =>
+    line.startsWith(INDENT) ? line.slice(INDENT.length) : line.replace(/^ /, ""),
+  );
 }
 
 /** Toggles `> ` quoting on the selected line(s). */
@@ -162,7 +168,11 @@ export function wrapInline(state: TextState, marker: string): TextState {
   // unwrap when the marker already encloses the selection (inside or just outside it)
   if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
     const inner = selected.slice(marker.length, selected.length - marker.length);
-    return { value: value.slice(0, start) + inner + value.slice(end), selectionStart: start, selectionEnd: start + inner.length };
+    return {
+      value: value.slice(0, start) + inner + value.slice(end),
+      selectionStart: start,
+      selectionEnd: start + inner.length,
+    };
   }
   if (value.slice(start - marker.length, start) === marker && value.slice(end, end + marker.length) === marker) {
     return {
@@ -203,9 +213,8 @@ export function continueListOnEnter(state: TextState): TextState | null {
 
   if (item.trim() === "") {
     // empty item: outdent one level, or exit the list entirely at top level
-    const replacement = indentPart.length >= INDENT.length
-      ? indentPart.slice(INDENT.length) + line.slice(indentPart.length)
-      : "";
+    const replacement =
+      indentPart.length >= INDENT.length ? indentPart.slice(INDENT.length) + line.slice(indentPart.length) : "";
     return {
       value: state.value.slice(0, start) + replacement + state.value.slice(end),
       selectionStart: start + replacement.length,
@@ -230,7 +239,8 @@ export function continueListOnEnter(state: TextState): TextState | null {
  */
 export function replaceRange(state: TextState, from: number, to: number, snippet: string): TextState {
   const caretMarker = snippet.indexOf(CARET_MARKER);
-  const text = caretMarker === -1 ? snippet : snippet.slice(0, caretMarker) + snippet.slice(caretMarker + CARET_MARKER.length);
+  const text =
+    caretMarker === -1 ? snippet : snippet.slice(0, caretMarker) + snippet.slice(caretMarker + CARET_MARKER.length);
   const caret = from + (caretMarker === -1 ? text.length : caretMarker);
   return {
     value: state.value.slice(0, from) + text + state.value.slice(to),

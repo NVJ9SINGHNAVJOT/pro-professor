@@ -17,11 +17,8 @@ import {
   ListPlusIcon,
   NotebookPenIcon,
   NotebookTextIcon,
-  
   PanelRightOpenIcon,
-  
   SparklesIcon,
-  
   SquarePenIcon,
   TextQuoteIcon,
   WandSparklesIcon,
@@ -65,12 +62,7 @@ import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteViewMode } from "@/modules/notes/types";
-import {
-  HEADING_SCROLL_DELAY_MS,
-  MERMAID_TEMPLATE,
-  
-  type SlashCommand,
-} from "@/modules/notes/constants";
+import { HEADING_SCROLL_DELAY_MS, MERMAID_TEMPLATE, type SlashCommand } from "@/modules/notes/constants";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 
 interface NotesScreenProps {
@@ -123,7 +115,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // A palette-issued AI command, run by an effect below (cleared once it has been acknowledged).
   const [aiCommand, setAiCommand] = useState<NotesBarCommand | null>(null);
   // Active `/` block context: where the slash starts, what's typed after it, where the menu sits.
-  const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(null);
+  const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(
+    null,
+  );
   const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const historyBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -162,7 +156,6 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const ai = useNoteAi(note?.id, setContent, refetchAfterAi, setAiBusy);
 
   const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle) && !aiBusy;
-
 
   // Seed (or clear) the editor whenever the route hands over a different note. Keyed on the id,
   // not the object: a revalidation of the explorer list re-runs the loader and would otherwise
@@ -302,7 +295,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const applyTextAction = (action: TextAction) => {
     const textarea = textareaRef.current;
     if (!textarea || aiBusy) return;
-    applyTextState(action({ value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd }));
+    applyTextState(
+      action({ value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd }),
+    );
   };
 
   /** Opens/updates the slash menu when the caret sits right after a line-start `/query`. */
@@ -440,15 +435,69 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
           run: () => insertSnippet(MERMAID_TEMPLATE),
         },
         // Line formatting — applies to the editor's current line/selection.
-        { id: "fmt-h1", label: "Format: Heading 1", hint: "#", icon: Heading1Icon, run: () => applyTextAction((s) => setHeading(s, 1)) },
-        { id: "fmt-h2", label: "Format: Heading 2", hint: "##", icon: Heading2Icon, run: () => applyTextAction((s) => setHeading(s, 2)) },
-        { id: "fmt-h3", label: "Format: Heading 3", hint: "###", icon: Heading3Icon, run: () => applyTextAction((s) => setHeading(s, 3)) },
-        { id: "fmt-bullet", label: "Format: Bullet list", hint: "-", icon: ListIcon, run: () => applyTextAction(toggleBulletList) },
-        { id: "fmt-numbered", label: "Format: Numbered list", hint: "1.", icon: ListOrderedIcon, run: () => applyTextAction(toggleNumberedList) },
-        { id: "fmt-quote", label: "Format: Quote", hint: ">", icon: TextQuoteIcon, run: () => applyTextAction(toggleQuote) },
-        { id: "fmt-code", label: "Format: Code block", hint: "```", icon: CodeIcon, run: () => applyTextAction(insertCodeBlock) },
-        { id: "fmt-indent", label: "Format: Indent", hint: "Tab", icon: IndentIncreaseIcon, run: () => applyTextAction(indent) },
-        { id: "fmt-outdent", label: "Format: Outdent", hint: "⇧Tab", icon: IndentDecreaseIcon, run: () => applyTextAction(outdent) },
+        {
+          id: "fmt-h1",
+          label: "Format: Heading 1",
+          hint: "#",
+          icon: Heading1Icon,
+          run: () => applyTextAction((s) => setHeading(s, 1)),
+        },
+        {
+          id: "fmt-h2",
+          label: "Format: Heading 2",
+          hint: "##",
+          icon: Heading2Icon,
+          run: () => applyTextAction((s) => setHeading(s, 2)),
+        },
+        {
+          id: "fmt-h3",
+          label: "Format: Heading 3",
+          hint: "###",
+          icon: Heading3Icon,
+          run: () => applyTextAction((s) => setHeading(s, 3)),
+        },
+        {
+          id: "fmt-bullet",
+          label: "Format: Bullet list",
+          hint: "-",
+          icon: ListIcon,
+          run: () => applyTextAction(toggleBulletList),
+        },
+        {
+          id: "fmt-numbered",
+          label: "Format: Numbered list",
+          hint: "1.",
+          icon: ListOrderedIcon,
+          run: () => applyTextAction(toggleNumberedList),
+        },
+        {
+          id: "fmt-quote",
+          label: "Format: Quote",
+          hint: ">",
+          icon: TextQuoteIcon,
+          run: () => applyTextAction(toggleQuote),
+        },
+        {
+          id: "fmt-code",
+          label: "Format: Code block",
+          hint: "```",
+          icon: CodeIcon,
+          run: () => applyTextAction(insertCodeBlock),
+        },
+        {
+          id: "fmt-indent",
+          label: "Format: Indent",
+          hint: "Tab",
+          icon: IndentIncreaseIcon,
+          run: () => applyTextAction(indent),
+        },
+        {
+          id: "fmt-outdent",
+          label: "Format: Outdent",
+          hint: "⇧Tab",
+          icon: IndentDecreaseIcon,
+          run: () => applyTextAction(outdent),
+        },
         {
           id: "ai-rewrite",
           label: "AI: rewrite with instruction…",
@@ -579,8 +628,5 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     </div>
   );
 };
-
-
-
 
 export default NotesScreen;

@@ -32,10 +32,7 @@ export function createListSlice<T extends { id: number }>(name: string) {
         const items = state.items as T[];
         const current = items.find((item) => item.id === action.payload.id);
         return {
-          items: [
-            { ...current, ...action.payload } as T,
-            ...items.filter((item) => item.id !== action.payload.id),
-          ],
+          items: [{ ...current, ...action.payload } as T, ...items.filter((item) => item.id !== action.payload.id)],
         };
       },
 

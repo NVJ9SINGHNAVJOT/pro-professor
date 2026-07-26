@@ -83,5 +83,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { id: "embed", label: "Embed note / image", hint: "![[…]]", icon: ImageIcon, snippet: "![[‸]]" },
   { id: "math", label: "Math block", hint: "$$", icon: SigmaIcon, snippet: "$$\n‸\n$$\n" },
   { id: "code", label: "Code block", hint: "```", icon: CodeIcon, snippet: "```\n‸\n```\n" },
-  { id: "mermaid", label: "Mermaid diagram", hint: "```mermaid", icon: WaypointsIcon, snippet: MERMAID_TEMPLATE.trimStart() },
+  {
+    id: "mermaid",
+    label: "Mermaid diagram",
+    hint: "```mermaid",
+    icon: WaypointsIcon,
+    snippet: MERMAID_TEMPLATE.trimStart(),
+  },
 ];

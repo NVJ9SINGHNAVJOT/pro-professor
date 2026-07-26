@@ -1,5 +1,12 @@
 import type { OutlineItem } from "@/modules/notes/types";
-import { FENCED_CODE, FRONTMATTER_BLOCK, HEADING_LINE, IMAGE_EXT, INLINE_CODE, WIKI_REF } from "@/modules/notes/constants";
+import {
+  FENCED_CODE,
+  FRONTMATTER_BLOCK,
+  HEADING_LINE,
+  IMAGE_EXT,
+  INLINE_CODE,
+  WIKI_REF,
+} from "@/modules/notes/constants";
 
 /** Removes the leading YAML frontmatter block — the preview renders only the body. */
 export function stripFrontmatter(content: string): string {

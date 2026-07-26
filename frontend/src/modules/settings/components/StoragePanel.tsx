@@ -141,41 +141,41 @@ const StoragePanel = ({
         </header>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {CATEGORY_FILTERS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => {
-                setConfirmingId(null);
-                setParam({ category: option === "all" ? null : option });
-              }}
-              className={cn(
-                "cursor-pointer rounded-lg px-3 py-1.5 para-small-medium capitalize text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white",
-                category === option && "bg-neutral-800 text-white",
-              )}
-            >
-              {option === "all" ? "All files" : option}
-            </button>
-          ))}
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {CATEGORY_FILTERS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setConfirmingId(null);
+                  setParam({ category: option === "all" ? null : option });
+                }}
+                className={cn(
+                  "cursor-pointer rounded-lg px-3 py-1.5 para-small-medium capitalize text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white",
+                  category === option && "bg-neutral-800 text-white",
+                )}
+              >
+                {option === "all" ? "All files" : option}
+              </button>
+            ))}
+          </div>
 
-        <SelectInput
-          options={SORT_OPTIONS}
-          value={sort}
-          onChange={(value) => {
-            setConfirmingId(null);
-            const isDefault = value === SORT_OPTIONS[0].value;
-            const [sortBy, order] = value.split(":");
-            setParam({
-              sortBy: isDefault ? null : sortBy,
-              order: isDefault ? null : order,
-            });
-          }}
-          className="w-44"
-          buttonClassName="h-9 rounded-lg"
-        />
-      </div>
+          <SelectInput
+            options={SORT_OPTIONS}
+            value={sort}
+            onChange={(value) => {
+              setConfirmingId(null);
+              const isDefault = value === SORT_OPTIONS[0].value;
+              const [sortBy, order] = value.split(":");
+              setParam({
+                sortBy: isDefault ? null : sortBy,
+                order: isDefault ? null : order,
+              });
+            }}
+            className="w-44"
+            buttonClassName="h-9 rounded-lg"
+          />
+        </div>
       </div>
 
       {files.length === 0 ? (

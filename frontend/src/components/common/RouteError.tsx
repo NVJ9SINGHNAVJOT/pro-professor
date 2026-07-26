@@ -29,7 +29,9 @@ const RouteError = () => {
     <div className="flex h-full min-w-minContent flex-col items-center justify-center gap-y-4 bg-grey px-6 text-white">
       <TriangleAlertIcon className="size-10 text-neutral-500" />
       <div className="flex flex-col items-center gap-y-1.5 text-center">
-        <h1 className="para-medium-semibold">{status ? `Couldn't load this page (${status})` : "Couldn't load this page"}</h1>
+        <h1 className="para-medium-semibold">
+          {status ? `Couldn't load this page (${status})` : "Couldn't load this page"}
+        </h1>
         <p className="max-w-md para-small-regular text-neutral-400">{messageOf(error)}</p>
       </div>
       <div className="flex items-center gap-x-2">

@@ -11,12 +11,7 @@ import { useEffect, useRef } from "react";
  * @param delayMs   Debounce window in milliseconds.
  * @param onEmpty   Optional handler invoked immediately when `value` is empty.
  */
-export function useDebounce(
-  value: string,
-  callback: (trimmed: string) => void,
-  delayMs: number,
-  onEmpty?: () => void,
-) {
+export function useDebounce(value: string, callback: (trimmed: string) => void, delayMs: number, onEmpty?: () => void) {
   // Keep callbacks ref-stable so callers don't need to memoise them.
   const callbackRef = useRef(callback);
   const onEmptyRef = useRef(onEmpty);
