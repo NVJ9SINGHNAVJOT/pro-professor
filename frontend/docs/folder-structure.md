@@ -82,22 +82,29 @@ list **must** use them rather than restyling rows by hand:
 | Export | Use |
 | --- | --- |
 | `SIDEBAR_LIST` | on the list wrapper — the vertical gap that keeps adjacent hover states from merging into one block |
-| `SIDEBAR_ROW_WRAPPER` | on each row's wrapper — establishes the positioning context and the `group` the menu's hover reveal keys off |
-| `sidebarRow(isActive, extra?)` | on the clickable element — padding, radius, truncation lane, hover and active fills |
-| `<SidebarRowMenu>` | the `⋯` overflow menu holding that row's actions |
+| `SIDEBAR_ROW_WRAPPER` | on each row's wrapper — the `group` its inner chips key their hover styling off |
+| `sidebarRow(isActive, extra?)` | on the clickable element — padding, radius, truncation, hover and active fills |
+| `<SidebarRowMenu>` | wraps a row; holds that row's actions, opened by right-click |
 | `<SidebarSection>` | a collapsible group of rows under a small header + count (the note explorer's "Tags", the diagram sidebar's "Diagrams" / "Folders") |
+| `<SidebarToggle>` | the collapse/expand control for a whole sidebar |
 
-**Row actions go in the overflow menu, not inline.** One `⋯` per row, revealed on hover, with the
+**A sidebar's collapse toggle belongs in the main pane, never inside the sidebar.** A button that
+collapses along with its own panel leaves no way back. Chat, notes and diagrams all put one
+`<SidebarToggle>` at the head of the main pane's top bar; where the main pane has more than one
+possible header (notes has editor / graph / empty), the toggle is repeated in each rather than
+being dropped into a rail of its own. Collapse itself is two elements: an outer one animating
+`w-67.5` ↔ `w-0` with `overflow-hidden`, wrapping an inner one that keeps the full width and fades,
+so the content doesn't reflow on its way out.
+
+**Row actions go in the row's context menu, not inline.** Right-click anywhere on the row, with the
 destructive action marked `destructive: true` (and last). Inline icon buttons per action do not
-scale past one and make rows noisy.
+scale past one and make rows noisy, and a hover-revealed `⋯` costs the row a reserved lane and the
+user a small target to aim at.
 
-**The menu is a sibling of the row, never a child.** The row is already a link or a button, and
-nesting a button inside either is invalid HTML — so `SidebarRowMenu` is positioned over the row
-instead. That is what `sidebarRow`'s right padding reserves space for; a row that opts out of the
-menu (the tag browser) reclaims that lane with `pr-2`.
-
-The menu stays visible while it is open (`data-[state=open]`), not only on hover — otherwise it
-disappears the moment the pointer leaves the row to reach it.
+**`SidebarRowMenu` wraps the row** (`ContextMenuTrigger asChild`), so the row keeps being the
+element it already was — a link, a button, a draggable div — and nothing is nested inside it. In a
+tree, wrap the folder's own row only, never the block containing its children: nested triggers both
+fire on one right-click. A row that changes mode (a folder renaming inline) passes `disabled`.
 
 **Never transition the reveal.** `opacity-0 → group-hover:opacity-100` must snap. Animating opacity
 promotes the icon onto its own compositing layer, which loses subpixel antialiasing and renders it

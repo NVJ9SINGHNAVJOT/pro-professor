@@ -115,28 +115,30 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
                 <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
                 <div className={SIDEBAR_LIST}>
                   {group.chats.map((chat) => (
-                    <div key={chat.id} className={SIDEBAR_ROW_WRAPPER}>
-                      <NavLink
-                        to={ROUTES.CHAT_DETAIL(chat.id)}
-                        // Re-navigating to the chat we're already on reads as a revalidation and
-                        // refetches the list, so swallow that click.
-                        onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
-                        className={({ isActive }) => sidebarRow(isActive)}
-                      >
-                        <span className="truncate">{chat.title}</span>
-                      </NavLink>
-                      <SidebarRowMenu
-                        label={chat.title}
-                        actions={[
-                          {
-                            label: "Delete",
-                            icon: Trash2Icon,
-                            destructive: true,
-                            onSelect: () => handleDelete(chat.id),
-                          },
-                        ]}
-                      />
-                    </div>
+                    <SidebarRowMenu
+                      key={chat.id}
+                      label={chat.title}
+                      actions={[
+                        {
+                          label: "Delete",
+                          icon: Trash2Icon,
+                          destructive: true,
+                          onSelect: () => handleDelete(chat.id),
+                        },
+                      ]}
+                    >
+                      <div className={SIDEBAR_ROW_WRAPPER}>
+                        <NavLink
+                          to={ROUTES.CHAT_DETAIL(chat.id)}
+                          // Re-navigating to the chat we're already on reads as a revalidation and
+                          // refetches the list, so swallow that click.
+                          onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
+                          className={({ isActive }) => sidebarRow(isActive)}
+                        >
+                          <span className="truncate">{chat.title}</span>
+                        </NavLink>
+                      </div>
+                    </SidebarRowMenu>
                   ))}
                 </div>
               </div>

@@ -5,6 +5,13 @@ import { rawFetch } from "@/services/client/rawFetch";
 
 export type NoteAiAction = "ai-update" | "summarize" | "continue";
 
+/**
+ * What the stream carries. `replace` is the complete new note — stream it into the editor.
+ * `fragment` is one piece the server splices in, so the buffer must be left alone and the note
+ * refetched on `note.done`.
+ */
+export type NoteAiMode = "replace" | "fragment";
+
 export interface NoteAiPayload {
   /** Required for "ai-update"; ignored by the other actions. */
   instruction?: string;
@@ -15,7 +22,7 @@ export interface NoteAiPayload {
 }
 
 export interface NoteAiStreamCallbacks {
-  onStart: (data: { noteId: number }) => void;
+  onStart: (data: { noteId: number; mode: NoteAiMode }) => void;
   onChunk: (data: { delta: string }) => void;
   /** The note was saved; revisionId points at the snapshot of the prior content. */
   onDone: (data: { noteId: number; revisionId: number }) => void;
@@ -27,6 +34,7 @@ export interface NoteAiStreamCallbacks {
 interface NoteStartFrame {
   type: "note.start";
   noteId: number;
+  mode: NoteAiMode;
 }
 
 interface NoteChunkFrame {
@@ -124,7 +132,7 @@ function run(
 function dispatch(event: NoteStreamFrame, cb: NoteAiStreamCallbacks) {
   switch (event.type) {
     case "note.start":
-      cb.onStart({ noteId: event.noteId });
+      cb.onStart({ noteId: event.noteId, mode: event.mode });
       break;
     case "note.chunk":
       cb.onChunk({ delta: event.delta });

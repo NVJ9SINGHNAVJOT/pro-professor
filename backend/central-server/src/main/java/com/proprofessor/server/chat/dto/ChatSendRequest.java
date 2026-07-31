@@ -14,6 +14,10 @@ import java.util.List;
  * @param attachmentIds  media ids (from {@code POST /api/v1/media/upload}) to attach, or {@code null}
  * @param systemPrompt   persona/instructions for a new conversation, or {@code null}; only honored
  *                       when {@code conversationId} is null (the first turn persists it as a system row)
+ * @param noteContext    the note this turn is about, or {@code null}. Sent fresh on every turn and
+ *                       injected into the prompt without being persisted, so it can neither go
+ *                       stale (as {@code systemPrompt} would — it is only read on the first turn)
+ *                       nor accumulate across turns. The caller sends it already trimmed to size.
  * @param maxTokens          max new tokens to generate, or {@code null} for the provider default
  * @param temperature        sampling temperature, or {@code null} for the provider default
  * @param topP               nucleus sampling top-p, or {@code null} for the provider default
@@ -29,6 +33,7 @@ public record ChatSendRequest(
         String content,
         List<Long> attachmentIds,
         String systemPrompt,
+        String noteContext,
         Integer maxTokens,
         Double temperature,
         Double topP,

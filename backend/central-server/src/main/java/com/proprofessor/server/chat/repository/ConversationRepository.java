@@ -17,16 +17,28 @@ import static com.proprofessor.server.db.Tables.MODELS;
 @Repository
 public class ConversationRepository {
 
+    /**
+     * {@code conversations.mode} for a conversation started from a note's chat panel. Metadata
+     * only — nothing branches on it except {@link #findAll}, which hides these rows.
+     */
+    public static final String NOTE_MODE = "note";
+
     private final DSLContext dsl;
 
     public ConversationRepository(DSLContext dsl) {
         this.dsl = dsl;
     }
 
+    /**
+     * The chat history list. Excludes note-scoped conversations (those started from a note's chat
+     * panel) — they belong to their note, not to the chat screen's history. {@link #findById} is
+     * unfiltered, so one can still be opened directly.
+     */
     public List<ConversationRow> findAll() {
         return dsl.select()
                 .from(CONVERSATIONS)
                 .join(MODELS).on(CONVERSATIONS.MODEL_ID.eq(MODELS.ID))
+                .where(CONVERSATIONS.MODE.ne(NOTE_MODE))
                 .orderBy(CONVERSATIONS.UPDATED_AT.desc())
                 .fetch(this::toRow);
     }

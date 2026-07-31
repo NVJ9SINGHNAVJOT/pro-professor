@@ -75,19 +75,38 @@ each pane scrolls independently:
 
 - **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): collapsible **tag
   browser tree** (tag → its notes) above the flat newest-first list; the search box merges instant
-  client title/tag matches with debounced server FTS results.
-- **Center** — [NotesBar](../frontend/src/modules/notes/components/NotesBar.tsx): the toolbar (view
-  toggle source/split/preview, graph view, revision history, context panel) and the AI instruction
-  bar (§6) in one strip, then editor
+  client title/tag matches with debounced server FTS results. The whole pane **collapses**, using
+  the chat sidebar's mechanics (outer element animates `w-67.5` ↔ `w-0`, inner keeps full width and
+  fades, so nothing reflows on the way out) minus its mobile handling. `LeftNav` collapses with it,
+  as in chat, and the pane goes to *zero* width — nothing is left behind. The toggle
+  ([SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), shared with the diagram
+  screen) sits at the head of the center pane's top bar, left of the model selector, and is
+  repeated in all three center states (editor, graph view, empty) — it must never live inside the
+  sidebar, which would take the button with it. State is local to NotesScreen, so it resets when
+  `/notes` → `/notes/:id` remounts the screen; chat does the same.
+- **Center** — [NotesBar](../frontend/src/modules/notes/components/NotesBar.tsx): one toolbar strip
+  (explorer toggle, model picker, graph view, view toggle source/split/preview, save, revision
+  history, AI panel, right rail), plus a transient status strip while a *fragment* AI action runs,
+  since those don't write to the editor. **Every AI surface lives in the rail's AI tab** (§6a) —
+  no instruction row, no floating panel. The toolbar's ✨ button opens that tab and **doubles as
+  Stop** while the model runs, since the rail can be closed mid-generation and would otherwise
+  strand it.
+  Then editor
   (plain `TextareaInput`) ⟷ preview split with a hand-rolled draggable divider
   ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). Cmd/Ctrl+S saves —
   and on `/notes/new` that save is the `POST` that creates the note (see §"New note" below);
   the graph view ([GraphView](../frontend/src/modules/notes/components/GraphView.tsx)) renders
   `GET /notes/links` as a *generated Mermaid definition* — solid arrows = links, dashed = embeds,
   dashed nodes = unresolved targets.
-- **Right** — [ContextPanel](../frontend/src/modules/notes/components/ContextPanel.tsx):
-  backlinks (server), outgoing links + outline (parsed client-side from the live editor content,
-  matching LinkParser's code-exclusion rules), tags.
+- **Right** — [RightRail](../frontend/src/modules/notes/components/RightRail.tsx), two tabs sharing
+  one pane so a chat doesn't cost the editor a third column; **width is draggable** from its left
+  edge (260–720px), the same divider mechanics as SplitPane. **Context**
+  ([ContextPanel](../frontend/src/modules/notes/components/ContextPanel.tsx)) — backlinks (server),
+  outgoing links + outline (parsed client-side from the live editor content, matching LinkParser's
+  code-exclusion rules), tags. **Chat**
+  ([NoteChatPanel](../frontend/src/modules/notes/components/NoteChatPanel.tsx)) — see §6a. Both tabs
+  stay mounted; the chat is component state, so unmounting it on a tab switch would discard the
+  thread.
 - **Command palette** — [CommandPalette](../frontend/src/modules/notes/components/CommandPalette.tsx),
   Cmd/Ctrl+P (or +K), hand-rolled (no `cmdk`): open/create notes, view modes, graph, line
   formatting, insert a Mermaid template, AI actions. An AI command is stored as NotesScreen state
@@ -141,18 +160,84 @@ chat ([NotesAiController](../backend/central-server/src/main/java/com/proprofess
 runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` / `note.done` /
 `note.error`). Flow in [NotesAiService](../backend/central-server/src/main/java/com/proprofessor/server/notes/ai/NotesAiService.java):
 
-1. Build a system prompt describing the app's Markdown dialect + a per-action task prompt; the
-   model must return the **complete updated note**.
+**Two shapes of action, carried on `note.start` as `mode`:**
+
+| Action | `mode` | The model returns | The server does |
+| --- | --- | --- | --- |
+| `ai-update` | `replace` | the complete updated note | saves it as-is |
+| `summarize` | `fragment` | `<summary>…</summary>` only | replaces/inserts the note's Summary section |
+| `continue` | `fragment` | `<continuation>…</continuation>` only | appends it |
+
+Only a rewrite legitimately needs the whole note back. Asking a local model to echo a long note
+verbatim just to add one section makes it drift — reflowed paragraphs, dropped callouts — which
+reads as the AI mangling the note, so the fragment actions ask for the new text alone.
+
+1. System prompt: `FULL_NOTE_SYSTEM_PROMPT` for the rewrite, `FRAGMENT_SYSTEM_PROMPT` otherwise;
+   both describe the Markdown dialect. A per-action task prompt follows. Fragment actions are fed
+   `Frontmatter.parse(content).body()` — the YAML block is noise for them.
 2. Stream through a local model — `ollama`/`ai-service` → the existing `ChatCompletionClient`
    (OpenAI-compatible), guarded by `ModelActivationService.acquireForChat`/`releaseAfterChat`
    like a chat turn.
-3. On completion: strip an accidental wrapping code fence → **snapshot the old content into
-   `note_revisions`** → save through `NotesService.updateNote` (re-parses frontmatter/links/tags)
-   → emit `note.done` with the revision id. A restore snapshots the current content first, so
-   restores are themselves undoable. Nothing is persisted on error/abort.
+3. **Fragment pipeline** — `extractBlock` (the delimiter is what makes the answer identifiable: a
+   model that echoes the note *around* its answer still splices cleanly, and preambles fall outside
+   the tag; an unclosed tag means a token cap, so the remainder is salvaged) → `stripWrappingFence`
+   → drop a stray leading `# Summary` → empty check → **echo guard**: with no tag at all, a
+   fragment reproducing the note's first 120 characters is the note handed back, so the action
+   fails with `502` and saves nothing. Notes under 80 characters skip the check. Applied **whether
+   or not the tag was used** — wrapping output in a delimiter is the easy half of the instruction
+   and condensing the note is the hard half, so a model can comply with the format while handing
+   the note straight back inside it.
+4. On completion: **snapshot the old content into `note_revisions`** → save through
+   `NotesService.updateNote` (re-parses frontmatter/links/tags) → emit `note.done` with the revision
+   id. A restore snapshots the current content first, so restores are themselves undoable. Nothing
+   is persisted on error/abort.
 
-The NotesBar's model picker lists the locally activated models and defaults to the active one; the
-frontend streams tokens straight into the editor and refetches the note on `note.done`.
+The NotesBar's model picker lists the locally activated models and defaults to the active one.
+On `replace` the frontend streams tokens straight into the editor; on `fragment` it leaves the
+buffer alone (the note is spliced server-side) and shows the text in a status strip, then refetches
+on `note.done`. The editor is read-only during both — a fragment action's refetch would discard
+anything typed meanwhile.
+
+**AI actions save first.** They read the note from the database, so running one over a dirty buffer
+would work off the stale saved copy and then the refetch would replace what was typed. NotesScreen
+saves before dispatching and aborts if that fails.
+
+## 6a. The AI tab (`NoteChatPanel`)
+
+The **one** AI surface in the workspace: the chat thread, the §6 note actions, and a single
+composer, as the right rail's AI tab. Everything reuses `POST /api/v1/chats/send` through the
+shared `chats.stream.ts` client (global `src/services`, so no cross-module import).
+
+**One input, two jobs.** The composer is the single text box: **Enter** sends it to the chat,
+**Rewrite** applies the same text as the note-edit instruction, and Summarize/Continue ignore it.
+The three action buttons sit directly under the composer, which is what makes the second reading
+discoverable. `useNoteAi` therefore holds no `instruction` state — `runAction(action, instruction)`
+takes it as an argument and returns whether generation started, so the caller only clears the
+composer on a real dispatch.
+
+The scope selector is labelled **"Chat context"** deliberately: it governs the chat turn only. The
+note actions always run server-side over the whole *saved* note, so an unlabelled control sitting
+next to them would misread.
+
+- The note travels as **`noteContext`**, a per-turn field injected as a system message right before
+  the current question and **never persisted**. Not `systemPrompt`: that is only honored when
+  `conversationId` is null, so it would freeze the note as of the first message and silently answer
+  about stale text.
+- Scope is **Selection · Whole note · None**, defaulting to the selection when there is one, capped
+  at `NOTE_CONTEXT_MAX_CHARS`. Trimming is the client's job — it is the side that knows about
+  selections — and the panel shows what it will send.
+- New conversations started this way get `conversations.mode = 'note'`, which
+  `ConversationRepository.findAll` filters out, so they stay out of the chat history.
+  `findById` is unfiltered, so one can still be opened directly.
+- History is **component state**, cleared (and any stream aborted) when the note changes. The
+  conversation row survives server-side — that is where persistence would later hook in.
+- Replies reach the note only through a per-message `⋯` menu (insert at cursor / replace selection /
+  append / copy), disabled while an AI action owns the buffer. Applying makes the note dirty;
+  saving stays the user's call.
+- The chat's busy state is **separate from `aiBusy`** — sharing it would make the editor read-only
+  while the AI answers, the opposite of what a side chat is for. The chat half also works on an
+  unsaved draft (context comes from the buffer, and the chat API needs no note id); the note
+  actions in the same tab do not, and are disabled until the first save.
 
 ## 7. Not implemented (by decision)
 

@@ -54,6 +54,11 @@ public class ChatService {
     private static final String DEFAULT_MODE = "simple";
     private static final int TITLE_MAX_LENGTH = 60;
 
+    /** Frames the note for the model, so it doesn't read as part of the user's question. */
+    private static final String NOTE_CONTEXT_PREAMBLE =
+            "The user is asking about the Markdown note below. Answer from it. Do not rewrite or "
+                    + "restate the whole note unless asked.\n\n";
+
     /**
      * Sent as a system message on audio turns so the audio-capable model transcribes its own input
      * (preserving its understanding for history) before replying. The backend splits the stream on
@@ -158,6 +163,10 @@ public class ChatService {
         if (!images.isEmpty()) {
             history = withCurrentTurnImage(history, images);
         }
+        // The note the turn is about, refreshed by the client on every send. Injected here rather
+        // than persisted as the conversation's persona: a persona is written once on the first turn
+        // (see createConversation), so it would answer about the note as it was then, silently.
+        history = withNoteContext(history, command.noteContext());
 
         try {
             // The AI service reports its own timing (including load) in x_metrics. Ollama's
@@ -265,8 +274,13 @@ public class ChatService {
     /** Creates a new conversation (title from the first message) and its optional persona system row. */
     private ConversationRow createConversation(ChatSendCommand command) {
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
+        // A turn carrying note context came from a note's chat panel, so the conversation is scoped
+        // to that note rather than being one the user started from the chat screen.
+        String mode = command.noteContext() == null || command.noteContext().isBlank()
+                ? DEFAULT_MODE
+                : ConversationRepository.NOTE_MODE;
         ConversationRow conversation = conversationRepository.insert(
-                model.id(), deriveTitle(command.content()), DEFAULT_MODE, settingsFrom(command.options()));
+                model.id(), deriveTitle(command.content()), mode, settingsFrom(command.options()));
         // A persona is the conversation's first (oldest) system row, so it replays to the model on
         // every later turn via findHistory — no per-request plumbing needed.
         String systemPrompt = command.systemPrompt();
@@ -418,6 +432,22 @@ public class ChatService {
         String mimeType = media.mimeType() != null ? media.mimeType() : "image/png";
         String dataUrl = "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
         return new ChatMessage.ImagePart(dataUrl);
+    }
+
+    /**
+     * Inserts the note this turn is about as a system message immediately before the current user
+     * message — adjacent to the question, so the freshest copy is what the model reads.
+     *
+     * <p>Deliberately <em>not</em> persisted: it never lands in {@code messages}, so it cannot go
+     * stale and cannot pile up a copy per turn in a conversation's replayed history.
+     */
+    private static List<ChatMessage> withNoteContext(List<ChatMessage> history, String noteContext) {
+        if (noteContext == null || noteContext.isBlank() || history.isEmpty()) {
+            return history;
+        }
+        List<ChatMessage> updated = new ArrayList<>(history);
+        updated.add(updated.size() - 1, new ChatMessage(ROLE_SYSTEM, NOTE_CONTEXT_PREAMBLE + noteContext.strip()));
+        return updated;
     }
 
     /**

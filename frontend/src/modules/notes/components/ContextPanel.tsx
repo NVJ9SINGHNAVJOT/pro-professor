@@ -16,7 +16,10 @@ interface ContextPanelProps {
   onHeadingClick: (heading: string) => void;
 }
 
-/** Right pane — backlinks, outbound links, outline, and tags of the active note. */
+/**
+ * Backlinks, outbound links, outline, and tags of the active note — the Context tab of
+ * {@link RightRail}, which owns the pane chrome around it.
+ */
 const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }: ContextPanelProps) => {
   const navigate = useNavigate();
 
@@ -24,7 +27,7 @@ const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }:
   const outbound = extractWikiRefs(content);
 
   return (
-    <aside className="chat-scroll flex h-full w-64 shrink-0 flex-col gap-y-5 overflow-y-auto border-l border-neutral-800 bg-chat-sidebar p-3 text-white">
+    <div className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-5 overflow-y-auto p-3">
       <section>
         <div className="flex items-center gap-x-2 pb-1.5 caption-small-medium text-neutral-500">
           <LinkIcon className="size-3.5" />
@@ -120,7 +123,7 @@ const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }:
           </div>
         )}
       </section>
-    </aside>
+    </div>
   );
 };
 

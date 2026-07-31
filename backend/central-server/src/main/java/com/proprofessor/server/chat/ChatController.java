@@ -78,11 +78,13 @@ public class ChatController {
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
                         request.attachmentIds() == null ? List.of() : request.attachmentIds(),
-                        request.systemPrompt(), options);
-                log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={}",
+                        request.systemPrompt(), request.noteContext(), options);
+                log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={} "
+                                + "noteContextLength={}",
                         command.conversationId(), command.provider(), command.model(),
                         command.content() == null ? 0 : command.content().length(),
-                        command.attachmentIds().size());
+                        command.attachmentIds().size(),
+                        command.noteContext() == null ? 0 : command.noteContext().length());
                 chatService.streamReply(command, new SseStreamListener(emitter, frames));
             } catch (ClientDisconnectedException ex) {
                 log.info("Client disconnected mid-stream; generation aborted");

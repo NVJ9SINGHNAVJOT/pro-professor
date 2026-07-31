@@ -116,6 +116,15 @@ their own `diagramFolderList` slice beside `diagramList` — a second `createLis
 one slice holding both, so the diagram rows keep the upsert-to-front behavior the autosave relies
 on. `diagramsListLoader` seeds both from the single list response.
 
+**The whole sidebar collapses**, with the same mechanics as the chat and notes ones — the outer
+element animates `w-67.5` ↔ `w-0` while the inner keeps full width and fades, so the tree doesn't
+reflow on the way out, and `LeftNav` goes with it. The toggle is
+[SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), passed into `DiagramEditor`
+as its `leading` slot so it sits at the head of the editor's toolbar (and into a matching band on
+the empty state). It deliberately does **not** live inside the sidebar, which would take the button
+with it. Open/closed is local `DiagramsScreen` state — unlike which *folders* are expanded, which
+is in Redux because it survives the `/diagrams` → `/diagrams/:id` remount and matters more.
+
 **Drag and drop** is HTML5-native. The dragged row is held in a `useRef`, not in `dataTransfer`,
 whose payload is unreadable during `dragover` — which is exactly when a folder drop has to be judged
 valid. The native drag ghost is suppressed in favour of a custom preview that follows the cursor

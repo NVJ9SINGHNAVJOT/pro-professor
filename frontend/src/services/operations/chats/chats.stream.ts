@@ -13,6 +13,12 @@ export interface ChatSendPayload {
   attachmentIds?: number[];
   /** Persona/instructions for a new conversation; honored only on the first turn (no conversationId). */
   systemPrompt?: string;
+  /**
+   * The note this turn is about. Sent fresh every turn and never persisted server-side, so it
+   * stays current as the note is edited — unlike `systemPrompt`, which is read once. Trim it to
+   * size before sending; the server takes it as-is.
+   */
+  noteContext?: string;
   maxTokens?: number;
   temperature?: number;
   topP?: number;

@@ -72,7 +72,7 @@ const SlashMenu = ({ anchor, query, onSelect, onClose }: SlashMenuProps) => {
 
   return (
     <div
-      className="absolute z-40 w-64 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl"
+      className="absolute z-40 w-88 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl"
       style={{ top: anchor.top, left: anchor.left }}
     >
       <ul ref={listRef} className="chat-scroll max-h-64 overflow-y-auto p-1">

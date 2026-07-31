@@ -24,6 +24,13 @@ import type { NoteViewMode } from "@/modules/notes/types";
 /** Leading YAML frontmatter block — the preview renders only the body. */
 export const FRONTMATTER_BLOCK = /^---\s*\n[\s\S]*?\n---\s*\n?/;
 
+/**
+ * Cap on the note text a chat turn carries. Trimming is the client's job — it is the side that
+ * knows whether a selection is in play — and one local model's context window has to hold this
+ * plus the whole thread.
+ */
+export const NOTE_CONTEXT_MAX_CHARS = 12000;
+
 export const FENCED_CODE = /^(```|~~~)[\s\S]*?^\1\s*$/gm;
 export const INLINE_CODE = /`[^`\n]*`/g;
 

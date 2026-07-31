@@ -151,9 +151,9 @@ public class NotesAiController {
         }
 
         @Override
-        public void onStart(long noteId) {
+        public void onStart(long noteId, String mode) {
             this.noteId = noteId;
-            emitEvent(emitter, frames, NoteStreamEvent.NoteStart.of(noteId));
+            emitEvent(emitter, frames, NoteStreamEvent.NoteStart.of(noteId, mode));
         }
 
         @Override

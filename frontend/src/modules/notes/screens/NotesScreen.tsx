@@ -15,8 +15,11 @@ import {
   ListIcon,
   ListOrderedIcon,
   ListPlusIcon,
+  MessageSquareIcon,
   NotebookPenIcon,
   NotebookTextIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   PanelRightOpenIcon,
   SparklesIcon,
   SquarePenIcon,
@@ -36,9 +39,14 @@ import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
 import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
+import type { NoteAiAction } from "@/services/operations/notes/notes.stream";
 import { markDraftCreated } from "@/services/client/loadRoute";
 import NoteList from "@/modules/notes/components/NoteList";
+import SidebarToggle from "@/components/common/SidebarToggle";
 import ContextPanel from "@/modules/notes/components/ContextPanel";
+import RightRail from "@/modules/notes/components/RightRail";
+import NoteChatPanel from "@/modules/notes/components/NoteChatPanel";
+import { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import SplitPane from "@/modules/notes/components/SplitPane";
 import GraphView from "@/modules/notes/components/GraphView";
 import RevisionList from "@/modules/notes/components/RevisionList";
@@ -61,7 +69,7 @@ import {
 import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
-import type { NoteViewMode } from "@/modules/notes/types";
+import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import { HEADING_SCROLL_DELAY_MS, MERMAID_TEMPLATE, type SlashCommand } from "@/modules/notes/constants";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 
@@ -106,7 +114,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const [title, setTitle] = useState(loadedNote?.title ?? "");
   const [savedTitle, setSavedTitle] = useState(loadedNote?.title ?? "");
   const [viewMode, setViewMode] = useState<NoteViewMode>("split");
-  const [contextOpen, setContextOpen] = useState(true);
+  const [rightPanel, setRightPanel] = useState<NoteRightPanel>("context");
+  // Explorer collapse. Local state, matching the chat screen — `/notes` and `/notes/:noteId` are
+  // two route entries, so opening the first note remounts this screen and resets it. That's the
+  // wanted default there (nothing to preserve when no note is open yet) and it's what chat does.
+  const [noteListOpen, setNoteListOpen] = useState(true);
+  const toggleNoteList = () => setNoteListOpen((open) => !open);
   const [graphOpen, setGraphOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -114,6 +127,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   // A palette-issued AI command, run by an effect below (cleared once it has been acknowledged).
   const [aiCommand, setAiCommand] = useState<NotesBarCommand | null>(null);
+  // The editor's selected text, mirrored into state because the chat panel *displays* what it will
+  // send — a ref read during render wouldn't update when the selection changes.
+  const [selectedText, setSelectedText] = useState("");
   // Active `/` block context: where the slash starts, what's typed after it, where the menu sits.
   const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(
     null,
@@ -152,8 +168,8 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (!res.error) applyDetail(res.response.data);
   };
 
-  const aiInputRef = useRef<HTMLInputElement | null>(null);
   const ai = useNoteAi(note?.id, setContent, refetchAfterAi, setAiBusy);
+  const chat = useNoteChat({ noteId: note?.id, content, selection: ai.activeSelection, selectedText });
 
   const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle) && !aiBusy;
 
@@ -193,16 +209,17 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (!isDraft || draftTitle) navigate(ROUTES.NOTES_NEW);
   };
 
-  const handleSave = async () => {
-    if (saving || creating || aiBusy) return;
+  /** @returns whether the note is now persisted — false on a refused or failed save. */
+  const handleSave = async (): Promise<boolean> => {
+    if (saving || creating || aiBusy) return false;
     if (!note) {
-      if (!isDraft) return;
+      if (!isDraft) return false;
       // First save of a draft: the row is born here. The title comes from the content's first
       // heading (or frontmatter), same as any other save.
       const res = await createNote({ content });
       if (res.error) {
         toast.error(res.error.message || "Failed to create note");
-        return;
+        return false;
       }
       const detail = res.response.data;
       seedFromDetail(detail);
@@ -211,14 +228,30 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       // refetching the note this save just returned.
       markDraftCreated("noteId", detail.id);
       navigate(ROUTES.NOTES_DETAIL(detail.id), { replace: true });
-      return;
+      return true;
     }
     const res = await updateNote(note.id, { title, content });
     if (res.error) {
       toast.error(res.error.message || "Failed to save note");
-      return;
+      return false;
     }
     applyDetail(res.response.data);
+    return true;
+  };
+
+  /**
+   * Runs an AI action against the note — saving it first when the buffer is dirty.
+   *
+   * The server reads the note from the database, not from this buffer, so an action started with
+   * unsaved edits would work off the stale saved copy and then the refetch on completion would
+   * replace the buffer with the result — silently discarding whatever had been typed. (The
+   * revision snapshot wouldn't hold it either; that captures the *saved* content.)
+   */
+  const runAiAction = async (action: NoteAiAction) => {
+    if (dirty && !(await handleSave())) return;
+    // The AI tab's composer is the single input: what's typed there is the Rewrite instruction,
+    // and it's cleared only once generation has actually started.
+    if (ai.runAction(action, chat.input)) chat.setInput("");
   };
 
   // Cmd/Ctrl+S saves the active note. The ref always points at the latest save
@@ -300,6 +333,30 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     );
   };
 
+  /**
+   * Writes a chat reply into the note. The note goes dirty like any other edit — saving stays the
+   * user's call, so an applied reply is undoable with the editor's own history before it is ever
+   * persisted.
+   */
+  const applyChatReply = (mode: NoteApplyMode, text: string) => {
+    const textarea = textareaRef.current;
+    // Preview-only doesn't render the editor, so there is no caret or selection to land on —
+    // appending is the only honest option. Switch to split so the result is visible either way.
+    if (mode === "append" || !textarea) {
+      if (viewMode === "preview") setViewMode("split");
+      setContent((current) => `${current.trimEnd()}\n\n${text}\n`);
+      return;
+    }
+    const state = {
+      value: textarea.value,
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+    };
+    // "Insert at cursor" is the zero-width case of "replace selection".
+    const to = mode === "selection" ? state.selectionEnd : state.selectionStart;
+    applyTextState(replaceRange(state, state.selectionStart, to, text));
+  };
+
   /** Opens/updates the slash menu when the caret sits right after a line-start `/query`. */
   const syncSlash = (textarea: HTMLTextAreaElement) => {
     const caret = textarea.selectionStart;
@@ -316,8 +373,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // Execute a command handed down from the Cmd+P palette.
   useEffect(() => {
     if (!aiCommand) return;
-    if (aiCommand === "focus") aiInputRef.current?.focus();
-    else ai.runAction(aiCommand, () => aiInputRef.current?.focus());
+    // The instruction input is the AI tab's composer, so "focus" means "open that tab".
+    if (aiCommand === "focus") setRightPanel("ai");
+    else void runAiAction(aiCommand);
     setAiCommand(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiCommand]);
@@ -378,6 +436,13 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       value={content}
       onChange={handleEditorChange}
       onKeyDown={handleEditorKeyDown}
+      // Fires on every caret move, but only a real change to the *selected text* re-renders —
+      // moving the caret leaves it "" both times.
+      onSelect={(e) => {
+        const textarea = e.currentTarget;
+        const next = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+        setSelectedText((current) => (current === next ? current : next));
+      }}
       onBlur={() => setSlash(null)}
       readOnly={aiBusy}
       placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
@@ -409,6 +474,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         icon: WaypointsIcon,
         run: () => setGraphOpen((open) => !open),
       },
+      {
+        id: "toggle-explorer",
+        label: noteListOpen ? "Collapse note explorer" : "Expand note explorer",
+        icon: noteListOpen ? PanelLeftCloseIcon : PanelLeftOpenIcon,
+        run: toggleNoteList,
+      },
     ];
     if (note) {
       commands.push(
@@ -417,9 +488,15 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         { id: "view-preview", label: "View: preview only", icon: EyeIcon, run: () => setViewMode("preview") },
         {
           id: "toggle-context",
-          label: contextOpen ? "Hide context panel" : "Show context panel",
+          label: rightPanel === "context" ? "Hide context panel" : "Show context panel",
           icon: PanelRightOpenIcon,
-          run: () => setContextOpen((open) => !open),
+          run: () => setRightPanel(rightPanel === "context" ? null : "context"),
+        },
+        {
+          id: "toggle-ai-panel",
+          label: rightPanel === "ai" ? "Hide AI panel" : "Open AI panel",
+          icon: MessageSquareIcon,
+          run: () => setRightPanel(rightPanel === "ai" ? null : "ai"),
         },
         {
           id: "toggle-history",
@@ -506,7 +583,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         },
         { id: "ai-summarize", label: "AI: summarize note", icon: ListPlusIcon, run: () => setAiCommand("summarize") },
         { id: "ai-continue", label: "AI: continue writing", icon: ArrowRightIcon, run: () => setAiCommand("continue") },
-        { id: "ai-focus", label: "Focus AI instruction bar", icon: SparklesIcon, run: () => setAiCommand("focus") },
+        { id: "ai-focus", label: "Open AI panel and type an instruction", icon: SparklesIcon, run: () => setAiCommand("focus") },
       );
     }
     notes.forEach((item) => {
@@ -525,7 +602,8 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (graphOpen) {
       return (
         <>
-          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
+          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
+            <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
             <WaypointsIcon className="size-4.5 text-neutral-400" />
             <h1 className="para-medium-semibold">Graph view</h1>
             <button
@@ -549,7 +627,6 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         <>
           <NotesBar
             ai={ai}
-            aiInputRef={aiInputRef}
             hasNote={note !== null}
             dirty={dirty}
             saving={saving}
@@ -558,8 +635,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
             historyOpen={historyOpen}
             setHistoryOpen={setHistoryOpen}
             historyBtnRef={historyBtnRef}
-            contextOpen={contextOpen}
-            setContextOpen={setContextOpen}
+            rightPanel={rightPanel}
+            setRightPanel={setRightPanel}
+            noteListOpen={noteListOpen}
+            onToggleNoteList={toggleNoteList}
             setGraphOpen={setGraphOpen}
             onSave={handleSave}
           />
@@ -592,18 +671,24 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     }
 
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-y-3 text-neutral-500">
-        <NotebookPenIcon className="size-10" />
-        <p className="para-small-medium">Select a note or create a new one</p>
-        <button
-          type="button"
-          onClick={() => setGraphOpen(true)}
-          className="flex cursor-pointer items-center gap-x-2 rounded-lg border border-neutral-800 px-3 py-1.5 para-small-medium text-neutral-300 hover:bg-neutral-800"
-        >
-          <WaypointsIcon className="size-4" />
-          Graph view
-        </button>
-      </div>
+      <>
+        {/* Same top band as the other two states, so the explorer toggle never disappears. */}
+        <div className="flex h-11.5 shrink-0 items-center border-b border-neutral-800 px-2 pt-2 pb-2">
+          <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-y-3 text-neutral-500">
+          <NotebookPenIcon className="size-10" />
+          <p className="para-small-medium">Select a note or create a new one</p>
+          <button
+            type="button"
+            onClick={() => setGraphOpen(true)}
+            className="flex cursor-pointer items-center gap-x-2 rounded-lg border border-neutral-800 px-3 py-1.5 para-small-medium text-neutral-300 hover:bg-neutral-800"
+          >
+            <WaypointsIcon className="size-4" />
+            Graph view
+          </button>
+        </div>
+      </>
     );
   };
 
@@ -611,18 +696,38 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* eslint-disable-next-line react-hooks/refs -- the Format entries only touch textareaRef inside their run() callbacks (event time, not render) */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={buildPaletteCommands()} />
-      <NoteList notes={notes} onCreate={handleCreate} creating={creating} />
+      <NoteList notes={notes} onCreate={handleCreate} creating={creating} isOpen={noteListOpen} />
 
       {/* Center — toolbar + editor⟷preview (or the graph view) */}
       <section className="flex h-full min-w-0 flex-1 flex-col">{renderCenterSection()}</section>
 
-      {(note || isDraft) && contextOpen && (
-        <ContextPanel
-          backlinks={backlinks}
-          content={content}
-          tags={note?.tags ?? []}
-          onWikiClick={wiki.onLinkClick}
-          onHeadingClick={scrollToHeading}
+      {(note || isDraft) && rightPanel !== null && (
+        <RightRail
+          active={rightPanel}
+          onSelect={setRightPanel}
+          onClose={() => setRightPanel(null)}
+          context={
+            <ContextPanel
+              backlinks={backlinks}
+              content={content}
+              tags={note?.tags ?? []}
+              onWikiClick={wiki.onLinkClick}
+              onHeadingClick={scrollToHeading}
+            />
+          }
+          ai={
+            // No apply target while an AI action owns the buffer: it's read-only and a refetch
+            // is on its way that would discard whatever was inserted.
+            <NoteChatPanel
+              chat={chat}
+              wiki={wiki}
+              onApply={aiBusy ? null : applyChatReply}
+              onRunAction={(action) => void runAiAction(action)}
+              // The note actions edit the saved row, so they need one — unlike the chat half,
+              // which works on a draft straight from the buffer.
+              noteActionsEnabled={note !== null && !aiBusy}
+            />
+          }
         />
       )}
     </div>

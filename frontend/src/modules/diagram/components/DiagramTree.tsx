@@ -112,33 +112,35 @@ const DiagramTree = (props: DiagramTreeProps) => {
 
       {only !== "folders" &&
         diagramsIn(diagrams, parentId).map((diagram) => (
-          <div key={diagram.id} style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
-            <button
-              type="button"
-              draggable
-              onDragStart={(e) => beginDrag(e, { kind: "diagram", id: diagram.id }, props)}
-              onDrag={(e) => onDragMove(e.clientX, e.clientY)}
-              onDragEnd={() => {
-                dragRef.current = null;
-                onDragging(null);
-              }}
-              onClick={() => openId !== diagram.id && onOpenDiagram(diagram.id)}
-              className={sidebarRow(
-                openId === diagram.id,
-                dragging?.kind === "diagram" && dragging.id === diagram.id && "opacity-40",
-              )}
-            >
-              {/* Aligns the title with folder names, whose chevron occupies this column. */}
-              {depth > 0 && <span className="size-4 shrink-0" />}
-              <span className="truncate">{diagram.title}</span>
-            </button>
-            <SidebarRowMenu
-              label={diagram.title}
-              actions={[
-                { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteDiagram(diagram.id) },
-              ]}
-            />
-          </div>
+          <SidebarRowMenu
+            key={diagram.id}
+            label={diagram.title}
+            actions={[
+              { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteDiagram(diagram.id) },
+            ]}
+          >
+            <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => beginDrag(e, { kind: "diagram", id: diagram.id }, props)}
+                onDrag={(e) => onDragMove(e.clientX, e.clientY)}
+                onDragEnd={() => {
+                  dragRef.current = null;
+                  onDragging(null);
+                }}
+                onClick={() => openId !== diagram.id && onOpenDiagram(diagram.id)}
+                className={sidebarRow(
+                  openId === diagram.id,
+                  dragging?.kind === "diagram" && dragging.id === diagram.id && "opacity-40",
+                )}
+              >
+                {/* Aligns the title with folder names, whose chevron occupies this column. */}
+                {depth > 0 && <span className="size-4 shrink-0" />}
+                <span className="truncate">{diagram.title}</span>
+              </button>
+            </div>
+          </SidebarRowMenu>
         ))}
     </div>
   );
@@ -188,60 +190,61 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
       }}
       className={cn("rounded-lg", dragOver && "bg-neutral-800/40 ring-1 ring-neutral-500")}
     >
-      <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
-        <div
-          role="button"
-          draggable={!renaming}
-          onDragStart={(e) => {
-            e.stopPropagation();
-            beginDrag(e, { kind: "folder", id: folder.id }, props);
-          }}
-          onDrag={(e) => onDragMove(e.clientX, e.clientY)}
-          onDragEnd={() => {
-            dragRef.current = null;
-            onDragging(null);
-          }}
-          onClick={() => !renaming && onToggle(folder.id)}
-          className={sidebarRow(false, dragging?.kind === "folder" && dragging.id === folder.id && "opacity-40")}
-        >
-          {isExpanded ? (
-            <ChevronDown className="size-4 shrink-0 text-neutral-500" />
-          ) : (
-            <ChevronRight className="size-4 shrink-0 text-neutral-500" />
-          )}
-          {isExpanded ? (
-            <FolderOpen className="size-4 shrink-0 text-neutral-400" />
-          ) : (
-            <Folder className="size-4 shrink-0 text-neutral-400" />
-          )}
+      {/* Wraps the folder's own row only — never its nested contents, whose rows carry their own
+          menus and would otherwise open two at once on right-click. */}
+      <SidebarRowMenu
+        label={folder.name}
+        disabled={renaming}
+        actions={[
+          { label: "Rename", icon: PencilLine, onSelect: () => setRenaming(true) },
+          { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteFolder(folder.id) },
+        ]}
+      >
+        <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
+          <div
+            role="button"
+            draggable={!renaming}
+            onDragStart={(e) => {
+              e.stopPropagation();
+              beginDrag(e, { kind: "folder", id: folder.id }, props);
+            }}
+            onDrag={(e) => onDragMove(e.clientX, e.clientY)}
+            onDragEnd={() => {
+              dragRef.current = null;
+              onDragging(null);
+            }}
+            onClick={() => !renaming && onToggle(folder.id)}
+            className={sidebarRow(false, dragging?.kind === "folder" && dragging.id === folder.id && "opacity-40")}
+          >
+            {isExpanded ? (
+              <ChevronDown className="size-4 shrink-0 text-neutral-500" />
+            ) : (
+              <ChevronRight className="size-4 shrink-0 text-neutral-500" />
+            )}
+            {isExpanded ? (
+              <FolderOpen className="size-4 shrink-0 text-neutral-400" />
+            ) : (
+              <Folder className="size-4 shrink-0 text-neutral-400" />
+            )}
 
-          {renaming ? (
-            <input
-              autoFocus
-              defaultValue={folder.name}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={(e) => commitRename(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitRename(e.currentTarget.value);
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              className="min-w-0 flex-1 rounded bg-neutral-950 px-1 para-small-medium text-white outline-none ring-1 ring-neutral-700"
-            />
-          ) : (
-            <span className="truncate">{folder.name}</span>
-          )}
+            {renaming ? (
+              <input
+                autoFocus
+                defaultValue={folder.name}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => commitRename(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename(e.currentTarget.value);
+                  if (e.key === "Escape") setRenaming(false);
+                }}
+                className="min-w-0 flex-1 rounded bg-neutral-950 px-1 para-small-medium text-white outline-none ring-1 ring-neutral-700"
+              />
+            ) : (
+              <span className="truncate">{folder.name}</span>
+            )}
+          </div>
         </div>
-
-        {!renaming && (
-          <SidebarRowMenu
-            label={folder.name}
-            actions={[
-              { label: "Rename", icon: PencilLine, onSelect: () => setRenaming(true) },
-              { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteFolder(folder.id) },
-            ]}
-          />
-        )}
-      </div>
+      </SidebarRowMenu>
 
       {/* `DiagramTree` brings its own list spacing; this only separates it from the folder row. */}
       {isExpanded && (

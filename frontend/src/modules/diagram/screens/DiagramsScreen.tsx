@@ -17,6 +17,7 @@ import {
   toggleFoldersSection,
 } from "@/redux/slices/diagramSidebarSlice";
 import SidebarSection from "@/components/common/SidebarSection";
+import SidebarToggle from "@/components/common/SidebarToggle";
 import DiagramTree, { type DragItem } from "@/modules/diagram/components/DiagramTree";
 import {
   ancestorIds,
@@ -81,6 +82,9 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   const dragRef = useRef<DragItem | null>(null);
   // The same value as state, purely so the source row can dim while it is being dragged. This is
   // set once per gesture — the preview's *position* is deliberately not state (see `moveDragPreview`).
+  // Local, like the chat and notes screens: `/diagrams` and `/diagrams/:id` are separate route
+  // entries, so opening the first diagram remounts this and resets to open — the wanted default.
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const [rootDragOver, setRootDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
@@ -309,6 +313,12 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
         ? (diagrams.find((d) => d.id === dragging.id)?.folderId ?? null) !== null
         : (folders.find((f) => f.id === dragging.id)?.parentId ?? null) !== null;
 
+  // One toggle, rendered into whichever main-pane header is showing — never into the sidebar
+  // itself, which would take the button with it when it closes.
+  const sidebarToggle = (
+    <SidebarToggle isOpen={sidebarOpen} onToggle={() => setSidebarOpen((open) => !open)} label="diagram sidebar" />
+  );
+
   return (
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* The drag preview. The native ghost is suppressed because browsers rasterize it at 1x —
@@ -350,8 +360,19 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
           setRootDragOver(false);
         }}
         onDrop={(e) => e.preventDefault()}
-        className="relative flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden border-r border-neutral-800 bg-chat-sidebar text-white"
+        // Collapses like the chat and notes sidebars: the outer element animates its width while
+        // the inner one keeps the full width and fades, so the tree doesn't reflow on the way out.
+        className={cn(
+          "relative h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
+          sidebarOpen ? "w-67.5 border-r border-neutral-800" : "w-0",
+        )}
       >
+        <div
+          className={cn(
+            "flex h-full w-67.5 flex-col gap-y-2 transition-opacity duration-300",
+            sidebarOpen ? "opacity-100" : "opacity-0",
+          )}
+        >
         <LeftNav />
         <div className="flex h-11.5 shrink-0 items-center gap-x-1 px-2">
           <button
@@ -425,6 +446,7 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
           >
             <DiagramTree {...treeProps} only="folders" />
           </SidebarSection>
+          </div>
         </div>
       </aside>
 
@@ -437,12 +459,19 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
               diagram={diagram}
               onCreated={handleCreated}
               onSaved={(saved) => dispatch(upsertDiagram(summaryOf(saved)))}
+              leading={sidebarToggle}
             />
           </Suspense>
         ) : (
-          <div className="flex flex-1 items-center justify-center caption-small-regular text-neutral-500">
-            Select or create a diagram
-          </div>
+          <>
+            {/* Matches the editor's toolbar height so the toggle sits in the same place either way. */}
+            <div className="flex h-11.5 shrink-0 items-center border-b border-neutral-800 px-2 pt-2 pb-2">
+              {sidebarToggle}
+            </div>
+            <div className="flex flex-1 items-center justify-center caption-small-regular text-neutral-500">
+              Select or create a diagram
+            </div>
+          </>
         )}
       </main>
     </div>

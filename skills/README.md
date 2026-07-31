@@ -16,6 +16,10 @@ to produce files you can paste straight into Pro Professor:
 
 ## Scope note
 
-These skills are **authoring** contracts for external models. The app's built-in AI actions use
-their own *editing* contract wired into the backend pipeline (`NotesAiService` in
-`backend/central-server`) — intentionally separate and not meant to be copied into a chat.
+These skills are **authoring** contracts for external models: produce a whole note, paste it in.
+
+The app's built-in AI actions use their own *editing* contracts, wired into the backend pipeline
+(`NotesAiService` in `backend/central-server`) — intentionally separate and not meant to be copied
+into a chat. There are two of them, and only the first resembles what's here: **Rewrite** returns a
+complete note, while **Summarize** and **Continue** return only delimited new text that the server
+splices into the existing note. See [docs/notes-flow.md](../docs/notes-flow.md) §6 for the pipeline.

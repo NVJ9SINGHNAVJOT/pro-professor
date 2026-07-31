@@ -15,6 +15,8 @@ import java.util.List;
  * @param attachmentIds  media ids to attach to the user message (never {@code null}; may be empty)
  * @param systemPrompt   persona/instructions persisted as a system row when starting a new
  *                       conversation; ignored for existing conversations (may be {@code null}/blank)
+ * @param noteContext    the note this turn is about, or {@code null}; injected for this turn only
+ *                       and never persisted (see {@code ChatService.generate})
  * @param options        per-request inference settings (never {@code null}; see {@link InferenceOptions})
  */
 public record ChatSendCommand(
@@ -24,6 +26,7 @@ public record ChatSendCommand(
         String content,
         List<Long> attachmentIds,
         String systemPrompt,
+        String noteContext,
         InferenceOptions options
 ) {
 }

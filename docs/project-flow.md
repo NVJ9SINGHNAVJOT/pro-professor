@@ -164,8 +164,10 @@ Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.
 An Obsidian-like Markdown notes workspace at `/notes` (backend vertical
 `com.proprofessor.server.notes`, frontend `modules/notes`): wiki-links/backlinks/embeds, tags,
 Postgres full-text search, inline Mermaid diagrams, a graph view, and AI note actions
-(local models) with reversible revision snapshots. Full
-architecture and flow: [notes-flow.md](notes-flow.md).
+(local models) with reversible revision snapshots — a rewrite returns the whole note, while
+summarize/continue return only delimited new text that the server splices in. A note-scoped chat
+panel reuses the chat SSE endpoint with a per-turn `noteContext` and applies replies to the note
+only on request. Full architecture and flow: [notes-flow.md](notes-flow.md).
 
 ### 2.10 Diagram module
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Excalidraw, MainMenu, getSceneVersion, restore, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
@@ -23,6 +23,8 @@ interface DiagramEditorProps {
    * only patches local state, it doesn't refetch anything.
    */
   onSaved?: (diagram: DiagramDetail) => void;
+  /** Rendered at the head of the toolbar — the screen puts its sidebar toggle here. */
+  leading?: ReactNode;
 }
 
 type SaveState = "idle" | "saving" | "saved";
@@ -32,7 +34,7 @@ type SaveState = "idle" | "saving" | "saved";
  * the diagram row. Excalidraw owns the scene state and undo history; we debounce-save on
  * change. Diagrams are drawn by the user — there is no AI generation/editing.
  */
-const DiagramEditor = ({ diagram, onCreated, onSaved }: DiagramEditorProps) => {
+const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorProps) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [title, setTitle] = useState(diagram?.title ?? "");
@@ -127,7 +129,8 @@ const DiagramEditor = ({ diagram, onCreated, onSaved }: DiagramEditorProps) => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-4 pt-2 pb-2">
+      <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
+        {leading}
         <input
           value={title}
           spellCheck={false}
