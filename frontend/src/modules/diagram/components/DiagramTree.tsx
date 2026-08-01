@@ -8,6 +8,7 @@ import {
   sidebarIndent,
   sidebarRow,
 } from "@/components/common/sidebarRow";
+import { EMPTY_DRAG_IMAGE } from "@/modules/diagram/constants";
 import { childFolders, diagramsIn } from "@/modules/diagram/utils/folderTree";
 import type { DiagramFolderSummary, DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
 import { cn } from "@/lib/utils";
@@ -19,24 +20,6 @@ export type DragItem = { kind: "folder"; id: number } | { kind: "diagram"; id: n
 const indentOf = sidebarIndent;
 
 const IconSlot = () => <span className={SIDEBAR_ICON_SLOT} />;
-
-/**
- * A 1×1 transparent GIF used to suppress the native drag ghost.
- *
- * The browser rasterizes that ghost at 1× regardless of device pixel ratio, so on a HiDPI display
- * the dragged row is *always* upscaled and soft — nothing about the row's own styling can fix it.
- * So we don't draw one: the source row dims and the drop target rings instead, which is both
- * sharper and closer to how Linear/Notion handle a list drag.
- *
- * Module scope so it is decoded long before a drag begins — `setDragImage` with an unloaded image
- * silently falls back to the default ghost.
- */
-const EMPTY_DRAG_IMAGE =
-  typeof Image === "undefined"
-    ? null
-    : Object.assign(new Image(), {
-        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-      });
 
 /**
  * Opens a drag: suppress the native ghost, record what's moving, and announce it.

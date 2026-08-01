@@ -16,14 +16,12 @@ import {
   type MediaUsage,
 } from "@/services/operations/media/media.route";
 import { formatBytes } from "@/modules/settings/utils";
-import { CATEGORY_FILTERS, STORAGE_PAGE_SIZE, asCategoryFilter } from "@/modules/settings/constants";
-
-const SORT_OPTIONS = [
-  { label: "Newest first", value: "created_at:desc" },
-  { label: "Oldest first", value: "created_at:asc" },
-  { label: "Largest first", value: "size:desc" },
-  { label: "Smallest first", value: "size:asc" },
-];
+import {
+  CATEGORY_FILTERS,
+  SORT_OPTIONS,
+  STORAGE_PAGE_SIZE,
+  asCategoryFilter,
+} from "@/modules/settings/constants";
 
 /** Category icon for files with no visual preview. */
 const iconFor = (category: MediaCategory) => {

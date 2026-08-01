@@ -2,11 +2,8 @@ import { useRef, useState, type ReactNode } from "react";
 import { ListTreeIcon, SparklesIcon, XIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { NoteRightPanel } from "@/modules/notes/types";
+import { RAIL_DEFAULT_WIDTH, RAIL_MAX_WIDTH, RAIL_MIN_WIDTH } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
-
-const DEFAULT_WIDTH = 320;
-const MIN_WIDTH = 260;
-const MAX_WIDTH = 720;
 
 const TABS: { id: Exclude<NoteRightPanel, null>; label: string; icon: LucideIcon }[] = [
   { id: "context", label: "Context", icon: ListTreeIcon },
@@ -30,7 +27,7 @@ interface RightRailProps {
  */
 const RightRail = ({ active, onSelect, onClose, context, ai, problemCount }: RightRailProps) => {
   const asideRef = useRef<HTMLElement | null>(null);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [width, setWidth] = useState(RAIL_DEFAULT_WIDTH);
 
   // Same approach as SplitPane's divider, measured from the rail's own right edge so it doesn't
   // assume the rail is flush with the viewport.
@@ -39,7 +36,7 @@ const RightRail = ({ active, onSelect, onClose, context, ai, problemCount }: Rig
     const onMouseMove = (event: MouseEvent) => {
       const rect = asideRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, rect.right - event.clientX)));
+      setWidth(Math.min(RAIL_MAX_WIDTH, Math.max(RAIL_MIN_WIDTH, rect.right - event.clientX)));
     };
     const onMouseUp = () => {
       window.removeEventListener("mousemove", onMouseMove);

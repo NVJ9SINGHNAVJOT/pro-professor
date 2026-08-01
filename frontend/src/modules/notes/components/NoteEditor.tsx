@@ -2,6 +2,12 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState }
 import type { TextareaHTMLAttributes } from "react";
 import { TextareaInput } from "@/components/inputs/TextareaInput";
 import type { Problem, ProblemSeverity } from "@/modules/notes/editor/lintMarkdown";
+import {
+  EDITOR_GUTTER,
+  EDITOR_TEXT_STYLE,
+  TOOLTIP_CLEARANCE,
+  TOOLTIP_MAX_WIDTH,
+} from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 
 /* ── Line numbers + inline problem markers ────────────────────────────────────
@@ -16,12 +22,6 @@ import { cn } from "@/lib/utils";
  * every existing consumer (textActions, the slash menu, jumpToLine, AI streaming)
  * keeps working against a plain textarea.
  */
-
-/** Left padding reserved for the gutter, on both the textarea and its mirror. */
-const GUTTER = "3.25rem";
-
-/** Typography the textarea and its mirror MUST share — any divergence desyncs the line boxes. */
-const TEXT_STYLE = "p-4 font-mono text-[13px] leading-relaxed";
 
 const SEVERITY_RANK: Record<ProblemSeverity, number> = { error: 0, warning: 1, info: 2 };
 
@@ -41,12 +41,6 @@ const groupByLine = (problems: Problem[]) => {
   }
   return byLine;
 };
-
-/** Room the tooltip needs below a line before it flips above it. Approximate — a few px of slack
- *  beats measuring, which would need a render to measure and a second to place. */
-const TOOLTIP_CLEARANCE = 96;
-/** Matches the tooltip's max-w-80, for keeping it off the right edge. */
-const TOOLTIP_MAX_WIDTH = 320;
 
 interface HoverState {
   line: number;
@@ -145,15 +139,15 @@ const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
         {/* Gutter backdrop — outside the scrolling mirror, so it stays put as the text moves. */}
         <div
           aria-hidden
-          style={{ width: GUTTER }}
+          style={{ width: EDITOR_GUTTER }}
           className="absolute inset-y-0 left-0 border-r border-neutral-800 bg-neutral-900/40"
         />
 
         <div ref={mirrorRef} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
             ref={contentRef}
-            style={{ paddingLeft: GUTTER }}
-            className={cn(TEXT_STYLE, "whitespace-pre-wrap wrap-break-word")}
+            style={{ paddingLeft: EDITOR_GUTTER }}
+            className={cn(EDITOR_TEXT_STYLE, "whitespace-pre-wrap wrap-break-word")}
           >
             {lines.map((line, index) => {
               const lineProblems = byLine.get(index + 1);
@@ -185,10 +179,10 @@ const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
           onScroll={handleScroll}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHover(null)}
-          style={{ paddingLeft: GUTTER }}
+          style={{ paddingLeft: EDITOR_GUTTER }}
           className={cn(
             "chat-scroll relative h-full min-h-0 resize-none rounded-none border-none bg-transparent focus:border-none",
-            TEXT_STYLE,
+            EDITOR_TEXT_STYLE,
             className,
           )}
         />

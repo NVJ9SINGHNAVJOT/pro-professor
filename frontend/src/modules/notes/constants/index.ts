@@ -45,6 +45,35 @@ export const HEADING_LINE = /^(#{1,6})\s+(.+)$/;
 /** Outline panel indentation per heading depth (px). */
 export const OUTLINE_INDENT_PX = 12;
 
+/** Left padding reserved for the editor's gutter, on both the textarea and its mirror. */
+export const EDITOR_GUTTER = "3.25rem";
+
+/** Typography the textarea and its mirror MUST share — any divergence desyncs the line boxes. */
+export const EDITOR_TEXT_STYLE = "p-4 font-mono text-[13px] leading-relaxed";
+
+/**
+ * Room a problem tooltip needs below a line before it flips above it. Approximate — a few px of
+ * slack beats measuring, which would need a render to measure and a second to place.
+ */
+export const TOOLTIP_CLEARANCE = 96;
+
+/** Matches the problem tooltip's max-w-80, for keeping it off the right edge. */
+export const TOOLTIP_MAX_WIDTH = 320;
+
+/** How much of a fragment action's live output the status strip shows (chars). */
+export const PREVIEW_TAIL_CHARS = 160;
+
+/** Gap between the caret's line and the slash menu, whichever side it lands on (px). */
+export const CARET_GAP = 4;
+
+/** Keeps the slash menu off the pane's edges when the caret sits near them (px). */
+export const EDGE_MARGIN = 8;
+
+/** Right rail width: where it opens, and the bounds the drag handle clamps to (px). */
+export const RAIL_DEFAULT_WIDTH = 320;
+export const RAIL_MIN_WIDTH = 260;
+export const RAIL_MAX_WIDTH = 720;
+
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;
 

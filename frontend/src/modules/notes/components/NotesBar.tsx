@@ -11,13 +11,10 @@ import {
 import Button from "@/components/common/Button";
 import EditableTitle from "@/components/common/EditableTitle";
 import SidebarToggle from "@/components/common/SidebarToggle";
-import { VIEW_MODES } from "@/modules/notes/constants";
+import { PREVIEW_TAIL_CHARS, VIEW_MODES } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 import type { NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
-
-/** How much of a fragment action's live output the status strip shows. */
-const PREVIEW_TAIL_CHARS = 160;
 
 interface NotesBarProps {
   ai: ReturnType<typeof useNoteAi>;

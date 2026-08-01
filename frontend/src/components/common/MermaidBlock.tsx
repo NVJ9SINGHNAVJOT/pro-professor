@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DiagramViewport from "@/components/common/DiagramViewport";
+import { MERMAID_RERENDER_DEBOUNCE_MS } from "@/constants/ui";
 import { cn } from "@/lib/utils";
 
 /* Mermaid is the one heavy diagram dependency — loaded lazily on first use so it
@@ -43,9 +44,6 @@ const getScratchBox = () => {
   }
   return scratchBox;
 };
-
-/** Re-parsing on every keystroke is wasted work — settle briefly before rendering. */
-const RERENDER_DEBOUNCE_MS = 200;
 
 /**
  * Mermaid's parse errors name the offending line and token, which is the whole value of
@@ -93,7 +91,7 @@ const MermaidBlock = ({ code, fill = false }: { code: string; fill?: boolean }) 
         }
       });
     // first render immediately (no blank flash); re-renders wait for typing to settle
-    const timer = setTimeout(render, svg === null ? 0 : RERENDER_DEBOUNCE_MS);
+    const timer = setTimeout(render, svg === null ? 0 : MERMAID_RERENDER_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);

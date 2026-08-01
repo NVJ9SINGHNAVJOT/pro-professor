@@ -5,6 +5,13 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import MermaidBlock from "@/components/common/MermaidBlock";
+import {
+  CALLOUT_MARKER,
+  WIKI_EMBED_PREFIX,
+  WIKI_LINK_PREFIX,
+  WIKI_PARTS,
+  WIKI_SPLIT,
+} from "@/constants/markdown";
 import { cn } from "@/lib/utils";
 
 /* ── Obsidian-style callouts ──────────────────────────────────────────────────
@@ -21,8 +28,6 @@ interface MdNode {
   url?: string;
   data?: { hProperties?: Record<string, string> };
 }
-
-const CALLOUT_MARKER = /^\[!(\w+)\][+-]?[ \t]*([^\n]*)\n?([\s\S]*)$/;
 
 const transformCallout = (blockquote: MdNode) => {
   const paragraph = blockquote.children?.[0];
@@ -71,18 +76,15 @@ const remarkCallouts = () => (tree: MdNode) => walkCallouts(tree);
  * rides along URL-encoded after a second `#`. Text inside code spans/blocks is
  * untouched (those are separate mdast node types). */
 
-const WIKI_REF = /(!?\[\[[^[\]]+\]\])/;
-const WIKI_PARTS = /^(!?)\[\[([^[\]|]+?)(?:\|([^[\]]*))?\]\]$/;
-
 const wikiUrl = (embed: boolean, target: string, heading?: string) =>
   `#wiki${embed ? "-embed" : ""}:${encodeURIComponent(target)}${heading ? `#${encodeURIComponent(heading)}` : ""}`;
 
 const transformWikiText = (parent: MdNode, index: number): number => {
   const node = parent.children![index];
-  if (!node.value || !WIKI_REF.test(node.value)) return 1;
+  if (!node.value || !WIKI_SPLIT.test(node.value)) return 1;
 
   const replacements: MdNode[] = [];
-  for (const piece of node.value.split(WIKI_REF)) {
+  for (const piece of node.value.split(WIKI_SPLIT)) {
     const match = WIKI_PARTS.exec(piece);
     if (!match) {
       if (piece) replacements.push({ type: "text", value: piece });
@@ -132,9 +134,6 @@ export interface WikiHandlers {
   /** Image `![[file.png]]` embed filename → direct storage-server URL, resolved by the backend at note load. */
   embedUrls?: Record<string, string>;
 }
-
-const WIKI_LINK_PREFIX = "#wiki:";
-const WIKI_EMBED_PREFIX = "#wiki-embed:";
 
 const parseWikiHref = (href: string, prefix: string): { target: string; heading?: string } => {
   const [target, heading] = href.slice(prefix.length).split("#");

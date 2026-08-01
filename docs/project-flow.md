@@ -157,12 +157,8 @@ Each conversation persists its current inference settings on the `conversations`
 
 ### 2.8 Database schema & migrations
 
-Postgres schema is a **consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen.
-One incremental migration currently rides alongside it: `V2__messages_fts.sql` adds
-`messages.content_tsv` (a generated `tsvector` + GIN index) for the ⌘K palette's chat search,
-mirroring `notes.content_tsv`. It stayed incremental rather than being folded into `V1` only
-because `V1` was already applied and editing it would fail Flyway's checksum; fold it back at the
-next clean rebuild. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
+Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ**
+codegen — no incremental migrations ride alongside it. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
 
 ### 2.8a Global search (⌘K)
 

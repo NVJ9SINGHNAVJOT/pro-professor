@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MaximizeIcon, MinimizeIcon, RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
+import { VIEWPORT_MAX_SCALE, VIEWPORT_MIN_SCALE, VIEWPORT_ZOOM_STEP } from "@/constants/ui";
 import { cn } from "@/lib/utils";
 
 /* Mermaid emits its SVG with `width: 100%` (useMaxWidth), so a large diagram shrinks to the width of
@@ -12,15 +13,7 @@ import { cn } from "@/lib/utils";
  * a <div> here would be invalid nesting. The fullscreen overlay portals to <body> to escape both
  * that <pre> and the preview pane's overflow. */
 
-/* Mermaid emits at `width: 100%`, so scale 1 is already "fit to width" — a wide graph (the note
- * network especially) arrives fitted and therefore tiny. The useful direction is *in*, so the
- * ceiling is high and each press is a big jump rather than a nudge; getting from fitted to
- * readable shouldn't take a dozen clicks. */
-const MIN_SCALE = 0.25;
-const MAX_SCALE = 12;
-const ZOOM_STEP = 1.5;
-
-const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+const clampScale = (scale: number) => Math.min(VIEWPORT_MAX_SCALE, Math.max(VIEWPORT_MIN_SCALE, scale));
 
 interface DiagramViewportProps {
   svg: string;
@@ -80,7 +73,7 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      setScale((prev) => clampScale(prev * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)));
+      setScale((prev) => clampScale(prev * (e.deltaY < 0 ? VIEWPORT_ZOOM_STEP : 1 / VIEWPORT_ZOOM_STEP)));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -143,8 +136,8 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
       >
         <button
           type="button"
-          onClick={() => setScale((prev) => clampScale(prev / ZOOM_STEP))}
-          disabled={scale <= MIN_SCALE}
+          onClick={() => setScale((prev) => clampScale(prev / VIEWPORT_ZOOM_STEP))}
+          disabled={scale <= VIEWPORT_MIN_SCALE}
           aria-label="Zoom out"
           className={buttonClass}
         >
@@ -163,8 +156,8 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
         </button>
         <button
           type="button"
-          onClick={() => setScale((prev) => clampScale(prev * ZOOM_STEP))}
-          disabled={scale >= MAX_SCALE}
+          onClick={() => setScale((prev) => clampScale(prev * VIEWPORT_ZOOM_STEP))}
+          disabled={scale >= VIEWPORT_MAX_SCALE}
           aria-label="Zoom in"
           className={buttonClass}
         >

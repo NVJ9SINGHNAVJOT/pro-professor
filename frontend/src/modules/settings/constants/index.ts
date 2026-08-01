@@ -15,6 +15,14 @@ export const NOTES_DEFAULT_PARAMS: InferenceParams = {
 /** Files per page in the storage browser — the loader's first page and every "Load more" after it. */
 export const STORAGE_PAGE_SIZE = 50;
 
+/** The storage browser's sort dropdown; each value is the `sort` query param the listing takes. */
+export const SORT_OPTIONS = [
+  { label: "Newest first", value: "created_at:desc" },
+  { label: "Oldest first", value: "created_at:asc" },
+  { label: "Largest first", value: "size:desc" },
+  { label: "Smallest first", value: "size:asc" },
+];
+
 /** The storage browser's category chips: every media category, plus an unfiltered "all". */
 export const CATEGORY_FILTERS = ["all", ...MEDIA_CATEGORIES] as const;
 

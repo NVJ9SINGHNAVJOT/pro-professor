@@ -1,11 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { SLASH_COMMANDS, type SlashCommand } from "@/modules/notes/constants";
+import { CARET_GAP, EDGE_MARGIN, SLASH_COMMANDS, type SlashCommand } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
-
-/** Gap between the caret's line and the menu, whichever side it lands on. */
-const CARET_GAP = 4;
-/** Keeps the menu off the pane's edges when the caret sits near them. */
-const EDGE_MARGIN = 8;
 
 /** The caret line's box inside the (relative) editor wrapper. */
 interface SlashAnchor {

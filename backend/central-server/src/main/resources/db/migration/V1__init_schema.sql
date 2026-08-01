@@ -62,12 +62,16 @@ CREATE TRIGGER trg_conversations_updated_at
 -- assistant turns and 'settings' rows mark a mid-conversation settings change; both
 -- are persisted for the UI and never replayed to the model (see ChatService.MODEL_ROLES).
 -- 'system' holds the conversation's persona.
+-- content_tsv mirrors notes.content_tsv so the shared ⌘K palette ranks chats the same way
+-- it ranks notes: a generated tsvector + GIN index, queried with websearch_to_tsquery and
+-- ordered by ts_rank (ConversationRepository.search).
 CREATE TABLE messages
 (
     id              BIGSERIAL PRIMARY KEY,
     conversation_id BIGINT      NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
     role            VARCHAR(20) NOT NULL,
     content         TEXT        NOT NULL,
+    content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT messages_role_check
@@ -77,6 +81,8 @@ CREATE TABLE messages
 CREATE TRIGGER trg_messages_updated_at
     BEFORE UPDATE ON messages
     FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+
+CREATE INDEX messages_content_tsv_idx ON messages USING GIN (content_tsv);
 
 -- ── media ─────────────────────────────────────────────────────────────────────
 -- One row per file stored in the storage-server. We keep only the reference

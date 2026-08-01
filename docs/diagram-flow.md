@@ -82,6 +82,7 @@ layering (Excalidraw is the model + renderer).
 | Layer | Files | Role |
 | --- | --- | --- |
 | `types/` | `index.ts` | the `DiagramScene` document type |
+| `constants/` | `index.ts` | `EMPTY_DRAG_IMAGE` — the 1×1 GIF that suppresses the native drag ghost in the sidebar tree |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
 | `utils/` | `folderTree.ts` | pure tree helpers (`childFolders`, `diagramsIn`, `descendantIds`, `isDescendant`) — the drag guards are testable without a DOM |
 | `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) and shares its `EditableTitle` |

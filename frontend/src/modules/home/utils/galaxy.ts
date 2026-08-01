@@ -2,8 +2,9 @@
  * Procedural Milky Way for the home screen, drawn with Canvas 2D.
  *
  * The whole sky — nebula band, dust lanes, stars, grain — is rendered **once** into an offscreen
- * layer. The camera never moves; the per-frame loop only re-lights a few dozen stars, so an idle
- * home screen costs one `drawImage` plus a handful of sprite blits.
+ * layer, which the per-frame loop then turns very slowly about the galactic core. Nothing is
+ * re-generated while it spins, so an idle home screen costs one rotated `drawImage` plus a handful
+ * of sprite blits.
  */
 
 const TAU = Math.PI * 2;
@@ -22,7 +23,21 @@ const SEED = 20260731;
  *  together, so the whole thing stays in proportion when tuned. */
 const GALAXY_SCALE = 0.8;
 
-/** One star bright enough to be worth re-lighting every frame. */
+/** Milliseconds for one full turn of the sky. Slow enough to read as drift rather than spin: at
+ *  twelve minutes a star near the frame edge creeps by ~8px/s. */
+const ROTATION_PERIOD = 720_000;
+
+/**
+ * Device-pixel ceiling for one side of the sky layer. Because the layer has to be the square that
+ * covers the viewport at *every* angle, it is 2–3× the viewport's area — at full DPR a 1080p screen
+ * would want an 85 MB canvas. Capping the side trades a little sharpness (the layer is upscaled on
+ * the way out) for a bounded ~45 MB, and keeps it clear of Safari's canvas-area limit. Rotation
+ * resamples the sky anyway, so the softening barely shows.
+ */
+const MAX_LAYER_SIDE = 3400;
+
+/** One star bright enough to be worth re-lighting every frame. Positioned relative to the core, so
+ *  it can be blitted inside the same rotated transform as the sky it belongs to. */
 interface Twinkle {
   x: number;
   y: number;
@@ -33,13 +48,16 @@ interface Twinkle {
 }
 
 export interface GalaxyScene {
-  /** The pre-rendered sky, exactly viewport-sized in CSS px. */
+  /** The pre-rendered sky: a `2 × radius` square in CSS px, with the core dead centre. */
   layer: HTMLCanvasElement;
   /** Soft white dot reused for every twinkle highlight. */
   glow: HTMLCanvasElement;
   twinkles: Twinkle[];
-  width: number;
-  height: number;
+  /** Half the layer's side — far enough to reach the viewport's furthest corner from the core. */
+  radius: number;
+  /** The point the sky turns about, in viewport CSS px. */
+  pivotX: number;
+  pivotY: number;
 }
 
 /** Tiny deterministic PRNG (mulberry32) — same seed, same sky, every time. */
@@ -219,38 +237,54 @@ const drawGrain = (
   ctx.restore();
 };
 
-/** Render the whole sky into an offscreen layer. Called on mount and on resize only. */
+/**
+ * Render the whole sky into an offscreen layer. Called on mount and on resize only.
+ *
+ * The layer is a square centred on the galactic core, big enough that the viewport's furthest
+ * corner stays inside it however far the sky has turned — so everything below is drawn in *layer*
+ * coordinates, with `offsetX/offsetY` mapping the composed-for-the-viewport positions across.
+ */
 export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyScene => {
+  const pivotX = width * CORE_X;
+  const pivotY = height * CORE_Y;
+  // Furthest corner, plus a hair so the layer's own edge never grazes into view.
+  const radius =
+    Math.max(
+      Math.hypot(pivotX, pivotY),
+      Math.hypot(width - pivotX, pivotY),
+      Math.hypot(pivotX, height - pivotY),
+      Math.hypot(width - pivotX, height - pivotY),
+    ) + 4;
+  const side = radius * 2;
+  const scale = Math.min(dpr, MAX_LAYER_SIDE / side);
+
   const layer = document.createElement("canvas");
-  layer.width = Math.round(width * dpr);
-  layer.height = Math.round(height * dpr);
+  layer.width = Math.round(side * scale);
+  layer.height = Math.round(side * scale);
   const ctx = layer.getContext("2d");
   const twinkles: Twinkle[] = [];
-  const scene: GalaxyScene = { layer, glow: buildGlowSprite(), twinkles, width, height };
+  const scene: GalaxyScene = { layer, glow: buildGlowSprite(), twinkles, radius, pivotX, pivotY };
   if (!ctx) return scene;
 
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
   const random = makeRandom(SEED);
-  const cx = width * CORE_X;
-  const cy = height * CORE_Y;
+  const cx = radius;
+  const cy = radius;
+  const offsetX = radius - pivotX;
+  const offsetY = radius - pivotY;
   const diagonal = Math.hypot(width, height);
 
   // 1. Deep space, with the reference photo's faint blue haze in the lower right.
   ctx.fillStyle = "#020308";
-  ctx.fillRect(0, 0, width, height);
-  const haze = ctx.createRadialGradient(
-    width * 0.78,
-    height * 0.84,
-    0,
-    width * 0.78,
-    height * 0.84,
-    diagonal * 0.4,
-  );
+  ctx.fillRect(0, 0, side, side);
+  const hazeX = offsetX + width * 0.78;
+  const hazeY = offsetY + height * 0.84;
+  const haze = ctx.createRadialGradient(hazeX, hazeY, 0, hazeX, hazeY, diagonal * 0.4);
   haze.addColorStop(0, "rgba(26,38,68,0.2)");
   haze.addColorStop(1, "rgba(26,38,68,0)");
   ctx.fillStyle = haze;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, side, side);
 
   const span = diagonal * GALAXY_SCALE;
 
@@ -269,7 +303,7 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
   // 4. Stars. Two thirds are drawn from the band (uniform along the axis, Gaussian across it) so
   //    the field thins out naturally toward the corners; the rest fill the whole frame.
   ctx.globalCompositeOperation = "lighter";
-  const target = Math.min(14000, Math.round((width * height) / 190));
+  const target = Math.min(24000, Math.round((side * side) / 190));
   const spread = height * 0.34 * GALAXY_SCALE;
   const reach = span * 0.62;
   const cos = Math.cos(BAND_ANGLE);
@@ -286,10 +320,10 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
       x = cx + u * cos - v * sin;
       y = cy + u * sin + v * cos;
     } else {
-      x = random() * width;
-      y = random() * height;
+      x = random() * side;
+      y = random() * side;
     }
-    if (x < 0 || y < 0 || x > width || y > height) continue;
+    if (x < 0 || y < 0 || x > side || y > side) continue;
     placed++;
 
     const color = pickStarColor(random());
@@ -323,8 +357,8 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
 
     if (radius > 1.8 && twinkles.length < 55 && random() < 0.4) {
       twinkles.push({
-        x,
-        y,
+        x: x - cx,
+        y: y - cy,
         size: 5 + radius * 2.5,
         phase: random() * TAU,
         speed: 0.0006 + random() * 0.0012,
@@ -334,8 +368,8 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
   ctx.globalAlpha = 1;
 
   // 5. The one conspicuous star upper-left of the core.
-  const heroX = width * 0.38;
-  const heroY = height * 0.27;
+  const heroX = offsetX + width * 0.38;
+  const heroY = offsetY + height * 0.27;
   const bloom = ctx.createRadialGradient(heroX, heroY, 0, heroX, heroY, 24);
   bloom.addColorStop(0, "rgba(255,255,255,0.95)");
   bloom.addColorStop(0.12, "rgba(226,236,255,0.45)");
@@ -346,7 +380,7 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
   ctx.arc(heroX, heroY, 24, 0, TAU);
   ctx.fill();
   drawSpikes(ctx, heroX, heroY, 32, 0.7);
-  twinkles.push({ x: heroX, y: heroY, size: 18, phase: 0, speed: 0.0004 });
+  twinkles.push({ x: heroX - cx, y: heroY - cy, size: 18, phase: 0, speed: 0.0004 });
 
   // 6. Grain over everything.
   drawGrain(ctx, random, layer.width, layer.height);
@@ -354,20 +388,27 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
   return scene;
 };
 
-/** One frame: the fixed sky, plus a gentle pulse on the brightest stars. */
+/**
+ * One frame: the sky turned a little further about its core, plus a gentle pulse on the brightest
+ * stars. The layer is opaque and always overhangs the viewport, so there is nothing to clear first.
+ */
 export const drawGalaxyFrame = (ctx: CanvasRenderingContext2D, scene: GalaxyScene, time: number) => {
-  const { layer, glow, twinkles, width, height } = scene;
+  const { layer, glow, twinkles, radius, pivotX, pivotY } = scene;
+
+  ctx.save();
+  ctx.translate(pivotX, pivotY);
+  ctx.rotate(-(time / ROTATION_PERIOD) * TAU); // counter-clockwise, like the northern sky
 
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1;
-  ctx.drawImage(layer, 0, 0, width, height);
+  ctx.drawImage(layer, -radius, -radius, radius * 2, radius * 2);
 
+  // Twinkles ride along inside the rotation — their coordinates are already core-relative.
   ctx.globalCompositeOperation = "lighter";
   for (const star of twinkles) {
     ctx.globalAlpha = 0.06 + 0.16 * (0.5 + 0.5 * Math.sin(time * star.speed + star.phase));
     ctx.drawImage(glow, star.x - star.size / 2, star.y - star.size / 2, star.size, star.size);
   }
 
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
 };

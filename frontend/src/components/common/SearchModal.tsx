@@ -6,10 +6,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
 import { notesRoute } from "@/services/operations/notes/notes.route";
 import { ROUTES } from "@/constants/routes";
+import { SEARCH_DEBOUNCE_MS } from "@/constants/ui";
 import { cn } from "@/lib/utils";
-
-/** Long enough that a fast typist issues one request per word, not one per letter. */
-const SEARCH_DEBOUNCE_MS = 250;
 
 interface Hit {
   key: string;
