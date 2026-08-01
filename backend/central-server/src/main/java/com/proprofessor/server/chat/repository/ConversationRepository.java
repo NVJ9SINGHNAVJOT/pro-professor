@@ -1,5 +1,6 @@
 package com.proprofessor.server.chat.repository;
 
+import com.proprofessor.server.chat.dto.ChatSearchResult;
 import com.proprofessor.server.common.db.ConversationRow;
 import com.proprofessor.server.common.db.ConversationSettings;
 import com.proprofessor.server.common.db.ModelRow;
@@ -41,6 +42,48 @@ public class ConversationRepository {
                 .where(CONVERSATIONS.MODE.ne(NOTE_MODE))
                 .orderBy(CONVERSATIONS.UPDATED_AT.desc())
                 .fetch(this::toRow);
+    }
+
+    /** How many hits the ⌘K palette shows for chats — it lists notes beside them. */
+    private static final int SEARCH_LIMIT = 30;
+
+    /**
+     * Full-text search over chat messages, for the ⌘K palette.
+     *
+     * Plain SQL rather than the DSL: this needs {@code DISTINCT ON} to collapse a conversation's
+     * many matching messages down to its best one, {@code ts_headline} for the excerpt, and the
+     * tsquery bound once and reused in three places — all of which read far worse assembled from
+     * {@code DSL.field("...")} fragments than written out.
+     *
+     * Title matches ride along in the same pass so naming a chat finds it even when nothing said
+     * inside it does; those rank 0 and fall below genuine content hits. Note-scoped conversations
+     * are excluded exactly as in {@link #findAll} — they belong to their note, not to chat.
+     */
+    public List<ChatSearchResult> search(String query) {
+        String sql = """
+                SELECT s.id, s.title, s.snippet, s.updated_at
+                  FROM (SELECT DISTINCT ON (c.id)
+                               c.id,
+                               c.title,
+                               c.updated_at,
+                               ts_headline('english', m.content, q.tsq,
+                                           'MaxFragments=1,MaxWords=22,MinWords=8,StartSel=,StopSel=') AS snippet,
+                               ts_rank(m.content_tsv, q.tsq) AS rank
+                          FROM conversations c
+                          JOIN messages m ON m.conversation_id = c.id
+                          CROSS JOIN websearch_to_tsquery('english', ?) AS q(tsq)
+                         WHERE c.mode <> ?
+                           AND (m.content_tsv @@ q.tsq OR c.title ILIKE ?)
+                         ORDER BY c.id, rank DESC, m.created_at) s
+                 ORDER BY s.rank DESC, s.updated_at DESC
+                 LIMIT ?
+                """;
+        return dsl.fetch(sql, query, NOTE_MODE, "%" + query + "%", SEARCH_LIMIT)
+                .map(r -> new ChatSearchResult(
+                        r.get("id", Long.class),
+                        r.get("title", String.class),
+                        r.get("snippet", String.class),
+                        r.get("updated_at", java.time.Instant.class)));
     }
 
     public Optional<ConversationRow> findById(long id) {

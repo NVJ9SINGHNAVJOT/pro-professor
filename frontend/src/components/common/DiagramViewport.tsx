@@ -12,13 +12,29 @@ import { cn } from "@/lib/utils";
  * a <div> here would be invalid nesting. The fullscreen overlay portals to <body> to escape both
  * that <pre> and the preview pane's overflow. */
 
+/* Mermaid emits at `width: 100%`, so scale 1 is already "fit to width" — a wide graph (the note
+ * network especially) arrives fitted and therefore tiny. The useful direction is *in*, so the
+ * ceiling is high and each press is a big jump rather than a nudge; getting from fitted to
+ * readable shouldn't take a dozen clicks. */
 const MIN_SCALE = 0.25;
-const MAX_SCALE = 5;
-const ZOOM_STEP = 1.25;
+const MAX_SCALE = 12;
+const ZOOM_STEP = 1.5;
 
 const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 
-const DiagramViewport = ({ svg }: { svg: string }) => {
+interface DiagramViewportProps {
+  svg: string;
+  /**
+   * Take the parent's full height instead of sizing to the diagram.
+   *
+   * Mermaid renders at `width: 100%` with automatic height, so a wide, shallow diagram — the note
+   * network above all — occupies a thin strip and leaves the rest of the pane dead. Filling gives
+   * the whole pane over to panning once you've zoomed in, and centres the diagram in it.
+   */
+  fill?: boolean;
+}
+
+const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
   const [fullscreen, setFullscreen] = useState(false);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -89,7 +105,8 @@ const DiagramViewport = ({ svg }: { svg: string }) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
-  const buttonClass = "cursor-pointer rounded-lg p-1.5 text-neutral-300 hover:bg-neutral-800";
+  const buttonClass =
+    "cursor-pointer rounded-lg p-1.5 text-neutral-300 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:text-neutral-600 disabled:hover:bg-transparent";
 
   const viewport = (
     <span
@@ -104,7 +121,9 @@ const DiagramViewport = ({ svg }: { svg: string }) => {
         // Inline, the diagram needs a frame to read as its own block — markdown.css strips the
         // surrounding <pre>'s chrome, so without this it floats in the prose. Fullscreen has the
         // whole screen to itself and needs no edge.
-        fullscreen ? "flex h-full w-full items-center justify-center" : "rounded-xl border border-neutral-800",
+        fullscreen && "flex h-full w-full items-center justify-center",
+        !fullscreen && "rounded-xl border border-neutral-800",
+        !fullscreen && fill && "flex h-full w-full items-center justify-center",
       )}
     >
       <span
@@ -125,20 +144,33 @@ const DiagramViewport = ({ svg }: { svg: string }) => {
         <button
           type="button"
           onClick={() => setScale((prev) => clampScale(prev / ZOOM_STEP))}
+          disabled={scale <= MIN_SCALE}
           aria-label="Zoom out"
           className={buttonClass}
         >
           <ZoomOutIcon className="size-4" />
         </button>
+        {/* Zoom is otherwise invisible — at a glance you can't tell 2× from 8×, or that you've
+            hit the ceiling. Clicking the readout snaps back to fitted. */}
+        <button
+          type="button"
+          onClick={resetView}
+          aria-label="Reset zoom to fit"
+          title="Reset zoom to fit"
+          className="w-11 shrink-0 cursor-pointer rounded-lg px-1 py-1.5 text-center tabular-nums caption-small-regular text-neutral-400 hover:bg-neutral-800 hover:text-white"
+        >
+          {Math.round(scale * 100)}%
+        </button>
         <button
           type="button"
           onClick={() => setScale((prev) => clampScale(prev * ZOOM_STEP))}
+          disabled={scale >= MAX_SCALE}
           aria-label="Zoom in"
           className={buttonClass}
         >
           <ZoomInIcon className="size-4" />
         </button>
-        <button type="button" onClick={resetView} aria-label="Reset zoom" className={buttonClass}>
+        <button type="button" onClick={resetView} aria-label="Reset view" className={buttonClass}>
           <RotateCcwIcon className="size-4" />
         </button>
         <button

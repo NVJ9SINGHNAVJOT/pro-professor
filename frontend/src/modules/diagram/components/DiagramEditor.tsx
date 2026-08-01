@@ -169,7 +169,8 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
           onCommit={(next) => void commitTitle(next)}
           placeholder="Untitled Diagram"
         />
-        <span className="ml-auto caption-small-regular text-neutral-500">
+        {/* Fixed width so the autosave status appearing and changing can't nudge the toolbar. */}
+        <span className="ml-auto w-14 text-right caption-small-regular text-neutral-500">
           {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
         </span>
       </div>

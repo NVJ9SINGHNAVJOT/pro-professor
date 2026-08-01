@@ -317,7 +317,8 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         void saveRef.current();
       }
       // Obsidian-style command palette (Cmd/Ctrl+P, with Cmd/Ctrl+K as the common alias)
-      if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === "p" || e.key.toLowerCase() === "k")) {
+      // ⌘K belongs to the global search modal (see App.tsx); the palette keeps ⌘P.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
         setPaletteOpen((open) => !open);
       }

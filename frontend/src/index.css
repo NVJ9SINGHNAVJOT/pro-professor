@@ -4,6 +4,7 @@
 @import "./styles/theme.css"; /* Tailwind custom configurations */
 @import "./styles/typography.css";
 @import "./components/common/markdown/markdown.css";
+@import "./components/common/button.css";
 @import "./modules/notes/components/noteEditor.css";
 @import "shadcn/tailwind.css";
 

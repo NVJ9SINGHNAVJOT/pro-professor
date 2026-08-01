@@ -1,5 +1,6 @@
 package com.proprofessor.server.chat;
 
+import com.proprofessor.server.chat.dto.ChatSearchResult;
 import com.proprofessor.server.chat.dto.ConversationDetail;
 import com.proprofessor.server.chat.dto.ConversationSummary;
 import com.proprofessor.server.chat.mapper.ChatMapper;
@@ -237,6 +238,17 @@ public class ChatService {
         return conversationRepository.findAll().stream()
                 .map(chatMapper::toSummary)
                 .toList();
+    }
+
+    /**
+     * Full-text search over chat messages for the ⌘K palette. A blank query is a no-op rather than
+     * a match-everything — the palette calls this on every keystroke.
+     */
+    public List<ChatSearchResult> searchConversations(String query) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        return conversationRepository.search(query.trim());
     }
 
     public ConversationDetail getConversation(Long id) {

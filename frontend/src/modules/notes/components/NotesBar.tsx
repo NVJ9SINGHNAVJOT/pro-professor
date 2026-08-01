@@ -8,6 +8,7 @@ import {
   SquareIcon,
   WaypointsIcon,
 } from "lucide-react";
+import Button from "@/components/common/Button";
 import EditableTitle from "@/components/common/EditableTitle";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import { VIEW_MODES } from "@/modules/notes/constants";
@@ -104,22 +105,17 @@ const NotesBar = ({
               </button>
             ))}
           </div>
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={onSave}
-            disabled={!dirty || saving}
+            disabled={!dirty}
+            pending={saving}
+            icon={SaveIcon}
             aria-label="Save note"
             title="Save (⌘S)"
-            className={cn(
-              "flex w-[105px] cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1 para-small-medium transition-colors ease-in-out",
-              dirty && !saving
-                ? "bg-white text-black hover:bg-neutral-200"
-                : "cursor-not-allowed bg-neutral-800 text-neutral-500",
-            )}
           >
-            <SaveIcon className="size-4 items-start" />
-            <span className="flex-1 text-center">{saving ? "Saving…" : "Save"}</span>
-          </button>
+            Save
+          </Button>
           <button
             ref={historyBtnRef}
             type="button"

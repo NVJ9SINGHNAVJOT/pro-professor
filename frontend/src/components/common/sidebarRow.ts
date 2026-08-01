@@ -19,6 +19,28 @@ import { cn } from "@/lib/utils";
 export const SIDEBAR_LIST = "flex flex-col gap-y-1";
 
 /**
+ * Holds an icon column open on rows that have no icon for it.
+ *
+ * Every row in a tree lays out as [disclosure][icon][label]. A folder fills both columns, a leaf
+ * fills only the second, and a placeholder like "Empty" fills neither — without the blanks their
+ * labels start at three different offsets inside one list.
+ */
+export const SIDEBAR_ICON_SLOT = "size-4 shrink-0";
+
+/**
+ * Nesting indent, applied as a **margin on the row's wrapper** rather than padding on the row.
+ *
+ * Padding would leave the row's box — and so its hover and drop fills — spanning the full sidebar
+ * width, with the highlight bleeding across the empty indent to the left edge. As a margin, the
+ * fill starts where the row visually starts.
+ *
+ * One level is exactly one icon column (`size-4` plus the row's `gap-x-2`), so a child's disclosure
+ * chevron lands where its parent's icon sits and the levels read as a straight ladder.
+ */
+export const SIDEBAR_INDENT_PX = 24;
+export const sidebarIndent = (depth: number) => depth * SIDEBAR_INDENT_PX;
+
+/**
  * Scopes the row's hover state, which its inner chips read as `group-hover:`. It is also the
  * context-menu trigger, so `SidebarRowMenu` stamps `data-state="open"` here — see `sidebarRow`.
  */

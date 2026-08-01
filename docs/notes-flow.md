@@ -77,9 +77,14 @@ Follows the chat module's patterns: `pages/notes/index.tsx` → route in `main.t
 [NotesScreen](../frontend/src/modules/notes/screens/NotesScreen.tsx) is the three-pane workspace;
 each pane scrolls independently:
 
-- **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): collapsible **tag
-  browser tree** (tag → its notes) above the flat newest-first list; the search box merges instant
-  client title/tag matches with debounced server FTS results. The whole pane **collapses**, using
+- **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): two collapsible
+  `SidebarSection`s — a **Tags** browser tree (tag → its notes) above a **Notes** list — the same
+  shape as the diagram sidebar's Diagrams/Folders split, with rows sharing one
+  `[disclosure][icon][label]` grid (`SIDEBAR_ICON_SLOT` / `sidebarIndent` in
+  [sidebarRow.ts](../frontend/src/components/common/sidebarRow.ts)) so both explorers align.
+  **There is no search box here** — ⌘K searches notes and chats together (see
+  [project-flow.md](project-flow.md) §2.8a); `GET /notes/search` is now called from there.
+  The whole pane **collapses**, using
   the chat sidebar's mechanics (outer element animates `w-67.5` ↔ `w-0`, inner keeps full width and
   fades, so nothing reflows on the way out) minus its mobile handling. `LeftNav` collapses with it,
   as in chat, and the pane goes to *zero* width — nothing is left behind. The toggle

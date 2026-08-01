@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DiagramViewport from "@/components/common/DiagramViewport";
+import { cn } from "@/lib/utils";
 
 /* Mermaid is the one heavy diagram dependency — loaded lazily on first use so it
  * stays out of the main bundle. Initialized once with the app's dark theme. */
@@ -66,7 +67,7 @@ const parseErrorOf = (error: unknown): string => {
  * or mid-edit — the previous diagram stays and the parse error plus the raw source
  * show underneath.
  */
-const MermaidBlock = ({ code }: { code: string }) => {
+const MermaidBlock = ({ code, fill = false }: { code: string; fill?: boolean }) => {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const idRef = useRef(`mermaid-${++renderSeq}`);
@@ -100,9 +101,27 @@ const MermaidBlock = ({ code }: { code: string }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  /* Renders are serialized through a module-level queue and mermaid is imported lazily, so a
+   * diagram can sit for a moment before anything appears — several fences in one note render one
+   * after another. Without a marker that reads as an empty gap. Only shown before the *first*
+   * result: a re-render keeps the last good diagram on screen rather than flashing back to a
+   * spinner. */
+  const awaitingFirstRender = svg === null && error === null;
+
   return (
-    <span className="mermaid-block group block">
-      {svg && <DiagramViewport svg={svg} />}
+    <span className={cn("mermaid-block group block", fill && "h-full")}>
+      {awaitingFirstRender && (
+        <span
+          className={cn(
+            "flex items-center justify-center gap-x-2 rounded-xl border border-neutral-800",
+            fill ? "h-full" : "py-10",
+          )}
+        >
+          <span className="size-5 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-300" />
+          <span className="caption-small-regular text-neutral-500">Rendering diagram…</span>
+        </span>
+      )}
+      {svg && <DiagramViewport svg={svg} fill={fill} />}
       {error && (
         <span className="block rounded-xl border border-dashed border-neutral-700 p-3">
           <span className="block whitespace-pre-wrap pb-2 caption-small-regular text-amber-400">{error}</span>

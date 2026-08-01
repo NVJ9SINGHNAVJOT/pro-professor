@@ -45,9 +45,6 @@ export const HEADING_LINE = /^(#{1,6})\s+(.+)$/;
 /** Outline panel indentation per heading depth (px). */
 export const OUTLINE_INDENT_PX = 12;
 
-/** Debounce before firing the server keyword search (ms). */
-export const SEARCH_DEBOUNCE_MS = 250;
-
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;
 

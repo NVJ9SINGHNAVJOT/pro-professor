@@ -157,7 +157,31 @@ Each conversation persists its current inference settings on the `conversations`
 
 ### 2.8 Database schema & migrations
 
-Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
+Postgres schema is a **consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ** codegen.
+One incremental migration currently rides alongside it: `V2__messages_fts.sql` adds
+`messages.content_tsv` (a generated `tsvector` + GIN index) for the ⌘K palette's chat search,
+mirroring `notes.content_tsv`. It stayed incremental rather than being folded into `V1` only
+because `V1` was already applied and editing it would fail Flyway's checksum; fold it back at the
+next clean rebuild. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
+
+### 2.8a Global search (⌘K)
+
+One palette searches **both** notes and chats:
+[SearchModal](../frontend/src/components/common/SearchModal.tsx), mounted in
+[App.tsx](../frontend/src/App.tsx) so the shortcut works on any screen. It fires
+`GET /api/v1/notes/search?q=` and `GET /api/v1/chats/search?q=` together (both local, so one
+round of results rather than two) and lists notes above chats.
+
+Chat search is Postgres FTS over **message content**, not the titles the sidebar happens to hold:
+`ConversationRepository.search` uses `DISTINCT ON (c.id)` to collapse a conversation's many
+matching messages to its best one, `ts_headline` for the excerpt shown in the result row, and
+`ts_rank` for ordering. Title matches ride along in the same pass (rank 0, so they sort below real
+content hits). Note-scoped conversations are excluded, exactly as in `findAll`.
+
+**Neither sidebar carries a search box any more** — chat's could only filter already-loaded titles
+while notes' ran a real server query, two behaviours behind two identical-looking inputs. ⌘K rather
+than ⌘Space, which macOS reserves for Spotlight; the notes command palette kept ⌘P and gave up its
+⌘K half.
 
 ### 2.9 Notes module
 

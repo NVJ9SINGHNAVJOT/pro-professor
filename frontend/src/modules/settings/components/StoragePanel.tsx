@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { DownloadIcon, FileIcon, FileTextIcon, LockIcon, MusicIcon, Trash2Icon } from "lucide-react";
+import Button from "@/components/common/Button";
 import { toast } from "@/components/common/toast";
 import Tooltip from "@/components/common/Tooltip";
 import { SelectInput } from "@/components/inputs/SelectInput";
@@ -266,14 +267,14 @@ const StoragePanel = ({
 
           {pagination?.hasMore && (
             <div className="mt-6 flex justify-center">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={() => loadMore()}
-                disabled={loading}
-                className="cursor-pointer rounded-lg border border-neutral-800 px-4 py-2 para-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                pending={loading}
+                className="border border-neutral-800 text-neutral-300"
               >
-                {loading ? "Loading…" : "Load more"}
-              </button>
+                Load more
+              </Button>
             </div>
           )}
         </>

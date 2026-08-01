@@ -4,6 +4,7 @@ import type { MediaAttachment } from "@/services/operations/media/media.api";
 
 const chatsEndPoints = {
   GET_ALL: `${BASE_URL_SERVER}/chats`,
+  SEARCH: `${BASE_URL_SERVER}/chats/search`,
   GET_ONE: (id: number) => `${BASE_URL_SERVER}/chats/${id}`,
   DELETE_ONE: (id: number) => `${BASE_URL_SERVER}/chats/${id}`,
 };
@@ -43,9 +44,22 @@ export interface ConversationDetail {
   updatedAt: string;
 }
 
+/** One ⌘K hit: the conversation to open, plus an excerpt of its best-matching message. */
+export interface ChatSearchResult {
+  id: number;
+  title: string | null;
+  snippet: string;
+  updatedAt: string;
+}
+
 export type GetConversationsResponse = {
   message: string;
   data: { conversations: ConversationSummary[] };
+};
+
+export type SearchChatsResponse = {
+  message: string;
+  data: { results: ChatSearchResult[] };
 };
 
 export type GetConversationResponse = {
@@ -57,6 +71,11 @@ export const chatsRoute = {
   getConversations: createRoute<[], GetConversationsResponse>(() => ({
     method: "GET",
     url: chatsEndPoints.GET_ALL,
+  })),
+  searchChats: createRoute<[query: string], SearchChatsResponse>((query) => ({
+    method: "GET",
+    url: chatsEndPoints.SEARCH,
+    params: { q: query },
   })),
 
   getConversation: createRoute<[id: number], GetConversationResponse>((id) => ({

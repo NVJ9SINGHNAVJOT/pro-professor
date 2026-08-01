@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { SearchIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { useMemo } from "react";
+import { SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import LeftNav from "@/components/common/LeftNav";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
@@ -26,15 +26,13 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const chatId = useParams().chatId;
-  const [query, setQuery] = useState("");
   const { execute: deleteConversation } = useApi(chatsRoute.deleteConversation);
 
-  // filter by search query, then bucket by recency
+  // Bucket by recency. Searching is not here — ⌘K searches chats *and* notes, over full message
+  // text rather than the titles this list happens to have loaded.
   const grouped = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q ? conversations.filter((chat) => chat.title.toLowerCase().includes(q)) : conversations;
     const buckets = new Map<Group, ConversationSummary[]>();
-    filtered.forEach((chat) => {
+    conversations.forEach((chat) => {
       const group = groupOf(chat.updatedAt);
       buckets.set(group, [...(buckets.get(group) ?? []), chat]);
     });
@@ -42,7 +40,7 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
       label: group,
       chats: buckets.get(group)!,
     }));
-  }, [conversations, query]);
+  }, [conversations]);
 
   const handleDelete = async (id: number) => {
     const res = await deleteConversation(id);
@@ -92,24 +90,9 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
             </button>
           </div>
 
-          {/* Search */}
-          <div className="px-2">
-            <div className="flex items-center gap-x-2 rounded-lg px-2 py-1.5 focus-within:bg-neutral-800/60 hover:bg-neutral-800/60">
-              <SearchIcon className="size-4.5 shrink-0 text-neutral-400" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search chats"
-                className="w-full bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
-              />
-            </div>
-          </div>
-
           {/* Chat history, grouped by recency */}
           <div className="chat-scroll flex-1 overflow-y-auto px-2 pb-2">
-            {grouped.length === 0 && (
-              <div className="px-2 caption-regular text-neutral-500">{query ? "No chats found" : "No chats yet"}</div>
-            )}
+            {grouped.length === 0 && <div className="px-2 caption-regular text-neutral-500">No chats yet</div>}
             {grouped.map((group) => (
               <div key={group.label} className="mb-4">
                 <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>

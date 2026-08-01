@@ -1,6 +1,7 @@
 package com.proprofessor.server.chat;
 
 import com.proprofessor.server.chat.ChatService.ChatStreamListener;
+import com.proprofessor.server.chat.dto.ChatSearchResponse;
 import com.proprofessor.server.chat.dto.ChatSendRequest;
 import com.proprofessor.server.chat.dto.ChatStreamEvent;
 import com.proprofessor.server.chat.dto.ConversationDetail;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -118,6 +120,16 @@ public class ChatController {
     @GetMapping
     public ApiResponse<ConversationListResponse> list() {
         return ApiResponse.ok(new ConversationListResponse(chatService.listConversations()));
+    }
+
+    /**
+     * Keyword search over message content (Postgres FTS), best match first — the chat half of the
+     * ⌘K palette. Declared above {@code /{id}} for readability; the literal segment wins the match
+     * regardless of order.
+     */
+    @GetMapping("/search")
+    public ApiResponse<ChatSearchResponse> search(@RequestParam String q) {
+        return ApiResponse.ok(new ChatSearchResponse(chatService.searchConversations(q)));
     }
 
     @GetMapping("/{id}")

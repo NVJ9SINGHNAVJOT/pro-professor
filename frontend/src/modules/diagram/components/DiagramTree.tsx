@@ -1,7 +1,13 @@
 import { useState, type RefObject } from "react";
-import { ChevronDown, ChevronRight, Folder, FolderOpen, PencilLine, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, FolderOpen, PencilLine, Trash2, Workflow } from "lucide-react";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
-import { SIDEBAR_LIST, SIDEBAR_ROW_WRAPPER, sidebarRow } from "@/components/common/sidebarRow";
+import {
+  SIDEBAR_ICON_SLOT,
+  SIDEBAR_LIST,
+  SIDEBAR_ROW_WRAPPER,
+  sidebarIndent,
+  sidebarRow,
+} from "@/components/common/sidebarRow";
 import { childFolders, diagramsIn } from "@/modules/diagram/utils/folderTree";
 import type { DiagramFolderSummary, DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
 import { cn } from "@/lib/utils";
@@ -9,15 +15,10 @@ import { cn } from "@/lib/utils";
 /** What a drag is carrying. Held in a ref, not `dataTransfer` — see `DiagramsScreen`. */
 export type DragItem = { kind: "folder"; id: number } | { kind: "diagram"; id: number };
 
-/**
- * Nesting indent, applied as a **margin on the row's wrapper** rather than padding on the row.
- *
- * Padding would leave the row's box — and so its hover and drop fills — spanning the full sidebar
- * width, with the highlight bleeding across the empty indent all the way to the left edge. As a
- * margin, the fill starts where the row visually starts. Depth 0 adds nothing; the row's own `pl-2`
- * is the base inset.
- */
-const indentOf = (depth: number) => depth * 14;
+/** Alias kept so the many call sites below stay short; the rule lives in `sidebarRow`. */
+const indentOf = sidebarIndent;
+
+const IconSlot = () => <span className={SIDEBAR_ICON_SLOT} />;
 
 /**
  * A 1×1 transparent GIF used to suppress the native drag ghost.
@@ -135,8 +136,9 @@ const DiagramTree = (props: DiagramTreeProps) => {
                   dragging?.kind === "diagram" && dragging.id === diagram.id && "opacity-40",
                 )}
               >
-                {/* Aligns the title with folder names, whose chevron occupies this column. */}
-                {depth > 0 && <span className="size-4 shrink-0" />}
+                {/* Same two columns a folder row uses, so titles line up at every depth. */}
+                <IconSlot />
+                <Workflow className="size-4 shrink-0 text-neutral-500" />
                 <span className="truncate">{diagram.title}</span>
               </button>
             </div>
@@ -254,8 +256,10 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
             // chevron turns and nothing else happens.
             <div
               style={{ marginLeft: indentOf(depth + 1) }}
-              className="px-2 py-1 caption-regular text-neutral-600 italic"
+              className="flex items-center gap-x-2 px-2 py-1.5 caption-regular text-neutral-600 italic"
             >
+              <IconSlot />
+              <IconSlot />
               Empty
             </div>
           ) : (

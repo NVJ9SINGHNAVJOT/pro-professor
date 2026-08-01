@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SaveIcon } from "lucide-react";
+import Button from "@/components/common/Button";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { settingsRoute, type AppSettings } from "@/services/operations/settings/settings.route";
@@ -50,15 +51,9 @@ const NotesSettingsPanel = ({ initial }: NotesSettingsPanelProps) => {
         />
 
         <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="flex cursor-pointer items-center gap-x-2 rounded-lg bg-white px-4 py-2 para-small-medium text-black transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <SaveIcon className="size-4" />
-            {saving ? "Saving…" : "Save changes"}
-          </button>
+          <Button onClick={handleSave} pending={saving} icon={SaveIcon}>
+            Save changes
+          </Button>
         </div>
       </div>
     </>

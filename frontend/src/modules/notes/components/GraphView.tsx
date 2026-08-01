@@ -53,13 +53,19 @@ const GraphView = ({ notes }: GraphViewProps) => {
   }, [links, notes]);
 
   return (
-    <div className="chat-scroll h-full overflow-y-auto p-6">
+    // The graph is the whole view, not a block inside a document — it gets the pane's full height
+    // so a wide network has room to be panned around once zoomed, rather than sitting in a strip
+    // along the top. No scroll: panning is how you move around it.
+    <div className="flex h-full flex-col overflow-hidden p-4">
       {definition === null ? (
-        <p className="caption-regular text-neutral-500">Loading graph…</p>
+        <div className="flex h-full items-center justify-center gap-x-2">
+          <span className="size-5 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-300" />
+          <span className="caption-regular text-neutral-500">Loading graph…</span>
+        </div>
       ) : notes.length === 0 ? (
         <p className="caption-regular text-neutral-500">No notes to graph yet</p>
       ) : (
-        <MermaidBlock code={definition} />
+        <MermaidBlock code={definition} fill />
       )}
     </div>
   );

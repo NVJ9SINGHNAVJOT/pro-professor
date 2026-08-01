@@ -1,0 +1,42 @@
+/* Pending state for the shared Button.
+ *
+ * A button that swaps its label for "Saving…" mid-action reflows its own width and shifts
+ * whatever sits beside it, so the label stays put and the progress is carried entirely by the
+ * fill: the background moves to its pending tint and a soft highlight sweeps across it on a
+ * loop. Nothing about the button's box changes, so no layout moves.
+ *
+ * `--btn-sweep` lets each variant pick a highlight that reads against its own fill — a light
+ * sweep vanishes on a white button, a dark one vanishes on a black button. */
+
+.btn-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, var(--btn-sweep, rgb(255 255 255 / 0.35)) 50%, transparent 100%);
+  animation: btn-sweep 1.15s ease-in-out infinite;
+}
+
+@keyframes btn-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Motion is the whole signal here, so with it suppressed the pending tint has to carry it —
+ * a steady highlight rather than a travelling one. */
+@media (prefers-reduced-motion: reduce) {
+  .btn-sweep::after {
+    animation: none;
+    background: var(--btn-sweep, rgb(255 255 255 / 0.35));
+    opacity: 0.5;
+  }
+}
