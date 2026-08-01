@@ -1,0 +1,21 @@
+/* Squiggly underlines for the note editor's problem lines (see NoteEditor.tsx). A wavy SVG
+ * tiled along the bottom of the line box — the colour has to be baked into each data URI,
+ * since background-image can't read currentColor, hence one class per severity. Colours
+ * match the toaster's and markdown.css's. Imported from index.css so Tailwind processes it. */
+
+@layer components {
+  .note-squiggle {
+    height: 3px;
+    background-repeat: repeat-x;
+    background-size: 6px 3px;
+  }
+  .note-squiggle-error {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 3'><path d='M0 2.5 Q1.5 0.5 3 2.5 T6 2.5' fill='none' stroke='%23f87171' stroke-width='1'/></svg>");
+  }
+  .note-squiggle-warning {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 3'><path d='M0 2.5 Q1.5 0.5 3 2.5 T6 2.5' fill='none' stroke='%23fbbf24' stroke-width='1'/></svg>");
+  }
+  .note-squiggle-info {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 3'><path d='M0 2.5 Q1.5 0.5 3 2.5 T6 2.5' fill='none' stroke='%23a3a3a3' stroke-width='1'/></svg>");
+  }
+}

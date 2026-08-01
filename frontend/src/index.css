@@ -4,6 +4,7 @@
 @import "./styles/theme.css"; /* Tailwind custom configurations */
 @import "./styles/typography.css";
 @import "./components/common/markdown/markdown.css";
+@import "./modules/notes/components/noteEditor.css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *)); /* Typography utilities */

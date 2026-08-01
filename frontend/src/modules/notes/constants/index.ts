@@ -51,6 +51,9 @@ export const SEARCH_DEBOUNCE_MS = 250;
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;
 
+/** How long one pane keeps ownership of a split-view scroll before the other may drive again (ms). */
+export const SCROLL_SYNC_RELEASE_MS = 120;
+
 /** Suffix marking a `![[name.diagram]]` embed target as a diagram rather than a note/image. */
 export const DIAGRAM_SUFFIX = ".diagram";
 

@@ -89,7 +89,9 @@ each pane scrolls independently:
   sidebar, which would take the button with it. State is local to NotesScreen, so it resets when
   `/notes` → `/notes/:id` remounts the screen; chat does the same.
 - **Center** — [NotesBar](../frontend/src/modules/notes/components/NotesBar.tsx): one toolbar strip
-  (explorer toggle, **editable title**, graph view, view toggle source/split/preview, save, revision
+  (explorer toggle, **editable title**, graph view, view toggle source/split/preview — an existing
+  note opens in **preview**, a draft in **split**, re-applied whenever the route hands over a
+  different note so a manual toggle stands until then, save, revision
   history, AI panel, right rail), plus a transient status strip while a *fragment* AI action runs,
   since those don't write to the editor. The title is the shared
   [EditableTitle](../frontend/src/components/common/EditableTitle.tsx) (diagrams use the same one):
@@ -102,8 +104,11 @@ each pane scrolls independently:
   Stop** while the model runs, since the rail can be closed mid-generation and would otherwise
   strand it.
   Then editor
-  (plain `TextareaInput`) ⟷ preview split with a hand-rolled draggable divider
-  ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). Cmd/Ctrl+S saves —
+  ([NoteEditor](../frontend/src/modules/notes/components/NoteEditor.tsx) — a plain `TextareaInput`
+  plus a line-number gutter and inline problem squiggles, §5a) ⟷ preview split with a hand-rolled
+  draggable divider ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). The two
+  panes **scroll in sync** proportionally, with a short driver lock so the pane being driven can't
+  scroll the other one back. Cmd/Ctrl+S saves —
   and on `/notes/new` that save is the `POST` that creates the note (see §"New note" below);
   the graph view ([GraphView](../frontend/src/modules/notes/components/GraphView.tsx)) renders
   `GET /notes/links` as a *generated Mermaid definition* — solid arrows = links, dashed = embeds,
@@ -167,7 +172,12 @@ transforms (no `unist-util-visit` dependency):
   destroy each other's DOM and a note with several fences would show only one diagram. Each rendered
   diagram sits in [DiagramViewport](../frontend/src/components/common/DiagramViewport.tsx) — zoom,
   drag-to-pan, ctrl/cmd+wheel, and a fullscreen overlay, since mermaid's `useMaxWidth` shrinks a
-  large diagram to the pane. Mermaid is the way to draw
+  large diagram to the pane. Inline it carries a thin border: the `pre:has(.mermaid-block)` rule
+  strips the code block's chrome, so without one the diagram floats loose in the prose. (Excalidraw
+  diagrams never render inline — `[[Title.diagram]]` is a link to `/diagrams/:id`, not an embed.) `useMaxWidth` also pins the SVG at its *natural* width, so a diagram
+  narrower than the pane sits at its own size rather than stretching — **deliberately left alone**:
+  overriding that cap was tried and stretches a simple diagram until its nodes and labels are
+  comically large. A diagram looking small is a pane-width problem, not a rendering one. Mermaid is the way to draw
   a diagram inline in a note; it works in chat replies too. Standalone Excalidraw diagrams live in
   the `/diagrams` module and are referenced by `[[Title.diagram]]` link.
 
@@ -195,9 +205,32 @@ which selects that line and centers it via `measureCaret` — the counterpart to
 which moves the preview instead: a problem is a fact about the *source*, so the caret has to land
 where the fix goes. Severity colours match the toaster's (`text-red-400` / `text-amber-400`).
 
+Results surface in two places. In the rail, as the **Problems** section at the top of the Context
+tab, badged on the tab itself so a count is visible while the rail shows chat; clicking one calls
+NotesScreen's `jumpToLine`, which selects that line and centers it via `measureCaret` — the
+counterpart to `scrollToHeading`, which moves the preview instead: a problem is a fact about the
+*source*, so the caret has to land where the fix goes.
+
+In the editor itself, as a squiggle under the offending line, with the line's messages on hover.
+Text inside a `<textarea>` can't be styled, so
+[NoteEditor](../frontend/src/modules/notes/components/NoteEditor.tsx) puts an **invisible mirror
+layer** behind a transparent-background textarea: the same text, wrapped identically, carrying a
+line number and a squiggle per line. Because the mirror wraps exactly like the textarea, markers on
+a wrapped line align with **no measurement code** — the browser does it; this is the same trick
+`caretPosition.ts` uses for the slash menu. The mirror takes the textarea's `clientWidth` (not
+`offsetWidth` — the scrollbar is excluded, and that is the width the text actually wraps at), synced
+by a layout effect after every render *and* a `ResizeObserver` for resizes that don't re-render
+(SplitPane divider, rail edge). The textarea's ref is forwarded straight through, so `textActions`,
+the slash menu, `jumpToLine` and AI streaming all keep operating on a plain textarea. Hover is
+detected on the textarea, not the overlay, which would otherwise steal clicks. Severity colours
+match the toaster's (`text-red-400` / `text-amber-400`); the squiggles are three data-URI waves in
+`noteEditor.css`, one per severity, since `background-image` can't read `currentColor`.
+
 Deliberately **not** checked: anything that is valid Markdown but not what was meant (`*italic*` for
 `**bold**`, wrong list nesting), and mermaid fence contents — those can only fail at render, where
-MermaidBlock reports mermaid's own parse error (§5).
+MermaidBlock reports mermaid's own parse error (§5). Syntax highlighting of the source is
+out of reach on a textarea and largely redundant here: the preview renders from the *live* buffer, so
+whenever it is on screen it already shows what is being typed, styled.
 
 ## 6. AI note actions (`notes.ai` package)
 

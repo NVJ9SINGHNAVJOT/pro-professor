@@ -101,7 +101,10 @@ const DiagramViewport = ({ svg }: { svg: string }) => {
       className={cn(
         "relative block overflow-hidden",
         dragging ? "cursor-grabbing select-none" : "cursor-grab",
-        fullscreen ? "flex h-full w-full items-center justify-center" : "rounded-xl",
+        // Inline, the diagram needs a frame to read as its own block — markdown.css strips the
+        // surrounding <pre>'s chrome, so without this it floats in the prose. Fullscreen has the
+        // whole screen to itself and needs no edge.
+        fullscreen ? "flex h-full w-full items-center justify-center" : "rounded-xl border border-neutral-800",
       )}
     >
       <span

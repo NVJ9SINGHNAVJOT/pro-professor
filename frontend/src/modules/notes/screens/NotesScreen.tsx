@@ -34,7 +34,7 @@ import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import NotesBar from "@/modules/notes/components/NotesBar";
 import { useNoteAi, type NotesBarCommand } from "@/modules/notes/hooks/useNoteAi";
 
-import { TextareaInput } from "@/components/inputs/TextareaInput";
+import NoteEditor from "@/modules/notes/components/NoteEditor";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
@@ -71,7 +71,12 @@ import { lintMarkdown } from "@/modules/notes/editor/lintMarkdown";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
-import { HEADING_SCROLL_DELAY_MS, MERMAID_TEMPLATE, type SlashCommand } from "@/modules/notes/constants";
+import {
+  HEADING_SCROLL_DELAY_MS,
+  MERMAID_TEMPLATE,
+  SCROLL_SYNC_RELEASE_MS,
+  type SlashCommand,
+} from "@/modules/notes/constants";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 
 interface NotesScreenProps {
@@ -115,7 +120,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const [savedContent, setSavedContent] = useState(loadedNote?.content ?? "");
   const [title, setTitle] = useState(loadedNote?.title ?? "");
   const [savedTitle, setSavedTitle] = useState(loadedNote?.title ?? "");
-  const [viewMode, setViewMode] = useState<NoteViewMode>("split");
+  // An existing note is opened to be read, so it lands in preview; a draft has nothing to read yet,
+  // so it lands in split. The seeding effect below re-applies this whenever the route hands over a
+  // different note — until then a manual toggle stands.
+  const [viewMode, setViewMode] = useState<NoteViewMode>(isDraft ? "split" : "preview");
   const [rightPanel, setRightPanel] = useState<NoteRightPanel>("context");
   // Explorer collapse. Local state, matching the chat screen — `/notes` and `/notes/:noteId` are
   // two route entries, so opening the first note remounts this screen and resets it. That's the
@@ -138,6 +146,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   );
   const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Which pane currently owns a split-view scroll gesture (see syncScroll), and its release timer. */
+  const scrollDriverRef = useRef<"editor" | "preview" | null>(null);
+  const scrollReleaseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyBtnRef = useRef<HTMLButtonElement | null>(null);
   const wiki = useWikiHandlers(notes, note?.embedUrls);
 
@@ -191,6 +202,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (!isDraft && !loadedNote) return;
     if (loadedNote) {
       seedFromDetail(loadedNote);
+      setViewMode("preview");
       return;
     }
     appliedIdRef.current = null;
@@ -199,6 +211,8 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     setSavedContent("");
     setTitle(draftTitle ?? "");
     setSavedTitle("");
+    // A blank draft is there to be written in, not read.
+    setViewMode("split");
     // `noteId` is in here, not just the loaded note's id: after the save-hop above the route holds
     // a real id with no loader note, so leaving that note for a fresh `/notes/new` would otherwise
     // look like no change at all and keep the old buffer.
@@ -342,6 +356,35 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, note?.id, savedContent]);
+
+  /**
+   * Keeps the preview at roughly the same place in the note as the editor, and back — in split
+   * view the two panes otherwise drift apart and the preview stops being usable as a reference for
+   * what you're typing. Proportional rather than heading-anchored: far less machinery, and close
+   * enough at note length.
+   *
+   * The driver lock is what stops a feedback loop — scrolling the target fires its own scroll
+   * event, which would drive the source straight back.
+   */
+  const syncScroll = (driver: "editor" | "preview") => {
+    if (scrollDriverRef.current && scrollDriverRef.current !== driver) return;
+    // In source-only / preview-only the other pane isn't rendered, so its ref is null and this
+    // no-ops on its own — no need to check the view mode.
+    const source = driver === "editor" ? textareaRef.current : previewRef.current;
+    const target = driver === "editor" ? previewRef.current : textareaRef.current;
+    if (!source || !target) return;
+
+    scrollDriverRef.current = driver;
+    if (scrollReleaseRef.current) clearTimeout(scrollReleaseRef.current);
+    scrollReleaseRef.current = setTimeout(() => {
+      scrollDriverRef.current = null;
+    }, SCROLL_SYNC_RELEASE_MS);
+
+    const sourceRange = source.scrollHeight - source.clientHeight;
+    const targetRange = target.scrollHeight - target.clientHeight;
+    if (sourceRange <= 0 || targetRange <= 0) return;
+    target.scrollTop = (source.scrollTop / sourceRange) * targetRange;
+  };
 
   /**
    * Selects a problem's line in the editor and centers it — the Problems list's click target.
@@ -490,9 +533,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   };
 
   const editorPane = (
-    <TextareaInput
+    <NoteEditor
       ref={textareaRef}
       value={content}
+      problems={problems}
       onChange={handleEditorChange}
       onKeyDown={handleEditorKeyDown}
       // Fires on every caret move, but only a real change to the *selected text* re-renders —
@@ -503,15 +547,15 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         setSelectedText((current) => (current === next ? current : next));
       }}
       onBlur={() => setSlash(null)}
+      onScroll={() => syncScroll("editor")}
       readOnly={aiBusy}
       placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
       spellCheck={false}
-      className="chat-scroll h-full min-h-0 resize-none rounded-none border-none bg-transparent p-4 font-mono text-[13px] leading-relaxed focus:border-none"
     />
   );
 
   const previewPane = (
-    <div ref={previewRef} className="chat-scroll h-full overflow-y-auto p-4">
+    <div ref={previewRef} onScroll={() => syncScroll("preview")} className="chat-scroll h-full overflow-y-auto p-4">
       <MarkdownBody className="para-regular text-neutral-100">
         <Markdown wiki={wiki}>{stripFrontmatter(content)}</Markdown>
       </MarkdownBody>
