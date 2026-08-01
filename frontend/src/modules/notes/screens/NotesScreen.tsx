@@ -141,9 +141,13 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // send — a ref read during render wouldn't update when the selection changes.
   const [selectedText, setSelectedText] = useState("");
   // Active `/` block context: where the slash starts, what's typed after it, where the menu sits.
-  const [slash, setSlash] = useState<{ start: number; query: string; anchor: { top: number; left: number } } | null>(
-    null,
-  );
+  // A null `anchor` means the trigger is still live but its line is scrolled out of view, so the
+  // menu isn't shown — see repositionSlash.
+  const [slash, setSlash] = useState<{
+    start: number;
+    query: string;
+    anchor: { top: number; left: number; lineHeight: number } | null;
+  } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   /** Which pane currently owns a split-view scroll gesture (see syncScroll), and its release timer. */
@@ -459,6 +463,27 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     applyTextState(replaceRange(state, state.selectionStart, to, text));
   };
 
+  /**
+   * The slash menu is placed in the pane's coordinate space, but the caret it points at moves when
+   * the editor scrolls — without this the menu stays put while the text slides out from under it.
+   *
+   * Scrolling the line out of view drops the *anchor*, not the trigger: the menu stops rendering
+   * (and with it stops capturing ↑/↓/Enter, which would otherwise be swallowed by a menu nobody can
+   * see) while the typed `/query` stays exactly as written, so scrolling back brings it straight
+   * back. Deleting the `/` instead would throw away text the user may well have meant literally.
+   */
+  const repositionSlash = () => {
+    const textarea = textareaRef.current;
+    if (!textarea || !slash) return;
+    const pos = measureCaret(textarea, slash.start);
+    if (pos.top + pos.lineHeight < 0 || pos.top > textarea.clientHeight) {
+      // Already hidden — don't re-render on every scroll tick.
+      if (slash.anchor) setSlash({ ...slash, anchor: null });
+      return;
+    }
+    setSlash({ ...slash, anchor: { top: pos.top, left: pos.left, lineHeight: pos.lineHeight } });
+  };
+
   /** Opens/updates the slash menu when the caret sits right after a line-start `/query`. */
   const syncSlash = (textarea: HTMLTextAreaElement) => {
     const caret = textarea.selectionStart;
@@ -468,8 +493,13 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       setSlash(null);
       return;
     }
+    // The caret line's own box — SlashMenu decides which side of it the menu goes on.
     const pos = measureCaret(textarea, lineStart);
-    setSlash({ start: lineStart, query: match[1], anchor: { top: pos.top + pos.lineHeight + 2, left: pos.left } });
+    setSlash({
+      start: lineStart,
+      query: match[1],
+      anchor: { top: pos.top, left: pos.left, lineHeight: pos.lineHeight },
+    });
   };
 
   // Execute a command handed down from the Cmd+P palette.
@@ -547,7 +577,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         setSelectedText((current) => (current === next ? current : next));
       }}
       onBlur={() => setSlash(null)}
-      onScroll={() => syncScroll("editor")}
+      onScroll={() => {
+        syncScroll("editor");
+        repositionSlash();
+      }}
       readOnly={aiBusy}
       placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
       spellCheck={false}

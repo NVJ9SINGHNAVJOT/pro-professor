@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/common/toast";
-import { useDefaultSelectedModel } from "@/hooks/useDefaultSelectedModel";
 import { notesStream, type NoteAiAction, type NoteAiMode } from "@/services/operations/notes/notes.stream";
 import type { SelectedModel } from "@/modules/chat/types";
 
@@ -26,8 +25,12 @@ export const useNoteAi = (
     return () => abortRef.current?.abort();
   }, [noteId]);
 
-  const defaultModel = useDefaultSelectedModel();
-  const activeSelection = selected ?? defaultModel;
+  /**
+   * Null until the tab's picker is used — deliberately *not* defaulted to the active model. Which
+   * model rewrites a note is worth an explicit choice, and a pre-filled picker reads as one that
+   * has already been made.
+   */
+  const activeSelection = selected;
 
   const setBusyState = (value: boolean) => {
     setBusy(value);
@@ -47,7 +50,7 @@ export const useNoteAi = (
       return false;
     }
     if (!activeSelection) {
-      toast.error("No model available — activate a model first");
+      toast.error("Select a model first");
       return false;
     }
     const { provider, model } = activeSelection;

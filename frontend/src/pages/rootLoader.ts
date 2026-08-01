@@ -9,7 +9,7 @@ const EMPTY: GetAllModelsResponse = { message: "", data: { models: [] } };
 /**
  * Root layout loader — the models list every module reads from `modelsSlice`.
  * Seeded into Redux here rather than returned, because its `useAppSelector` consumers
- * (ModelSelector, ChatMessages, useDefaultSelectedModel) sit below the routes that would
+ * (ModelSelector, ChatMessages) sit below the routes that would
  * have to prop-drill it.
  *
  * `loadOptional`: a models outage must not blank the whole app — the app renders with an

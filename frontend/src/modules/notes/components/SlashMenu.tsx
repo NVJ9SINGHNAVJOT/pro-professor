@@ -1,10 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SLASH_COMMANDS, type SlashCommand } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 
+/** Gap between the caret's line and the menu, whichever side it lands on. */
+const CARET_GAP = 4;
+/** Keeps the menu off the pane's edges when the caret sits near them. */
+const EDGE_MARGIN = 8;
+
+/** The caret line's box inside the (relative) editor wrapper. */
+interface SlashAnchor {
+  top: number;
+  left: number;
+  lineHeight: number;
+}
+
+/** Just clear of the bottom of the caret's line — the default placement. */
+const belowLine = (anchor: SlashAnchor) => anchor.top + anchor.lineHeight + CARET_GAP;
+
 interface SlashMenuProps {
-  /** Popover position inside the (relative) editor wrapper; null = closed. */
-  anchor: { top: number; left: number } | null;
+  /** Where the menu points; null = not shown — either closed, or its line is scrolled out of view. */
+  anchor: SlashAnchor | null;
   /** What was typed after the `/` — filters the block list. */
   query: string;
   onSelect: (command: SlashCommand) => void;
@@ -19,6 +34,7 @@ interface SlashMenuProps {
 const SlashMenu = ({ anchor, query, onSelect, onClose }: SlashMenuProps) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,12 +84,38 @@ const SlashMenu = ({ anchor, query, onSelect, onClose }: SlashMenuProps) => {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
+  /**
+   * Adjusts the placement below once the menu's real size is known: flips it above the caret's line
+   * when the pane has no room left underneath (and there is room above), and pulls it back from the
+   * right edge so a caret late in a long line doesn't push it off. Written straight to the node —
+   * this reruns on every keystroke while filtering, and a re-render per measurement would make the
+   * menu visibly jump.
+   *
+   * Only ever *moves* the menu from the below-the-line position the style prop already sets, so if
+   * this bails (no offsetParent, nothing measurable yet) the fallback is still correct rather than
+   * sitting on top of the line being typed.
+   */
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const pane = menu?.offsetParent as HTMLElement | null;
+    if (!menu || !anchor || !pane) return;
+
+    const above = anchor.top - menu.offsetHeight - CARET_GAP;
+    const fitsBelow = belowLine(anchor) + menu.offsetHeight <= pane.clientHeight;
+    if (!fitsBelow && above >= 0) menu.style.top = `${above}px`;
+
+    const maxLeft = pane.clientWidth - menu.offsetWidth - EDGE_MARGIN;
+    menu.style.left = `${Math.max(EDGE_MARGIN, Math.min(anchor.left, maxLeft))}px`;
+  });
+
   if (!anchor) return null;
 
   return (
     <div
+      ref={menuRef}
       className="absolute z-40 w-88 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl"
-      style={{ top: anchor.top, left: anchor.left }}
+      // Clear of the caret's line by default; the layout effect above only flips/clamps from here.
+      style={{ top: belowLine(anchor), left: anchor.left }}
     >
       <ul ref={listRef} className="chat-scroll max-h-64 overflow-y-auto p-1">
         {filtered.length === 0 && (

@@ -42,11 +42,21 @@ const groupByLine = (problems: Problem[]) => {
   return byLine;
 };
 
+/** Room the tooltip needs below a line before it flips above it. Approximate — a few px of slack
+ *  beats measuring, which would need a render to measure and a second to place. */
+const TOOLTIP_CLEARANCE = 96;
+/** Matches the tooltip's max-w-80, for keeping it off the right edge. */
+const TOOLTIP_MAX_WIDTH = 320;
+
 interface HoverState {
   line: number;
   problems: Problem[];
-  top: number;
+  /** Viewport coords of the hovered line's box; the tooltip hangs off one edge or the other. */
+  lineTop: number;
+  lineBottom: number;
   left: number;
+  /** Near the bottom of the window there's no room underneath — sit above the line instead. */
+  flip: boolean;
 }
 
 interface NoteEditorProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value"> {
@@ -114,7 +124,16 @@ const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
         if (!element) continue;
         const rect = element.getBoundingClientRect();
         if (e.clientY >= rect.top && e.clientY < rect.bottom) {
-          if (hover?.line !== line) setHover({ line, problems: lineProblems, top: rect.bottom, left: rect.left });
+          if (hover?.line !== line) {
+            setHover({
+              line,
+              problems: lineProblems,
+              lineTop: rect.top,
+              lineBottom: rect.bottom,
+              left: Math.min(rect.left, window.innerWidth - TOOLTIP_MAX_WIDTH - 8),
+              flip: rect.bottom + TOOLTIP_CLEARANCE > window.innerHeight,
+            });
+          }
           return;
         }
       }
@@ -176,7 +195,11 @@ const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
 
         {hover && (
           <div
-            style={{ top: hover.top + 4, left: hover.left }}
+            style={
+              hover.flip
+                ? { bottom: window.innerHeight - hover.lineTop + 4, left: hover.left }
+                : { top: hover.lineBottom + 4, left: hover.left }
+            }
             className="pointer-events-none fixed z-50 max-w-80 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 shadow-lg"
           >
             {hover.problems.map((problem, index) => (

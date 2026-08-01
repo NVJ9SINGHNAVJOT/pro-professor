@@ -191,8 +191,31 @@ describe("wiki links", () => {
     expect(lintMarkdown("write `[[Roadmap]]` to link\n", noNotes)).toEqual([]);
   });
 
-  it("skips the link checks entirely without a resolver", () => {
+  it("skips the existence check without a resolver", () => {
     expect(lintMarkdown("see [[Roadmap]]\n")).toEqual([]);
+  });
+
+  it("reports a URL pasted into a wiki-link, resolver or not", () => {
+    for (const note of ["[[http://localhost:5173/notes/4]]\n", "[[https://example.com]]\n", "[[www.example.com]]\n"]) {
+      const problems = lintMarkdown(note);
+      expect(problems).toHaveLength(1);
+      expect(problems[0].severity).toBe("warning");
+      expect(problems[0].message).toContain("[text](url)");
+    }
+  });
+
+  it("reports a pasted URL as bad syntax rather than a missing note", () => {
+    const problems = lintMarkdown("[[https://example.com]]\n", noNotes);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).not.toContain("doesn't exist");
+  });
+
+  it("leaves ordinary Markdown links to external URLs alone", () => {
+    expect(lintMarkdown("[the docs](https://example.com) and <https://example.com>\n", noNotes)).toEqual([]);
+  });
+
+  it("does not mistake a note title containing a colon for a URL", () => {
+    expect(lintMarkdown("[[Notes: part two]]\n", (target) => target === "Notes: part two")).toEqual([]);
   });
 });
 

@@ -196,7 +196,10 @@ textarea. It checks: unclosed ``` / ~~~ fences (matching CommonMark's same-char,
 length rule), table headers with a missing or mismatched `|---|` row, `#heading` with no space
 (skipping single-`#` single-word lines, which are inline tags), frontmatter that never closes /
 doesn't start on line 1 / indents with a tab / has a non-`key: value` top-level line, callout types
-with no colour in `markdown.css`, unbalanced `$`/`$$` math, and unresolved `[[wiki-links]]`
+with no colour in `markdown.css`, unbalanced `$`/`$$` math, a **URL pasted into a `[[wiki-link]]`**
+(which links nothing — `[[…]]` resolves a note *title*, so it offers to create a note named after
+the address; the fix is `[text](url)`, and this one is reported whether or not a resolver was
+supplied, being wrong syntax rather than an unresolved reference), and unresolved `[[wiki-links]]`
 (deduplicated, skipping image and `.diagram` targets). Everything inside a fence is skipped.
 
 Results render as the **Problems** section at the top of the Context tab, badged on the tab itself
@@ -271,7 +274,10 @@ reads as the AI mangling the note, so the fragment actions ask for the new text 
    id. A restore snapshots the current content first, so restores are themselves undoable. Nothing
    is persisted on error/abort.
 
-The NotesBar's model picker lists the locally activated models and defaults to the active one.
+The AI tab's model picker lists the locally activated models and **starts empty** — no model is
+preselected, because which model rewrites a note is worth an explicit choice and a pre-filled picker
+reads as one already made. Until one is chosen, a chat turn or note action stops with "Select a
+model first".
 On `replace` the frontend streams tokens straight into the editor; on `fragment` it leaves the
 buffer alone (the note is spliced server-side) and shows the text in a status strip, then refetches
 on `note.done`. The editor is read-only during both — a fragment action's refetch would discard

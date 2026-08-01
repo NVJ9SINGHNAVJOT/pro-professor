@@ -31,6 +31,8 @@ const CALLOUT_LINE = /^\s*>\s*\[!(\w+)\]/;
 const DELIMITER_CELL = /^\s*:?-+:?\s*$/;
 /** A top-level frontmatter `key: value` line — YAML needs the space after the colon. */
 const YAML_PAIR = /^[^:\s][^:]*:(\s|$)/;
+/** A wiki-link target that is really an address — `[[…]]` resolves note titles, never URLs. */
+const URL_LIKE = /^(?:[a-z][\w+.-]*:\/\/|www\.)/i;
 
 /** Callout types with a colour in markdown.css; anything else falls back to the default blue. */
 const CALLOUT_TYPES = new Set([
@@ -140,7 +142,8 @@ function checkFrontmatter(lines: string[], problems: Problem[]) {
  * Structural problems in a note's Markdown, in line order.
  *
  * @param content    the raw note source, frontmatter included
- * @param linkExists resolves a wiki-link target to an existing note; omit to skip the link checks
+ * @param linkExists resolves a wiki-link target to an existing note; omit to skip the *existence*
+ *                   check (a wiki-link holding a URL is still reported either way)
  */
 export function lintMarkdown(content: string, linkExists?: (target: string) => boolean): Problem[] {
   const problems: Problem[] = [];
@@ -224,20 +227,31 @@ export function lintMarkdown(content: string, linkExists?: (target: string) => b
       }
     }
 
-    if (linkExists) {
-      for (const match of line.replace(INLINE_CODE, "").matchAll(WIKI_REF)) {
-        const target = match[1].trim();
-        const key = target.toLowerCase();
-        // Images resolve to uploads and `.diagram` targets to the diagram module — neither is a note.
-        if (!target || isImageTarget(target) || target.endsWith(DIAGRAM_SUFFIX) || reportedLinks.has(key)) continue;
-        if (!linkExists(target)) {
-          reportedLinks.add(key);
-          problems.push({
-            line: i + 1,
-            severity: "info",
-            message: `"${target}" doesn't exist yet — the link opens a blank note.`,
-          });
-        }
+    for (const match of line.replace(INLINE_CODE, "").matchAll(WIKI_REF)) {
+      const target = match[1].trim();
+      const key = target.toLowerCase();
+      if (!target || reportedLinks.has(key)) continue;
+      // A pasted URL is the common slip. `[[…]]` resolves a note *title*, so this doesn't link out
+      // at all — it offers to create a note named after the address. Flagged whether or not a
+      // resolver was supplied, because it's wrong syntax rather than an unresolved reference.
+      if (URL_LIKE.test(target)) {
+        reportedLinks.add(key);
+        problems.push({
+          line: i + 1,
+          severity: "warning",
+          message: "`[[…]]` links to a note by title, not to an address — use `[text](url)` to link out.",
+        });
+        continue;
+      }
+      // Images resolve to uploads and `.diagram` targets to the diagram module — neither is a note.
+      if (isImageTarget(target) || target.endsWith(DIAGRAM_SUFFIX)) continue;
+      if (linkExists && !linkExists(target)) {
+        reportedLinks.add(key);
+        problems.push({
+          line: i + 1,
+          severity: "info",
+          message: `"${target}" doesn't exist yet — the link opens a blank note.`,
+        });
       }
     }
   }

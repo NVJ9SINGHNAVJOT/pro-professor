@@ -62,7 +62,7 @@ export const useNoteChat = ({ noteId, content, selection, selectedText }: UseNot
     const question = input.trim();
     if (busy || !question) return;
     if (!selection) {
-      toast.error("No model available — activate a model first");
+      toast.error("Select a model first");
       return;
     }
 
