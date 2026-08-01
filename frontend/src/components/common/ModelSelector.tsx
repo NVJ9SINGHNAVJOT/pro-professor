@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/redux/store";
 import { type ModelProvider, type ProviderModel } from "@/services/operations/models/models.route";
 import type { SelectedModel } from "@/modules/chat/types";
@@ -27,14 +28,21 @@ interface ModelSelectorProps {
   align?: "start" | "end";
   /** Optional filter to exclude certain models (like embeddings) from the list. */
   filter?: (model: ProviderModel) => boolean;
+  /**
+   * Fills its container instead of sizing to the model name, and clips the name with an ellipsis
+   * rather than overflowing — for narrow places (the notes AI tab). The full name is in a tooltip.
+   */
+  fullWidth?: boolean;
 }
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
 
-const ModelSelector = ({ value, onChange, disabled, align = "start", filter }: ModelSelectorProps) => {
+const ModelSelector = ({ value, onChange, disabled, align = "start", filter, fullWidth }: ModelSelectorProps) => {
   const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
+  /** The whole name, for the tooltip that backs up a clipped one. */
+  const fullLabel = value ? `${PROVIDER_META[value.provider]?.label ?? value.provider} · ${value.model}` : "";
 
   const handleChange = (encoded: string) => {
     const idx = encoded.indexOf(MODEL_SEPARATOR);
@@ -84,6 +92,23 @@ const ModelSelector = ({ value, onChange, disabled, align = "start", filter }: M
     const isAvailable = Boolean(matchedModel);
     const modalities = matchedModel?.inputModalities ?? [];
 
+    if (fullWidth) {
+      return (
+        <Tooltip content={isAvailable ? fullLabel : "Model not available"} side="top">
+          <div className="flex w-full cursor-not-allowed items-center rounded-lg px-2 py-1 para-small-medium select-none">
+            <ModelOptionLabel
+              className="min-w-0"
+              name={value.model}
+              nameClassName={cn("min-w-0 truncate", isAvailable ? "text-neutral-300" : "text-neutral-400")}
+              modalities={isAvailable ? modalities : []}
+              providerLabel={providerMeta?.label}
+              providerClassName={isAvailable ? providerMeta?.className : "bg-neutral-800 text-neutral-400"}
+            />
+          </div>
+        </Tooltip>
+      );
+    }
+
     const display = (
       <div className="flex items-center gap-1.5 rounded-md px-2 py-1 para-small-medium cursor-not-allowed select-none text-neutral-400">
         {providerMeta ? (
@@ -113,20 +138,64 @@ const ModelSelector = ({ value, onChange, disabled, align = "start", filter }: M
   // No models loaded yet or none available
   if (!disabled && loaded && models.length === 0) {
     return (
-      <div className="flex items-center rounded-md px-2 py-1 para-small-medium text-neutral-500 cursor-not-allowed select-none">
+      <div
+        className={cn(
+          "flex items-center rounded-md px-2 py-1 para-small-medium text-neutral-500 cursor-not-allowed select-none",
+          fullWidth && "w-full",
+        )}
+      >
         No models available
       </div>
     );
   }
 
+  const providerMeta = value ? PROVIDER_META[value.provider] : undefined;
+  // Read off the loaded list, like the disabled branch does: what's baked into `value` can be stale
+  // when the selection was restored before the models arrived.
+  const triggerModalities = value
+    ? (models.find((m) => m.provider === value.provider && m.name === value.model)?.inputModalities ??
+      value.inputModalities ?? ["text"])
+    : [];
+  const trigger = (
+    <SelectTrigger
+      size="sm"
+      aria-label={fullWidth ? fullLabel || "Select a model" : undefined}
+      className={cn(
+        "gap-1.5 border-transparent bg-transparent text-neutral-200 shadow-none transition-colors para-small-medium hover:border-neutral-700 hover:bg-neutral-800 data-placeholder:text-neutral-400 [&_svg:not([class*='text-'])]:text-neutral-400",
+        fullWidth && "w-full",
+      )}
+    >
+      {fullWidth ? (
+        // The same row chat's trigger shows, built here rather than through SelectValue: only this
+        // copy can hand the name the leftover width (`min-w-0 truncate`) while the badges hold
+        // their size, which is what keeps it inside a narrow pane. Full name in the tooltip.
+        value ? (
+          <ModelOptionLabel
+            className="min-w-0"
+            name={value.model}
+            nameClassName="min-w-0 truncate"
+            modalities={triggerModalities}
+            providerLabel={providerMeta?.label}
+            providerClassName={providerMeta?.className}
+          />
+        ) : (
+          <span className="truncate text-neutral-400">Select a model</span>
+        )
+      ) : (
+        <SelectValue placeholder="Select a model" />
+      )}
+    </SelectTrigger>
+  );
+
   return (
     <Select value={current} onValueChange={handleChange} disabled={disabled}>
-      <SelectTrigger
-        size="sm"
-        className="gap-1.5 border-transparent bg-transparent text-neutral-200 shadow-none transition-colors para-small-medium hover:border-neutral-700 hover:bg-neutral-800 data-placeholder:text-neutral-400 [&_svg:not([class*='text-'])]:text-neutral-400"
-      >
-        <SelectValue placeholder="Select a model" />
-      </SelectTrigger>
+      {fullWidth && value ? (
+        <Tooltip content={fullLabel} side="top">
+          {trigger}
+        </Tooltip>
+      ) : (
+        trigger
+      )}
       <SelectContent
         position="popper"
         side="bottom"

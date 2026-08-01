@@ -6,6 +6,7 @@ const notesEndPoints = {
   GET_ONE: (id: number) => `${BASE_URL_SERVER}/notes/${id}`,
   CREATE: `${BASE_URL_SERVER}/notes`,
   UPDATE: (id: number) => `${BASE_URL_SERVER}/notes/${id}`,
+  RENAME: (id: number) => `${BASE_URL_SERVER}/notes/${id}/title`,
   DELETE_ONE: (id: number) => `${BASE_URL_SERVER}/notes/${id}`,
   SEARCH: `${BASE_URL_SERVER}/notes/search`,
   LINKS: `${BASE_URL_SERVER}/notes/links`,
@@ -90,6 +91,13 @@ export const notesRoute = {
     method: "PUT",
     url: notesEndPoints.UPDATE(id),
     data: payload,
+  })),
+
+  /** Rename only — the content is left alone, so unsaved editor edits survive it. */
+  renameNote: createRoute<[id: number, title: string], GetNoteResponse>((id, title) => ({
+    method: "PUT",
+    url: notesEndPoints.RENAME(id),
+    data: { title },
   })),
 
   deleteNote: createRoute<[id: number], { message: string }>((id) => ({

@@ -5,6 +5,7 @@ import com.proprofessor.server.notes.dto.NoteCreateRequest;
 import com.proprofessor.server.notes.dto.NoteDetail;
 import com.proprofessor.server.notes.dto.NoteLinksResponse;
 import com.proprofessor.server.notes.dto.NoteListResponse;
+import com.proprofessor.server.notes.dto.NoteRenameRequest;
 import com.proprofessor.server.notes.dto.NoteUpdateRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,6 +67,12 @@ public class NotesController {
     @PutMapping("/{id}")
     public ApiResponse<NoteDetail> update(@PathVariable Long id, @RequestBody NoteUpdateRequest request) {
         return ApiResponse.ok("Note updated.", notesService.updateNote(id, request));
+    }
+
+    /** Rename only — separate from the save above, which rewrites the content. */
+    @PutMapping("/{id}/title")
+    public ApiResponse<NoteDetail> rename(@PathVariable Long id, @RequestBody NoteRenameRequest request) {
+        return ApiResponse.ok("Note renamed.", notesService.renameNote(id, request.title()));
     }
 
     @DeleteMapping("/{id}")

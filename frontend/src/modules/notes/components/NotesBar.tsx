@@ -8,7 +8,7 @@ import {
   SquareIcon,
   WaypointsIcon,
 } from "lucide-react";
-import ModelSelector from "@/components/common/ModelSelector";
+import EditableTitle from "@/components/common/EditableTitle";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import { VIEW_MODES } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,11 @@ interface NotesBarProps {
   ai: ReturnType<typeof useNoteAi>;
   /** False on an unsaved draft: everything needing a note id is disabled until the first save. */
   hasNote: boolean;
+  /** The note's title, renamed in place here — its own request, not part of the save. */
+  title: string;
+  setTitle: (title: string) => void;
+  savedTitle: string;
+  onRenameTitle: (title: string) => void;
   dirty: boolean;
   saving: boolean;
   viewMode: NoteViewMode;
@@ -41,6 +46,10 @@ interface NotesBarProps {
 const NotesBar = ({
   ai,
   hasNote,
+  title,
+  setTitle,
+  savedTitle,
+  onRenameTitle,
   dirty,
   saving,
   viewMode,
@@ -57,19 +66,15 @@ const NotesBar = ({
 }: NotesBarProps) => {
   return (
     <>
-      <div className="flex h-11.5 shrink-0 items-center justify-between border-b border-neutral-800 px-2 pt-2 pb-2">
-        <div className="flex shrink-0 items-center gap-x-1">
-          <SidebarToggle isOpen={noteListOpen} onToggle={onToggleNoteList} label="note explorer" />
-          <div className="shrink-0">
-            <ModelSelector
-              value={ai.activeSelection}
-              onChange={ai.setSelected}
-              disabled={ai.busy}
-              align="start"
-              filter={(m) => m.role !== "embedding" && !m.name.toLowerCase().includes("embed")}
-            />
-          </div>
-        </div>
+      <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
+        <SidebarToggle isOpen={noteListOpen} onToggle={onToggleNoteList} label="note explorer" />
+        <EditableTitle
+          value={title}
+          savedValue={savedTitle}
+          onChange={setTitle}
+          onCommit={onRenameTitle}
+          placeholder="Untitled"
+        />
 
         <div className="ml-auto flex shrink-0 items-center gap-x-1">
           {dirty && <span className="mr-2 size-2 shrink-0 rounded-full bg-amber-400" title="Unsaved changes" />}
@@ -106,14 +111,14 @@ const NotesBar = ({
             aria-label="Save note"
             title="Save (⌘S)"
             className={cn(
-              "flex cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1.5 para-small-medium transition-colors",
+              "flex w-[105px] cursor-pointer items-center gap-x-1.5 rounded-lg px-2.5 py-1 para-small-medium transition-colors ease-in-out",
               dirty && !saving
                 ? "bg-white text-black hover:bg-neutral-200"
                 : "cursor-not-allowed bg-neutral-800 text-neutral-500",
             )}
           >
-            <SaveIcon className="size-4" />
-            {saving ? "Saving…" : "Save"}
+            <SaveIcon className="size-4 items-start" />
+            <span className="flex-1 text-center">{saving ? "Saving…" : "Save"}</span>
           </button>
           <button
             ref={historyBtnRef}

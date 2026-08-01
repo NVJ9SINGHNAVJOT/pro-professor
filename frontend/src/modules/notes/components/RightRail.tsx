@@ -20,13 +20,15 @@ interface RightRailProps {
   onClose: () => void;
   context: ReactNode;
   ai: ReactNode;
+  /** Markdown problems in the buffer — badged on the Context tab so they're visible unopened. */
+  problemCount: number;
 }
 
 /**
  * Right pane — the note's context and its chat, as two tabs of one rail rather than two panels
  * competing with the editor for width. Owns the pane chrome; the tab bodies are plain content.
  */
-const RightRail = ({ active, onSelect, onClose, context, ai }: RightRailProps) => {
+const RightRail = ({ active, onSelect, onClose, context, ai, problemCount }: RightRailProps) => {
   const asideRef = useRef<HTMLElement | null>(null);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
 
@@ -73,6 +75,14 @@ const RightRail = ({ active, onSelect, onClose, context, ai }: RightRailProps) =
             >
               <Icon className="size-4" />
               {label}
+              {id === "context" && problemCount > 0 && (
+                <span
+                  title={`${problemCount} Markdown ${problemCount === 1 ? "problem" : "problems"}`}
+                  className="rounded-full bg-amber-400/15 px-1.5 caption-small-medium text-amber-400"
+                >
+                  {problemCount}
+                </span>
+              )}
             </button>
           ))}
           <button

@@ -70,6 +70,14 @@ public class DiagramRepository {
                 .execute();
     }
 
+    /** Rename only — the scene stays as it is. */
+    public void updateTitle(long id, String title) {
+        dsl.update(DIAGRAMS)
+                .set(DIAGRAMS.TITLE, title)
+                .where(DIAGRAMS.ID.eq(id))
+                .execute();
+    }
+
     /** Null {@code folderId} moves the diagram to the root level. */
     public void updateFolder(long id, Long folderId) {
         dsl.update(DIAGRAMS)

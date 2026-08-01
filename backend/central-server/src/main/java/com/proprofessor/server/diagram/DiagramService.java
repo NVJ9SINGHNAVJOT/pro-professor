@@ -76,6 +76,20 @@ public class DiagramService {
     }
 
     /**
+     * Renames a diagram and nothing else — same reasoning as {@link #moveDiagram}: this must not
+     * round-trip the whole scene, and the editor's title field is not part of its autosave.
+     */
+    @Transactional
+    public DiagramDetail renameDiagram(long id, String title) {
+        requireDiagram(id);
+        if (title == null || title.isBlank()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Diagram title must not be blank.");
+        }
+        diagramRepository.updateTitle(id, uniqueTitle(normalizeTitle(title), id));
+        return getDiagram(id);
+    }
+
+    /**
      * Moves a diagram between folders — deliberately not part of {@link #updateDiagram}, which is
      * the editor's autosave path. Null {@code folderId} moves it to the root level.
      */

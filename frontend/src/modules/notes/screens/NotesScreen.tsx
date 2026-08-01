@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
@@ -67,6 +67,7 @@ import {
   type TextState,
 } from "@/modules/notes/editor/textActions";
 import { measureCaret } from "@/modules/notes/editor/caretPosition";
+import { lintMarkdown } from "@/modules/notes/editor/lintMarkdown";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
@@ -107,6 +108,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const { execute: fetchNote } = useApi(notesRoute.getNote);
   const { execute: createNote, loading: creating } = useApi(notesRoute.createNote);
   const { execute: updateNote, loading: saving } = useApi(notesRoute.updateNote);
+  const { execute: renameNote } = useApi(notesRoute.renameNote);
 
   const [note, setNote] = useState<NoteDetail | null>(loadedNote);
   const [content, setContent] = useState(loadedNote?.content ?? "");
@@ -173,6 +175,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
 
   const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle) && !aiBusy;
 
+  // Markdown mistakes that render as something else instead of failing. Memoized against the
+  // buffer: this screen re-renders on every chat token too, and none of that changes the note.
+  const problems = useMemo(() => lintMarkdown(content, wiki.linkExists), [content, wiki]);
+
   // Seed (or clear) the editor whenever the route hands over a different note. Keyed on the id,
   // not the object: a revalidation of the explorer list re-runs the loader and would otherwise
   // overwrite the buffer the user is typing into.
@@ -214,9 +220,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (saving || creating || aiBusy) return false;
     if (!note) {
       if (!isDraft) return false;
-      // First save of a draft: the row is born here. The title comes from the content's first
-      // heading (or frontmatter), same as any other save.
-      const res = await createNote({ content });
+      // First save of a draft: the row is born here. A blank title lands as "Untitled"
+      // server-side, and a frontmatter `title:` still wins — same as any other save.
+      const res = await createNote({ title, content });
       if (res.error) {
         toast.error(res.error.message || "Failed to create note");
         return false;
@@ -230,13 +236,39 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       navigate(ROUTES.NOTES_DETAIL(detail.id), { replace: true });
       return true;
     }
-    const res = await updateNote(note.id, { title, content });
+    // Content only — the title has its own request, and the server keeps the current one when a
+    // save doesn't carry it.
+    const res = await updateNote(note.id, { content });
     if (res.error) {
       toast.error(res.error.message || "Failed to save note");
       return false;
     }
     applyDetail(res.response.data);
     return true;
+  };
+
+  /**
+   * Commits a rename from the toolbar — a request of its own, so an unsaved buffer stays unsaved.
+   * Only the title (and the explorer row) moves; the content, revisions and backlinks don't.
+   */
+  const handleRenameTitle = async (next: string) => {
+    // A draft has no row to rename yet; the typed title rides along on its first save.
+    if (!note) {
+      setTitle(next);
+      return;
+    }
+    const res = await renameNote(note.id, next);
+    if (res.error) {
+      toast.error(res.error.message || "Failed to rename note");
+      setTitle(savedTitle);
+      return;
+    }
+    const detail = res.response.data;
+    setNote(detail);
+    // The server's copy, which may carry a "… 2" suffix from a title clash.
+    setTitle(detail.title);
+    setSavedTitle(detail.title);
+    dispatch(upsertNote(summaryOf(detail)));
   };
 
   /**
@@ -310,6 +342,33 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, note?.id, savedContent]);
+
+  /**
+   * Selects a problem's line in the editor and centers it — the Problems list's click target.
+   * The counterpart to `scrollToHeading`, which moves the *preview*: a problem is a fact about
+   * the source, so the caret has to land on the line that has to be fixed.
+   */
+  const jumpToLine = (line: number) => {
+    const focusLine = () => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const lines = textarea.value.split("\n");
+      const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
+      textarea.focus();
+      textarea.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
+      // measureCaret reports against the border box (scroll already subtracted), so adding the
+      // scroll back gives the line's offset within the content.
+      const caret = measureCaret(textarea, start);
+      textarea.scrollTop = Math.max(0, textarea.scrollTop + caret.top - textarea.clientHeight / 2);
+    };
+    if (viewMode !== "preview") {
+      focusLine();
+      return;
+    }
+    // Preview-only doesn't render the editor at all — switch first, then wait for the paint.
+    setViewMode("split");
+    setTimeout(focusLine, HEADING_SCROLL_DELAY_MS);
+  };
 
   /**
    * Applies a pure textActions result: new content + restored focus/selection.
@@ -628,6 +687,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
           <NotesBar
             ai={ai}
             hasNote={note !== null}
+            title={title}
+            setTitle={setTitle}
+            savedTitle={savedTitle}
+            onRenameTitle={(next) => void handleRenameTitle(next)}
             dirty={dirty}
             saving={saving}
             viewMode={viewMode}
@@ -706,13 +769,16 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
           active={rightPanel}
           onSelect={setRightPanel}
           onClose={() => setRightPanel(null)}
+          problemCount={problems.length}
           context={
             <ContextPanel
               backlinks={backlinks}
               content={content}
               tags={note?.tags ?? []}
+              problems={problems}
               onWikiClick={wiki.onLinkClick}
               onHeadingClick={scrollToHeading}
+              onProblemClick={jumpToLine}
             />
           }
           ai={
@@ -720,6 +786,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
             // is on its way that would discard whatever was inserted.
             <NoteChatPanel
               chat={chat}
+              ai={ai}
               wiki={wiki}
               onApply={aiBusy ? null : applyChatReply}
               onRunAction={(action) => void runAiAction(action)}

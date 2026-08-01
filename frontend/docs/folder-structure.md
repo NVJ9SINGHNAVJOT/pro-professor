@@ -69,6 +69,16 @@ src/
    rather than relative paths (e.g., `../types`), even when importing between files within the
    same module.
 
+## Editor title bars
+
+The notes and diagram editors share
+[components/common/EditableTitle.tsx](../src/components/common/EditableTitle.tsx) for the document
+title in their top bar. **A rename is its own operation, never part of the document's save:** typing
+changes nothing until Enter (or blur) commits it through that module's rename endpoint, and Escape
+puts the saved title back — so renaming a note can't persist an unsaved buffer, and renaming a
+diagram can't round-trip the scene. The parent owns the working text and the last saved title, which
+is what a commit is measured against and what a failed one reverts to.
+
 ## Sidebar list rows
 
 The three left sidebars — chat history, the note explorer, the diagram tree — are separate

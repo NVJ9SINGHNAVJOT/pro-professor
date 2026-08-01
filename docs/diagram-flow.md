@@ -50,15 +50,18 @@ plus shared `dto/` and `mapper/`.
 
 - Diagrams at `/api/v1/diagrams`: list (folders **and** diagrams, so the sidebar is one request),
   `GET /{id}`, `GET /by-title/{title}` (for `[[Title.diagram]]` link resolution), `POST`,
-  `PUT /{id}`, `PUT /{id}/folder`, `DELETE /{id}`.
+  `PUT /{id}`, `PUT /{id}/title` (rename only), `PUT /{id}/folder`, `DELETE /{id}`.
 - Folders at `/api/v1/diagram-folders`: `POST`, `PUT /{id}` (rename), `PUT /{id}/parent` (move),
   `DELETE /{id}`. Its own path rather than `/diagrams/folders`, which would sit under the
   `/diagrams/{id}` path variable. There is no list endpoint — folders ride with the diagram list.
 - `content` rides as a Jackson `JsonNode` and is stored as jsonb; the server only requires it to be
   a JSON object — there is no server-side scene schema (Excalidraw's `restore` normalises on load).
 
-**Moves are their own endpoints, never part of `PUT /{id}`.** That route is the editor's ~800ms
-autosave, which sends only title + content. A `folderId` field there would deserialize an absent
+**Renames and moves are their own endpoints, never part of `PUT /{id}`.** That route is the
+editor's ~800ms autosave, which sends title + content — so folding a rename into it would make
+every title keystroke round-trip the whole scene, and a rename would carry whatever is on the
+canvas. `PUT /{id}/title` touches the title column only (blank → 400, same uniqueness suffixing).
+A `folderId` field there would deserialize an absent
 value to null on every save (a Java record cannot tell "absent" from "explicitly null") and drag the
 open diagram back to the root. `DiagramCreateRequest`/`DiagramUpdateRequest` therefore carry no
 folder at all; `DiagramMoveRequest` and `DiagramFolderMoveRequest` do, with null meaning root.
@@ -81,7 +84,7 @@ layering (Excalidraw is the model + renderer).
 | `types/` | `index.ts` | the `DiagramScene` document type |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
 | `utils/` | `folderTree.ts` | pure tree helpers (`childFolders`, `diagramsIn`, `descendantIds`, `isDescendant`) — the drag guards are testable without a DOM |
-| `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) |
+| `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) and shares its `EditableTitle` |
 | `components/` | `DiagramTree.tsx` | one level of the sidebar tree, recursing into expanded folders |
 | `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | folder tree + `<DiagramEditor>`, and every mutation handler |
 
@@ -92,6 +95,11 @@ serialises with `serializeAsJSON(..., "database")` and `PUT`s the scene. The ver
 claimed *before* the request, not read back off the snapshot afterwards — Excalidraw replaces
 element objects as it finalises an edit, so the later read can return a stale number and fire a
 second, identical save.
+
+The **title is not part of that autosave**: [EditableTitle](../frontend/src/components/common/EditableTitle.tsx)
+(shared with the notes toolbar) commits on Enter or blur through `PUT /{id}/title` and reverts on
+Escape, so the scene is never resent for a rename. On a draft there is no row yet, so a committed
+title falls back to the create path below.
 
 Every successful save calls `onSaved(detail)`, which patches the list row (`upsertDiagram`) — the
 title *and* the position, since `updatedAt` moved and the list is ordered by it. That's a local
@@ -168,6 +176,9 @@ the old title; that is unchanged and unguarded.)
 
 **Diagrams drawn *inside* a note** use **Mermaid**: a ```mermaid fenced block renders inline via
 [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx) (the `language-mermaid` case in
-[Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx)). Mermaid is the tool for quick
+[Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx)). Renders are serialized —
+concurrent `mermaid.render()` calls wreck each other, see
+[notes-flow.md](notes-flow.md) §5 — and each diagram gets zoom / pan / fullscreen controls from
+[DiagramViewport](../frontend/src/components/common/DiagramViewport.tsx). Mermaid is the tool for quick
 in-note diagrams; the Excalidraw `/diagrams` module is for standalone, hand-drawn diagrams linked
 from notes.

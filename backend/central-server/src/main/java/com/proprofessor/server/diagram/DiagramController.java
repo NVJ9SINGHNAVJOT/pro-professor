@@ -5,6 +5,7 @@ import com.proprofessor.server.diagram.dto.DiagramCreateRequest;
 import com.proprofessor.server.diagram.dto.DiagramDetail;
 import com.proprofessor.server.diagram.dto.DiagramListResponse;
 import com.proprofessor.server.diagram.dto.DiagramMoveRequest;
+import com.proprofessor.server.diagram.dto.DiagramRenameRequest;
 import com.proprofessor.server.diagram.dto.DiagramUpdateRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,6 +60,12 @@ public class DiagramController {
     @PutMapping("/{id}")
     public ApiResponse<DiagramDetail> update(@PathVariable Long id, @RequestBody DiagramUpdateRequest request) {
         return ApiResponse.ok("Diagram updated.", diagramService.updateDiagram(id, request));
+    }
+
+    /** Separate from {@link #update} so a rename never round-trips the scene. */
+    @PutMapping("/{id}/title")
+    public ApiResponse<DiagramDetail> rename(@PathVariable Long id, @RequestBody DiagramRenameRequest request) {
+        return ApiResponse.ok("Diagram renamed.", diagramService.renameDiagram(id, request.title()));
     }
 
     /** Separate from {@link #update} so the editor's autosave never carries a folder. */

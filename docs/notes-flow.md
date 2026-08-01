@@ -48,13 +48,17 @@ Standard vertical: [NotesController](../backend/central-server/src/main/java/com
 1. [Frontmatter](../backend/central-server/src/main/java/com/proprofessor/server/notes/Frontmatter.java)
    parses the leading `--- … ---` YAML block (SafeConstructor — pasted text is untrusted) into the
    `frontmatter` jsonb column; `title:`/`tags:` keys are honored.
-2. Title precedence: frontmatter `title` → request title → first `#` heading → "Untitled", then
-   uniqueness suffixing.
+2. Title precedence: frontmatter `title` → request title → **the note's current title** →
+   "Untitled", then uniqueness suffixing. The current-title step is what lets the editor save
+   content without carrying a title: renaming is `PUT /{id}/title`'s job, not the save's.
 3. [LinkParser](../backend/central-server/src/main/java/com/proprofessor/server/notes/LinkParser.java)
    scans the body (code fences and inline code excluded) for `[[Note]]`, `[[Note#H|alias]]`,
    `![[embeds]]`, `[text](Note)` and inline `#tags`, then rebuilds `note_links` + `note_tags`.
 
-**Endpoints** (`/api/v1/notes`): CRUD, `GET ?tag=` filter, `GET /search?q=`
+**Endpoints** (`/api/v1/notes`): CRUD, **`PUT /{id}/title`** (rename only — content, frontmatter,
+tags, links and revisions are untouched; blank → 400; same uniqueness suffixing. Separate from the
+save for the same reason `PUT /diagrams/{id}/folder` is: renaming from the toolbar must not also
+persist an unsaved buffer), `GET ?tag=` filter, `GET /search?q=`
 (`websearch_to_tsquery` + `ts_rank` over the note-content tsvector), `GET /{id}/backlinks` (join on
 `lower(target_ref) = lower(title)`), `GET /links` (edge list feeding the graph view),
 `GET /{id}/revisions`, `POST /{id}/revisions/{revId}/restore`.
@@ -80,15 +84,21 @@ each pane scrolls independently:
   fades, so nothing reflows on the way out) minus its mobile handling. `LeftNav` collapses with it,
   as in chat, and the pane goes to *zero* width — nothing is left behind. The toggle
   ([SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), shared with the diagram
-  screen) sits at the head of the center pane's top bar, left of the model selector, and is
+  screen) sits at the head of the center pane's top bar, left of the title field, and is
   repeated in all three center states (editor, graph view, empty) — it must never live inside the
   sidebar, which would take the button with it. State is local to NotesScreen, so it resets when
   `/notes` → `/notes/:id` remounts the screen; chat does the same.
 - **Center** — [NotesBar](../frontend/src/modules/notes/components/NotesBar.tsx): one toolbar strip
-  (explorer toggle, model picker, graph view, view toggle source/split/preview, save, revision
+  (explorer toggle, **editable title**, graph view, view toggle source/split/preview, save, revision
   history, AI panel, right rail), plus a transient status strip while a *fragment* AI action runs,
-  since those don't write to the editor. **Every AI surface lives in the rail's AI tab** (§6a) —
-  no instruction row, no floating panel. The toolbar's ✨ button opens that tab and **doubles as
+  since those don't write to the editor. The title is the shared
+  [EditableTitle](../frontend/src/components/common/EditableTitle.tsx) (diagrams use the same one):
+  **Enter or blur commits a rename** through `PUT /{id}/title` and Escape reverts it, so a rename
+  never persists the editor buffer — the note stays as dirty as it was, and no revision is written.
+  The server's copy (deduplicated) replaces what was typed; a frontmatter `title:` still wins on the
+  next content save. **Every AI surface lives in the
+  rail's AI tab** (§6a) — no instruction row, no floating panel, and the **model picker lives there
+  too**, since that tab is the only thing that reads it. The toolbar's ✨ button opens that tab and **doubles as
   Stop** while the model runs, since the rail can be closed mid-generation and would otherwise
   strand it.
   Then editor
@@ -101,9 +111,9 @@ each pane scrolls independently:
 - **Right** — [RightRail](../frontend/src/modules/notes/components/RightRail.tsx), two tabs sharing
   one pane so a chat doesn't cost the editor a third column; **width is draggable** from its left
   edge (260–720px), the same divider mechanics as SplitPane. **Context**
-  ([ContextPanel](../frontend/src/modules/notes/components/ContextPanel.tsx)) — backlinks (server),
-  outgoing links + outline (parsed client-side from the live editor content, matching LinkParser's
-  code-exclusion rules), tags. **Chat**
+  ([ContextPanel](../frontend/src/modules/notes/components/ContextPanel.tsx)) — problems (§5a),
+  backlinks (server), outgoing links + outline (parsed client-side from the live editor content,
+  matching LinkParser's code-exclusion rules), tags. **Chat**
   ([NoteChatPanel](../frontend/src/modules/notes/components/NoteChatPanel.tsx)) — see §6a. Both tabs
   stay mounted; the chat is component state, so unmounting it on a tab switch would discard the
   thread.
@@ -116,7 +126,7 @@ each pane scrolls independently:
 **New note** is `/notes/new` — an editor with no note behind it, exactly like a new chat. It is a
 *value* of the `:noteId` param (`NEW_ITEM_ID`), not a route of its own, so the screen isn't
 remounted when the save gives it a real id. Clicking "New note" issues **no request**; the first
-save `POST`s the note (the title still comes from the content's first heading), adds it to the
+save `POST`s the note (carrying whatever is in the toolbar's title field), adds it to the
 explorer, then replaces the URL with `/notes/:id`. Leaving the draft unsaved leaves nothing behind.
 Revision history, backlinks and the NotesBar's AI actions need an id, so they stay inert until that
 first save.
@@ -149,9 +159,45 @@ transforms (no `unist-util-visit` dependency):
   the standalone diagram page: `onLinkClick` resolves the title→id and navigates to `/diagrams/:id`
   (see [diagram-flow.md](diagram-flow.md) §5).
 - **Inline diagrams** — ```` ```mermaid ```` fences → [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx)
-  (lazy `import("mermaid")`, dark theme, parse failure shows raw source). Mermaid is the way to draw
+  (lazy `import("mermaid")`, dark theme; a parse failure shows mermaid's own error text — which names
+  the line and token — above the raw source, and leaves the last good diagram in place, so a
+  mid-edit definition doesn't blank the pane). Renders are **serialized
+  through a module-level queue**: `mermaid.render()` blanks the container it is handed and resets
+  mermaid's global config before awaiting the diagram type's lazy import, so overlapping renders
+  destroy each other's DOM and a note with several fences would show only one diagram. Each rendered
+  diagram sits in [DiagramViewport](../frontend/src/components/common/DiagramViewport.tsx) — zoom,
+  drag-to-pan, ctrl/cmd+wheel, and a fullscreen overlay, since mermaid's `useMaxWidth` shrinks a
+  large diagram to the pane. Mermaid is the way to draw
   a diagram inline in a note; it works in chat replies too. Standalone Excalidraw diagrams live in
   the `/diagrams` module and are referenced by `[[Title.diagram]]` link.
+
+## 5a. Markdown problems ([editor/lintMarkdown.ts](../frontend/src/modules/notes/editor/lintMarkdown.ts))
+
+Markdown has no syntax errors: every input parses, so a mistake renders as *something else* instead
+of raising anything. That is the failure mode worth surfacing — an unclosed fence swallows the rest
+of the note, a table without its separator row becomes a paragraph of pipes, and malformed
+frontmatter is caught and discarded server-side (`Frontmatter.parse`), silently taking the note's
+title and tags with it.
+
+`lintMarkdown(content, linkExists?)` is a pure client-side scan — **no new dependency, and no
+server round trip** — returning `{ line, severity, message }[]` in line order. It reads the *raw*
+buffer, frontmatter included and nothing stripped, so its 1-based line numbers map straight onto the
+textarea. It checks: unclosed ``` / ~~~ fences (matching CommonMark's same-char, same-or-greater
+length rule), table headers with a missing or mismatched `|---|` row, `#heading` with no space
+(skipping single-`#` single-word lines, which are inline tags), frontmatter that never closes /
+doesn't start on line 1 / indents with a tab / has a non-`key: value` top-level line, callout types
+with no colour in `markdown.css`, unbalanced `$`/`$$` math, and unresolved `[[wiki-links]]`
+(deduplicated, skipping image and `.diagram` targets). Everything inside a fence is skipped.
+
+Results render as the **Problems** section at the top of the Context tab, badged on the tab itself
+so a count is visible while the rail shows chat. Clicking one calls NotesScreen's `jumpToLine`,
+which selects that line and centers it via `measureCaret` — the counterpart to `scrollToHeading`,
+which moves the preview instead: a problem is a fact about the *source*, so the caret has to land
+where the fix goes. Severity colours match the toaster's (`text-red-400` / `text-amber-400`).
+
+Deliberately **not** checked: anything that is valid Markdown but not what was meant (`*italic*` for
+`**bold**`, wrong list nesting), and mermaid fence contents — those can only fail at render, where
+MermaidBlock reports mermaid's own parse error (§5).
 
 ## 6. AI note actions (`notes.ai` package)
 
@@ -206,7 +252,14 @@ saves before dispatching and aborts if that fails.
 
 The **one** AI surface in the workspace: the chat thread, the §6 note actions, and a single
 composer, as the right rail's AI tab. Everything reuses `POST /api/v1/chats/send` through the
-shared `chats.stream.ts` client (global `src/services`, so no cross-module import).
+shared `chats.stream.ts` client (global `src/services`, so no cross-module import). The **model
+picker** heads the tab (shared `ModelSelector` in its `fullWidth` mode, embeddings filtered out,
+locked while generating) — one control for both the chat turns and the note actions, and the only
+one, so the row carries no "Model" label. `fullWidth` means the trigger **fills the rail and clips
+the name with an ellipsis** instead of sizing to it: same `ModelOptionLabel` row as chat's trigger
+(provider badge, name, modality badges), but built directly rather than through `SelectValue`,
+which is the only way to give the name `min-w-0 truncate` while the badges keep their size. The
+whole name is in a tooltip.
 
 **One input, two jobs.** The composer is the single text box: **Enter** sends it to the chat,
 **Rewrite** applies the same text as the note-edit instruction, and Summarize/Continue ignore it.

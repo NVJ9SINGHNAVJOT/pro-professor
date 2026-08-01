@@ -110,7 +110,7 @@ public class NotesService {
     public NoteDetail createNote(NoteCreateRequest request) {
         String content = request.content() == null ? "" : request.content();
         Frontmatter frontmatter = Frontmatter.parse(content);
-        String title = uniqueTitle(resolveTitle(frontmatter, request.title(), content), null);
+        String title = uniqueTitle(resolveTitle(frontmatter, request.title(), null), null);
         NoteRow note = notesRepository.insert(title, content, toJson(frontmatter.map()));
         indexRefs(note.id(), frontmatter);
         return getNote(note.id());
@@ -118,12 +118,32 @@ public class NotesService {
 
     @Transactional
     public NoteDetail updateNote(long id, NoteUpdateRequest request) {
-        requireNote(id);
+        NoteRow existing = requireNote(id);
         String content = request.content() == null ? "" : request.content();
         Frontmatter frontmatter = Frontmatter.parse(content);
-        String title = uniqueTitle(resolveTitle(frontmatter, request.title(), content), id);
+        // The note's own title is the fallback, so a content-only save never renames it — the
+        // editor sends no title, because renaming is {@link #renameNote}'s job.
+        String title = uniqueTitle(resolveTitle(frontmatter, request.title(), existing.title()), id);
         notesRepository.update(id, title, content, toJson(frontmatter.map()));
         indexRefs(id, frontmatter);
+        return getNote(id);
+    }
+
+    /**
+     * Renames a note and nothing else — the content, its frontmatter, tags and links are left
+     * exactly as they are, and no revision is snapshotted (revisions capture content).
+     *
+     * <p>Deliberately not part of {@link #updateNote}, which is the editor's save path: renaming
+     * from the toolbar must not also persist whatever is sitting unsaved in the buffer. A
+     * frontmatter {@code title:} still wins on the note's next content save.
+     */
+    @Transactional
+    public NoteDetail renameNote(long id, String title) {
+        requireNote(id);
+        if (title == null || title.isBlank()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Note title must not be blank.");
+        }
+        notesRepository.updateTitle(id, uniqueTitle(truncate(title.trim()), id));
         return getNote(id);
     }
 
@@ -147,11 +167,19 @@ public class NotesService {
                 .orElseThrow(() -> new ResourceNotFoundException("Note not found: " + id));
     }
 
-    /** Title precedence: frontmatter {@code title} → request title → "Untitled". */
-    private static String resolveTitle(Frontmatter frontmatter, String requestTitle, String content) {
+    /**
+     * Title precedence: frontmatter {@code title} → request title → {@code current} → "Untitled".
+     * {@code current} is the note's existing title on an update, and null on a create.
+     */
+    private static String resolveTitle(Frontmatter frontmatter, String requestTitle, String current) {
         String title = frontmatter.title();
         if (title == null && requestTitle != null && !requestTitle.isBlank()) title = requestTitle.trim();
+        if (title == null && current != null && !current.isBlank()) title = current;
         if (title == null || title.isBlank()) title = DEFAULT_TITLE;
+        return truncate(title);
+    }
+
+    private static String truncate(String title) {
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
     }
 

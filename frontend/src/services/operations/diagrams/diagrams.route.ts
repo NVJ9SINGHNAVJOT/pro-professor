@@ -7,6 +7,7 @@ const diagramsEndPoints = {
   GET_BY_TITLE: (title: string) => `${BASE_URL_SERVER}/diagrams/by-title/${encodeURIComponent(title)}`,
   CREATE: `${BASE_URL_SERVER}/diagrams`,
   UPDATE: (id: number) => `${BASE_URL_SERVER}/diagrams/${id}`,
+  RENAME: (id: number) => `${BASE_URL_SERVER}/diagrams/${id}/title`,
   MOVE: (id: number) => `${BASE_URL_SERVER}/diagrams/${id}/folder`,
   DELETE_ONE: (id: number) => `${BASE_URL_SERVER}/diagrams/${id}`,
   CREATE_FOLDER: `${BASE_URL_SERVER}/diagram-folders`,
@@ -86,6 +87,13 @@ export const diagramsRoute = {
     method: "PUT",
     url: diagramsEndPoints.UPDATE(id),
     data: payload,
+  })),
+
+  /** Rename only — deliberately not part of `updateDiagram`, so it never round-trips the scene. */
+  renameDiagram: createRoute<[id: number, title: string], GetDiagramResponse>((id, title) => ({
+    method: "PUT",
+    url: diagramsEndPoints.RENAME(id),
+    data: { title },
   })),
 
   /**

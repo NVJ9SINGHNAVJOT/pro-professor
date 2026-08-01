@@ -1,26 +1,67 @@
-import { ArrowUpRightIcon, HashIcon, LinkIcon, ListTreeIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  HashIcon,
+  InfoIcon,
+  LinkIcon,
+  ListTreeIcon,
+  OctagonXIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import type { NoteSummary } from "@/services/operations/notes/notes.route";
 import { extractOutline, extractWikiRefs } from "@/modules/notes/utils";
+import type { Problem, ProblemSeverity } from "@/modules/notes/editor/lintMarkdown";
 import { OUTLINE_INDENT_PX } from "@/modules/notes/constants";
 import { ROUTES } from "@/constants/routes";
+
+/** Same severity vocabulary as the toaster, so red/amber mean the same thing across the app. */
+const SEVERITY: Record<ProblemSeverity, { Icon: LucideIcon; className: string }> = {
+  error: { Icon: OctagonXIcon, className: "text-red-400" },
+  warning: { Icon: TriangleAlertIcon, className: "text-amber-400" },
+  info: { Icon: InfoIcon, className: "text-neutral-500" },
+};
+
+/** Renders the `code spans` in a problem message — they are all literal Markdown syntax. */
+const withCodeSpans = (message: string) =>
+  message.split("`").map((part, index) =>
+    index % 2 === 1 ? (
+      <code key={index} className="rounded bg-neutral-800 px-1 font-mono text-neutral-200">
+        {part}
+      </code>
+    ) : (
+      part
+    ),
+  );
 
 interface ContextPanelProps {
   /** Notes linking here — loaded with the note by the route loader. */
   backlinks: NoteSummary[];
   content: string;
   tags: string[];
+  /** Markdown mistakes in the buffer, in line order (see lintMarkdown). */
+  problems: Problem[];
   /** Wiki-link navigation (resolves by title; opens a draft when missing). */
   onWikiClick: (target: string) => void;
   /** Scrolls the preview to one of this note's headings — no navigation, so nothing refetches. */
   onHeadingClick: (heading: string) => void;
+  /** Puts the editor's caret on a problem's line. */
+  onProblemClick: (line: number) => void;
 }
 
 /**
- * Backlinks, outbound links, outline, and tags of the active note — the Context tab of
+ * Problems, backlinks, outbound links, outline, and tags of the active note — the Context tab of
  * {@link RightRail}, which owns the pane chrome around it.
  */
-const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }: ContextPanelProps) => {
+const ContextPanel = ({
+  backlinks,
+  content,
+  tags,
+  problems,
+  onWikiClick,
+  onHeadingClick,
+  onProblemClick,
+}: ContextPanelProps) => {
   const navigate = useNavigate();
 
   const outline = extractOutline(content);
@@ -28,6 +69,36 @@ const ContextPanel = ({ backlinks, content, tags, onWikiClick, onHeadingClick }:
 
   return (
     <div className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-5 overflow-y-auto p-3">
+      <section>
+        <div className="flex items-center gap-x-2 pb-1.5 caption-small-medium text-neutral-500">
+          <TriangleAlertIcon className="size-3.5" />
+          Problems
+        </div>
+        {problems.length === 0 ? (
+          <div className="caption-regular text-neutral-600">No problems</div>
+        ) : (
+          <ul className="flex flex-col gap-y-0.5">
+            {problems.map((problem, index) => {
+              const { Icon, className } = SEVERITY[problem.severity];
+              return (
+                <li key={index}>
+                  <button
+                    type="button"
+                    onClick={() => onProblemClick(problem.line)}
+                    className="flex w-full cursor-pointer items-start gap-x-1.5 rounded px-1 py-1 text-left hover:bg-neutral-800"
+                  >
+                    <Icon className={`mt-0.5 size-3.5 shrink-0 ${className}`} />
+                    <span className="min-w-0 para-small-regular text-neutral-300">
+                      <span className="text-neutral-500">Line {problem.line}</span> · {withCodeSpans(problem.message)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section>
         <div className="flex items-center gap-x-2 pb-1.5 caption-small-medium text-neutral-500">
           <LinkIcon className="size-3.5" />

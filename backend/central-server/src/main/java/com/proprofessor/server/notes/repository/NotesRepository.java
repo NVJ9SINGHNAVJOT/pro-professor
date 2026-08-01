@@ -134,6 +134,14 @@ public class NotesRepository {
                 .execute();
     }
 
+    /** Rename only — the content and its derived columns stay as they are. */
+    public void updateTitle(long id, String title) {
+        dsl.update(NOTES)
+                .set(NOTES.TITLE, title)
+                .where(NOTES.ID.eq(id))
+                .execute();
+    }
+
     public boolean existsById(long id) {
         return dsl.fetchExists(NOTES, NOTES.ID.eq(id));
     }

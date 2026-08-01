@@ -4,6 +4,7 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
 import "@/modules/diagram/components/diagramEditor.css";
+import EditableTitle from "@/components/common/EditableTitle";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { diagramsRoute, type DiagramDetail } from "@/services/operations/diagrams/diagrams.route";
@@ -38,6 +39,8 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [title, setTitle] = useState(diagram?.title ?? "");
+  /** The server's title — what a rename is measured against, and what a failed one reverts to. */
+  const [savedTitle, setSavedTitle] = useState(diagram?.title ?? "");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // null until a draft's first save creates the row; the prop can't carry it, since the parent
   // deliberately keeps this component mounted across that transition.
@@ -58,6 +61,7 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
 
   const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
   const { execute: updateDiagram } = useApi(diagramsRoute.updateDiagram);
+  const { execute: renameDiagram } = useApi(diagramsRoute.renameDiagram);
 
   useEffect(() => {
     return () => {
@@ -106,6 +110,7 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
         idRef.current = saved.id;
         // The server named it ("Untitled Diagram", or a de-duplicated title); adopt that unless
         // the user has typed on since.
+        setSavedTitle(saved.title);
         if (titleRef.current === titleToSave) setTitle(saved.title);
       }
       // Every save moves the row: `updatedAt` changed, so the list re-sorts it to the top.
@@ -115,6 +120,32 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  /**
+   * Commits a rename from the toolbar. Its own request, so it doesn't round-trip the scene —
+   * except on a draft, where there is no row yet and the first save has to create it.
+   */
+  const commitTitle = async (next: string) => {
+    if (idRef.current === null) {
+      setTitle(next);
+      void doSave(next);
+      return;
+    }
+    setSaveState("saving");
+    const res = await renameDiagram(idRef.current, next);
+    if (res.error) {
+      setSaveState("idle");
+      setTitle(savedTitle);
+      toast.error("Failed to rename diagram");
+      return;
+    }
+    const saved = res.response.data;
+    setSaveState("saved");
+    // The server's copy, which may carry a "… 2" suffix from a title clash.
+    setTitle(saved.title);
+    setSavedTitle(saved.title);
+    onSaved?.(saved);
+  };
 
   // Excalidraw fires onChange for selection/pointer too; the scene version only
   // moves on real element edits, so it debounces those into a single save.
@@ -131,15 +162,11 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
         {leading}
-        <input
+        <EditableTitle
           value={title}
-          spellCheck={false}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            if (saveTimer.current) clearTimeout(saveTimer.current);
-            saveTimer.current = setTimeout(() => doSave(e.target.value), 800);
-          }}
-          className="min-w-0 flex-1 truncate bg-transparent para-medium-semibold outline-none"
+          savedValue={savedTitle}
+          onChange={setTitle}
+          onCommit={(next) => void commitTitle(next)}
           placeholder="Untitled Diagram"
         />
         <span className="ml-auto caption-small-regular text-neutral-500">

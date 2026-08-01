@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { FileText, ImageIcon, Mic, Video } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const MODALITY_META: Record<string, { icon: ComponentType<{ size?: number }>; label: string; className: string }> = {
   text: { icon: FileText, label: "Text", className: "bg-neutral-700 text-neutral-300" },
@@ -14,6 +15,8 @@ interface ModelOptionLabelProps {
   modalities?: string[];
   providerLabel?: string;
   providerClassName?: string;
+  /** On the row itself — `min-w-0` where the row has to clip rather than overflow. */
+  className?: string;
 }
 
 /** Row showing a provider badge, the model name, and badges for its accepted input types. */
@@ -23,15 +26,18 @@ export const ModelOptionLabel = ({
   modalities = [],
   providerLabel,
   providerClassName,
+  className,
 }: ModelOptionLabelProps) => (
-  <span className="flex items-center gap-2">
+  <span className={cn("flex items-center gap-2", className)}>
     {providerLabel && (
-      <span className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${providerClassName}`}>
+      <span
+        className={`inline-flex shrink-0 items-center rounded px-1 py-0.5 text-[10px] font-medium ${providerClassName}`}
+      >
         {providerLabel}
       </span>
     )}
     <span className={nameClassName}>{name}</span>
-    <span className="flex items-center gap-1" aria-label="Supported input types">
+    <span className="flex shrink-0 items-center gap-1" aria-label="Supported input types">
       {modalities.map((mod) => {
         const meta = MODALITY_META[mod];
         if (!meta) return null;

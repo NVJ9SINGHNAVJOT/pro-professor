@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import DiagramViewport from "@/components/common/DiagramViewport";
 
 /* Mermaid is the one heavy diagram dependency — loaded lazily on first use so it
  * stays out of the main bundle. Initialized once with the app's dark theme. */
@@ -12,6 +13,17 @@ const loadMermaid = () => {
 };
 
 let renderSeq = 0;
+
+/* mermaid.render() blanks the container it is given and resets mermaid's module-global config, then
+ * awaits the diagram type's lazy import — so two overlapping renders wreck each other's DOM and
+ * only one survives. A note with several ```mermaid fences mounts them all in the same tick, so
+ * renders queue up and go through one at a time. */
+let renderQueue: Promise<unknown> = Promise.resolve();
+const queueRender = <T,>(task: () => Promise<T>) => {
+  const run = renderQueue.then(task);
+  renderQueue = run.catch(() => {}); // a failed render must not wedge the queue
+  return run;
+};
 
 /* Without a container, mermaid.render appends its measuring element to
  * document.body — a wide/tall diagram then momentarily stretches the page and
@@ -35,33 +47,50 @@ const getScratchBox = () => {
 const RERENDER_DEBOUNCE_MS = 200;
 
 /**
+ * Mermaid's parse errors name the offending line and token, which is the whole value of
+ * showing a failure at all — so pull the text out rather than only reporting *that* it broke.
+ * Older builds carry it on `str` instead of the Error's `message`.
+ */
+const parseErrorOf = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === "object" && error !== null && "str" in error) {
+    const str = String((error as { str: unknown }).str).trim();
+    if (str) return str;
+  }
+  return "This diagram didn't parse.";
+};
+
+/**
  * Renders a Mermaid definition (a ```mermaid fence, or the graph view's generated
  * definition) to inline SVG. While the definition doesn't parse — e.g. mid-stream
- * or mid-edit — the previous diagram stays and the raw source shows underneath.
+ * or mid-edit — the previous diagram stays and the parse error plus the raw source
+ * show underneath.
  */
 const MermaidBlock = ({ code }: { code: string }) => {
   const [svg, setSvg] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const idRef = useRef(`mermaid-${++renderSeq}`);
 
   useEffect(() => {
     let cancelled = false;
     const renderId = `${idRef.current}-${++renderSeq}`;
-    const render = async () => {
-      try {
-        const mermaid = await loadMermaid();
-        const { svg: rendered } = await mermaid.render(renderId, code, getScratchBox());
-        if (!cancelled) {
-          setSvg(rendered);
-          setFailed(false);
+    const render = () =>
+      queueRender(async () => {
+        if (cancelled) return; // unmounted or superseded while waiting its turn
+        try {
+          const mermaid = await loadMermaid();
+          const { svg: rendered } = await mermaid.render(renderId, code, getScratchBox());
+          if (!cancelled) {
+            setSvg(rendered);
+            setError(null);
+          }
+        } catch (failure) {
+          if (!cancelled) setError(parseErrorOf(failure));
+        } finally {
+          // drop measuring leftovers (incl. mermaid's orphaned error element on parse failure)
+          scratchBox?.replaceChildren();
         }
-      } catch {
-        if (!cancelled) setFailed(true);
-      } finally {
-        // drop measuring leftovers (incl. mermaid's orphaned error element on parse failure)
-        scratchBox?.replaceChildren();
-      }
-    };
+      });
     // first render immediately (no blank flash); re-renders wait for typing to settle
     const timer = setTimeout(render, svg === null ? 0 : RERENDER_DEBOUNCE_MS);
     return () => {
@@ -72,12 +101,13 @@ const MermaidBlock = ({ code }: { code: string }) => {
   }, [code]);
 
   return (
-    <span className="mermaid-block block">
-      {svg && <span className="block overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />}
-      {failed && (
-        <code className="block whitespace-pre-wrap rounded-xl border border-dashed border-neutral-700 p-3 caption-small-regular text-neutral-500">
-          {code}
-        </code>
+    <span className="mermaid-block group block">
+      {svg && <DiagramViewport svg={svg} />}
+      {error && (
+        <span className="block rounded-xl border border-dashed border-neutral-700 p-3">
+          <span className="block whitespace-pre-wrap pb-2 caption-small-regular text-amber-400">{error}</span>
+          <code className="block whitespace-pre-wrap caption-small-regular text-neutral-500">{code}</code>
+        </span>
       )}
     </span>
   );

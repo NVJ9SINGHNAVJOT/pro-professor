@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Markdown from "@/components/common/markdown/Markdown";
+import ModelSelector from "@/components/common/ModelSelector";
 import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { WikiHandlers } from "@/components/common/markdown/Markdown";
+import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import type { NoteApplyMode, NoteChatContextMode } from "@/modules/notes/types";
 import type { NoteAiAction } from "@/services/operations/notes/notes.stream";
@@ -35,6 +37,8 @@ const CONTEXT_MODES: { mode: NoteChatContextMode; label: string }[] = [
 
 interface NoteChatPanelProps {
   chat: ReturnType<typeof useNoteChat>;
+  /** Owns the model picked for this tab — both the chat and the note actions run on it. */
+  ai: ReturnType<typeof useNoteAi>;
   /** Makes `[[links]]` in replies clickable, same as the preview pane. */
   wiki: WikiHandlers;
   /** Writes a reply into the editor. Absent while an AI action owns the buffer. */
@@ -49,7 +53,7 @@ interface NoteChatPanelProps {
  * Chat about the open note without changing it. Replies land in the note only through the
  * per-message apply menu — nothing here writes to the editor on its own.
  */
-const NoteChatPanel = ({ chat, wiki, onApply, onRunAction, noteActionsEnabled }: NoteChatPanelProps) => {
+const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnabled }: NoteChatPanelProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // Follow the stream, the way the main chat does.
@@ -59,6 +63,20 @@ const NoteChatPanel = ({ chat, wiki, onApply, onRunAction, noteActionsEnabled }:
 
   return (
     <>
+      {/* The model this tab runs on — chat turns and the note actions below both use it. Lives
+          here rather than in the toolbar: this tab is the only thing that reads it. Unlabelled: the
+          provider badge and name say what it is, and the row is narrow enough to need the width. */}
+      <div className="flex shrink-0 items-center border-b border-neutral-800 px-2 py-2">
+        <ModelSelector
+          value={ai.activeSelection}
+          onChange={ai.setSelected}
+          disabled={ai.busy}
+          align="start"
+          fullWidth
+          filter={(m) => m.role !== "embedding" && !m.name.toLowerCase().includes("embed")}
+        />
+      </div>
+
       {/* What the next *chat turn* will carry — shown, not guessed at. Labelled explicitly because
           the note actions below ignore it: those always run server-side over the whole saved note. */}
       <div className="flex shrink-0 flex-col gap-y-1.5 border-b border-neutral-800 px-3 py-2">
