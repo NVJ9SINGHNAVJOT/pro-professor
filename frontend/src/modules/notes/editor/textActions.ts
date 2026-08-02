@@ -248,3 +248,26 @@ export function replaceRange(state: TextState, from: number, to: number, snippet
     selectionEnd: caret,
   };
 }
+
+/* ── Applying a result ───────────────────────────────────────────────────── */
+
+/**
+ * The single span of `before` that has to be replaced — and what to replace it with — to get
+ * `after`: the common prefix and suffix trimmed off both sides.
+ *
+ * Transforms rebuild the whole value, but the textarea must only be *edited* where it actually
+ * changed. NotesScreen writes that edit through `execCommand`, and the edit's width is what the
+ * browser records as one undo step: replacing the entire note would make Cmd+Z restore the note's
+ * previous text as a single blob, and would wipe the selection of everything the user didn't touch.
+ */
+export function changedRange(before: string, after: string): { start: number; end: number; text: string } {
+  const limit = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < limit && before[start] === after[start]) start += 1;
+  // Stop the suffix scan at `start` from both sides, or a repeated character
+  // ("ab" → "aab") would be counted into the prefix and the suffix at once.
+  const maxTail = Math.min(before.length, after.length) - start;
+  let tail = 0;
+  while (tail < maxTail && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail += 1;
+  return { start, end: before.length - tail, text: after.slice(start, after.length - tail) };
+}

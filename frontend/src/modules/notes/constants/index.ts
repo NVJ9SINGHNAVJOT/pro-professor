@@ -83,7 +83,9 @@ export const SCROLL_SYNC_RELEASE_MS = 120;
 /** Suffix marking a `![[name.diagram]]` embed target as a diagram rather than a note/image. */
 export const DIAGRAM_SUFFIX = ".diagram";
 
-export const MERMAID_TEMPLATE = "\n```mermaid\ngraph TD\n  A[Start] --> B[Next]\n```\n";
+/** Starter diagram; the numbered edges are the house notation (skills/pro-professor-notes/SKILL.md). */
+export const MERMAID_TEMPLATE =
+  "\n```mermaid\nflowchart TD\n  A[Start] -->|1| B{Branch?}\n  B -->|2a| C[Yes]\n  B -->|2b| D[No]\n  C -->|3| E[Done]\n  D -->|3| E\n```\n";
 
 export const VIEW_MODES: { mode: NoteViewMode; label: string; icon: typeof CodeIcon }[] = [
   { mode: "source", label: "Source only", icon: CodeIcon },

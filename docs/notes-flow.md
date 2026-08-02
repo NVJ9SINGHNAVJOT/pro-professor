@@ -111,7 +111,14 @@ each pane scrolls independently:
   Then editor
   ([NoteEditor](../frontend/src/modules/notes/components/NoteEditor.tsx) — a plain `TextareaInput`
   plus a line-number gutter and inline problem squiggles, §5a) ⟷ preview split with a hand-rolled
-  draggable divider ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)). The two
+  draggable divider ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)).
+  **Every programmatic edit — Tab/⇧Tab, Enter list continuation, ⌘B/⌘I, toolbar and palette
+  formatting, slash-menu blocks, an applied AI reply — goes through `applyTextState`, which writes
+  it with `execCommand("insertText")` over just the span `changedRange` says changed, never through
+  `setContent`.** The textarea is controlled, so `setContent` makes React *assign* `.value`, and a
+  scripted `.value` assignment wipes the browser's native undo stack: ⌘Z would restore nothing after
+  an indent, and lose the typing history before it too. An execCommand edit is recorded as a user
+  edit, so each transform is one undo step. The two
   panes **scroll in sync** proportionally, with a short driver lock so the pane being driven can't
   scroll the other one back. Cmd/Ctrl+S saves —
   and on `/notes/new` that save is the `POST` that creates the note (see §"New note" below);
@@ -185,6 +192,15 @@ transforms (no `unist-util-visit` dependency):
   comically large. A diagram looking small is a pane-width problem, not a rendering one. Mermaid is the way to draw
   a diagram inline in a note; it works in chat replies too. Standalone Excalidraw diagrams live in
   the `/diagrams` module and are referenced by `[[Title.diagram]]` link.
+- **Edge-numbering convention** — mermaid flows label their edges so a path can be read in order:
+  `1`,`2`,`3` linear; `2a`/`2b` where only one branch is taken; `4.1`/`4.2` where every branch is;
+  the shared number repeated on both edges where branches rejoin; structural edges (an import,
+  "depends on") unlabelled; sequence diagrams use `autonumber` and state/ER/class diagrams stay
+  unnumbered. The full table lives in
+  [skills/pro-professor-notes/SKILL.md](../skills/pro-professor-notes/SKILL.md) § Numbering the
+  edges — **canonical**; condensed copies ride in `MERMAID_TEMPLATE`
+  ([constants/index.ts](../frontend/src/modules/notes/constants/index.ts)) and
+  `NotesAiService.MERMAID_NUMBERING`, so a change to the notation touches all four.
 
 ## 5a. Markdown problems ([editor/lintMarkdown.ts](../frontend/src/modules/notes/editor/lintMarkdown.ts))
 

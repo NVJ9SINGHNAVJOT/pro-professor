@@ -53,6 +53,7 @@ import RevisionList from "@/modules/notes/components/RevisionList";
 import CommandPalette, { type PaletteCommand } from "@/modules/notes/components/CommandPalette";
 import SlashMenu from "@/modules/notes/components/SlashMenu";
 import {
+  changedRange,
   continueListOnEnter,
   indent,
   insertCodeBlock,
@@ -420,14 +421,34 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
 
   /**
    * Applies a pure textActions result: new content + restored focus/selection.
-   * flushSync so the selection is set on the ALREADY-updated textarea — a
-   * deferred restore (rAF) races with fast typing and scrambles the caret.
+   *
+   * The edit goes in through `execCommand("insertText")` rather than `setContent`, because a
+   * controlled textarea makes React *assign* `.value` — and assigning `.value` from script wipes
+   * the browser's native undo stack. That is what left Cmd+Z with nothing to restore after a
+   * Tab-indent, and took the typing history before it down as well. An execCommand edit is
+   * recorded like a user edit instead: one undo step per transform, earlier history intact. React's
+   * own `onChange` fires from it, so `content` still tracks the textarea.
+   *
+   * Only the span that actually changed is rewritten (`changedRange`), so indenting three lines
+   * doesn't re-type the whole note into a single undo entry.
    */
   const applyTextState = (next: TextState) => {
-    flushSync(() => setContent(next.value));
     const textarea = textareaRef.current;
-    if (!textarea) return;
+    if (!textarea) {
+      setContent(next.value);
+      return;
+    }
     textarea.focus();
+    const { start, end, text } = changedRange(textarea.value, next.value);
+    if (start !== end || text !== "") {
+      textarea.setSelectionRange(start, end);
+      // insertText can't express a pure deletion (outdent, unwrapping a marker); `delete` can, and
+      // is only ever reached with a non-empty selection, so it can't eat a character on its own.
+      const written = text ? document.execCommand("insertText", false, text) : document.execCommand("delete");
+      // No execCommand (or it refused): correctness over undo — flushSync so the selection below
+      // still lands on the ALREADY-updated textarea, since a deferred restore races with typing.
+      if (!written) flushSync(() => setContent(next.value));
+    }
     textarea.setSelectionRange(next.selectionStart, next.selectionEnd);
   };
 
@@ -448,8 +469,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const applyChatReply = (mode: NoteApplyMode, text: string) => {
     const textarea = textareaRef.current;
     // Preview-only doesn't render the editor, so there is no caret or selection to land on —
-    // appending is the only honest option. Switch to split so the result is visible either way.
-    if (mode === "append" || !textarea) {
+    // appending is the only honest option, and there is no textarea to write it through. Switch to
+    // split so the result is visible either way.
+    if (!textarea) {
       if (viewMode === "preview") setViewMode("split");
       setContent((current) => `${current.trimEnd()}\n\n${text}\n`);
       return;
@@ -459,6 +481,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       selectionStart: textarea.selectionStart,
       selectionEnd: textarea.selectionEnd,
     };
+    // Appending is a replace of the note's trailing whitespace — routed through applyTextState like
+    // every other insert so it lands on the undo stack rather than wiping it.
+    if (mode === "append") {
+      applyTextState(replaceRange(state, state.value.trimEnd().length, state.value.length, `\n\n${text}\n`));
+      return;
+    }
     // "Insert at cursor" is the zero-width case of "replace selection".
     const to = mode === "selection" ? state.selectionEnd : state.selectionStart;
     applyTextState(replaceRange(state, state.selectionStart, to, text));

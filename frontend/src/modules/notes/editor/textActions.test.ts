@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  changedRange,
   continueListOnEnter,
   indent,
   insertCodeBlock,
@@ -193,5 +194,39 @@ describe("replaceRange", () => {
     const result = replaceRange(caret("/ta|"), 0, 3, "| A |\n| --- |\n| ‸ |\n");
     expect(result.value).toBe("| A |\n| --- |\n|  |\n");
     expect(result.selectionStart).toBe("| A |\n| --- |\n| ".length);
+  });
+});
+
+describe("changedRange", () => {
+  /** Applying the returned edit to `before` must always reproduce `after`. */
+  const applied = (before: string, after: string) => {
+    const { start, end, text } = changedRange(before, after);
+    return before.slice(0, start) + text + before.slice(end);
+  };
+
+  it("narrows an indent to the inserted spaces", () => {
+    expect(changedRange("a\nb", "  a\nb")).toEqual({ start: 0, end: 0, text: "  " });
+  });
+
+  it("narrows an outdent to a pure deletion", () => {
+    expect(changedRange("  a", "a")).toEqual({ start: 0, end: 2, text: "" });
+  });
+
+  it("spans every changed line when a block is indented", () => {
+    expect(applied("a\nb\nc", "  a\n  b\n  c")).toBe("  a\n  b\n  c");
+  });
+
+  it("leaves the untouched tail out of the edit", () => {
+    const { end } = changedRange("# t\nbody\ntail", "# t\n- body\ntail");
+    expect(end).toBeLessThan("# t\nbody".length + 1);
+  });
+
+  it("never counts a repeated character into both prefix and suffix", () => {
+    expect(applied("ab", "aab")).toBe("aab");
+    expect(applied("aab", "ab")).toBe("ab");
+  });
+
+  it("reports an empty edit when nothing changed", () => {
+    expect(changedRange("same", "same")).toEqual({ start: 4, end: 4, text: "" });
   });
 });

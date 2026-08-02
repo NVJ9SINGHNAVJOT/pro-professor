@@ -49,13 +49,20 @@ public class NotesAiService {
             ![alt](https://...) embeds one by URL. Only reference images that already appear in the note or \
             that the task gives you — never invent a filename or a URL.""";
 
+    /** House style for flow diagrams; the full table lives in {@code skills/pro-professor-notes/SKILL.md}. */
+    private static final String MERMAID_NUMBERING = """
+            When a mermaid diagram shows a flow, label its edges with step numbers: 1, 2, 3 in order; \
+            2a/2b for branches where only one is taken; 4.1/4.2 where every branch is taken; the same \
+            number repeated on both edges where branches rejoin. Leave structural edges (an import, \
+            "depends on") unlabelled, and leave sequence and state diagrams unnumbered.""";
+
     /** For {@link Action#UPDATE}, the one action whose result legitimately is the whole note. */
     private static final String FULL_NOTE_SYSTEM_PROMPT = """
             You are a note-editing assistant inside a Markdown note app. \
             You will be given a note and a task; respond with ONLY the complete updated Markdown note. \
             Do not add explanations before or after it, and do not wrap the whole note in a code fence. \
             Preserve the YAML frontmatter block (--- ... ---) when present, updating it only when the task asks. \
-            """ + MARKDOWN_DIALECT;
+            """ + MARKDOWN_DIALECT + " " + MERMAID_NUMBERING;
 
     /**
      * For the fragment actions. The delimiter is what makes the result identifiable: a model that
@@ -70,7 +77,7 @@ public class NotesAiService {
             preamble, no explanation, no code fence, and no copy of the note you were given. \
             For example, when the task asks for <summary>: <summary>This note covers X and Y.</summary> \
             Always output the tagged block first, before anything else. \
-            """ + MARKDOWN_DIALECT;
+            """ + MARKDOWN_DIALECT + " " + MERMAID_NUMBERING;
 
     private static final Pattern WRAPPING_FENCE =
             Pattern.compile("\\A```[a-zA-Z]*\\s*\\n(.*)\\n```\\s*\\z", Pattern.DOTALL);
