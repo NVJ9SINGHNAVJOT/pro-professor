@@ -111,10 +111,19 @@ existing barrel stay as they are.
 
 - Uses Tailwind directives (`@layer components`, `@apply`, theme vars) → `@import` it from
   `src/index.css` so Tailwind's pipeline sees it. This is the common case (`button.css`,
-  `noteEditor.css`, `markdown.css`).
-- Plain CSS overriding a third-party stylesheet → `import` it from the component file instead,
-  which keeps vendor overrides out of the global cascade and ships them in the component's own
-  lazy chunk. Only `diagramEditor.css` (Excalidraw overrides) does this.
+  `noteEditor.css`, `markdown.css`). A **vendor** stylesheet an eager component depends on belongs
+  here too — `katex/dist/katex.min.css` is `@import`ed from `index.css`, not from `Markdown.tsx`.
+- Plain CSS overriding a third-party stylesheet, **in a lazy component** → `import` it from the
+  component file, so the overrides ride that component's own chunk instead of the global cascade.
+  Only `diagramEditor.css` (Excalidraw overrides, and `DiagramEditor` is the one `lazy()` component)
+  does this.
+
+Keeping CSS out of eagerly-imported `.tsx` files is not just tidiness: a bare `import "…css"` is a
+**side effect**, which stops a bundler from dropping the module when nothing uses it. A barrel that
+re-exports a side-effectful component makes that module unshakeable for every consumer of the
+folder. Pair this with `import type { … }` (statement-level, not an inline `{ type X }` specifier)
+for type-only imports — under this repo's `verbatimModuleSyntax`, the inline form compiles to a bare
+`import {} from "…"` that pins the whole module at runtime for the sake of a type.
 
 ## Editor title bars
 

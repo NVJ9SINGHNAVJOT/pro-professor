@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "@/components/common/toast";
-import { type WikiHandlers } from "@/components/common/Markdown";
+import type { WikiHandlers } from "@/components/common/Markdown";
 import { useApi } from "@/hooks/useApi";
-import { type NoteSummary } from "@/services/operations/notes/notes.route";
+import type { NoteSummary } from "@/services/operations/notes/notes.route";
 import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";
 import NoteEmbed from "@/modules/notes/components/NoteEmbed";
 import { DIAGRAM_SUFFIX } from "@/modules/notes/constants";

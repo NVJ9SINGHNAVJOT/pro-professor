@@ -1,7 +1,7 @@
 import { useLoaderData } from "react-router";
 import ChatScreen from "@/modules/chat/screens/ChatScreen";
 import { useAppSelector } from "@/redux/store";
-import { type ChatDetailLoaderData } from "@/pages/chat/loader";
+import type { ChatDetailLoaderData } from "@/pages/chat/loader";
 
 export default function ChatPage() {
   // The history list is Redux state seeded by the parent route's loader, so a new or renamed

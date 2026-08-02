@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/redux/store";
-import { type ModelProvider, type ProviderModel } from "@/services/operations/models/models.route";
+import type { ModelProvider, ProviderModel } from "@/services/operations/models/models.route";
 import type { SelectedModel } from "@/modules/chat/types";
 import { MODEL_SEPARATOR, PROVIDER_META, PROVIDER_ORDER } from "@/modules/chat/constants";
 

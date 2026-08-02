@@ -3,6 +3,7 @@
 @import "tw-animate-css"; /* Css configuration for shadcn */
 @import "./styles/theme.css"; /* Tailwind custom configurations */
 @import "./styles/typography.css";
+@import "katex/dist/katex.min.css"; /* KaTeX's own stylesheet, for rehype-katex output in Markdown */
 @import "./components/common/Markdown/markdown.css";
 @import "./components/common/Button/button.css";
 @import "./modules/notes/components/NoteEditor/noteEditor.css";

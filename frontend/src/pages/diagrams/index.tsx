@@ -1,7 +1,7 @@
 import { useLoaderData } from "react-router";
 import DiagramsScreen from "@/modules/diagram/screens/DiagramsScreen";
 import { useAppSelector } from "@/redux/store";
-import { type DiagramDetailLoaderData } from "@/pages/diagrams/loader";
+import type { DiagramDetailLoaderData } from "@/pages/diagrams/loader";
 
 export default function DiagramsPage() {
   // The list is Redux state seeded by the parent route's loader, so an autosave can patch one row

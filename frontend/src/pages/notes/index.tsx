@@ -1,7 +1,7 @@
 import { useLoaderData } from "react-router";
 import NotesScreen from "@/modules/notes/screens/NotesScreen";
 import { useAppSelector } from "@/redux/store";
-import { type NoteDetailLoaderData } from "@/pages/notes/loader";
+import type { NoteDetailLoaderData } from "@/pages/notes/loader";
 
 export default function NotesPage() {
   // The explorer list is Redux state seeded by the parent route's loader, so a save can patch one
