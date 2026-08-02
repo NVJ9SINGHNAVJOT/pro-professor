@@ -7,7 +7,7 @@ import {
   SIDEBAR_ROW_WRAPPER,
   sidebarIndent,
   sidebarRow,
-} from "@/components/common/sidebarRow";
+} from "@/components/common/sidebar";
 import { EMPTY_DRAG_IMAGE } from "@/modules/diagram/constants";
 import { childFolders, diagramsIn } from "@/modules/diagram/utils/folderTree";
 import type { DiagramFolderSummary, DiagramSummary } from "@/services/operations/diagrams/diagrams.route";

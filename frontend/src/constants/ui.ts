@@ -15,3 +15,10 @@ export const MERMAID_RERENDER_DEBOUNCE_MS = 200;
 export const VIEWPORT_MIN_SCALE = 0.25;
 export const VIEWPORT_MAX_SCALE = 12;
 export const VIEWPORT_ZOOM_STEP = 1.5;
+
+/**
+ * The graph view's own ceiling. The note network is the extreme case of the above: every note is a
+ * node on one canvas, so fitted it's a strip of unreadable labels and even 12× leaves them small.
+ * It gets a much higher ceiling than a hand-written fence, which never needs one.
+ */
+export const GRAPH_VIEW_MAX_SCALE = 100;

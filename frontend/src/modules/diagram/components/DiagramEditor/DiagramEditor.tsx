@@ -3,7 +3,7 @@ import { Excalidraw, MainMenu, getSceneVersion, restore, serializeAsJSON } from 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
-import "@/modules/diagram/components/diagramEditor.css";
+import "@/modules/diagram/components/DiagramEditor/diagramEditor.css";
 import EditableTitle from "@/components/common/EditableTitle";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";

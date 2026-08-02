@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { FileText, Folder, FolderPlus, SquarePenIcon } from "lucide-react";
-import LeftNav from "@/components/common/LeftNav";
+import MainNavbar from "@/components/common/MainNavbar";
+import { sidebarNavRow, sidebarShell, sidebarShellInner } from "@/components/common/sidebar";
 import { toast } from "@/components/common/toast";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
@@ -19,13 +20,7 @@ import {
 import SidebarSection from "@/components/common/SidebarSection";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import DiagramTree, { type DragItem } from "@/modules/diagram/components/DiagramTree";
-import {
-  ancestorIds,
-  childFolders,
-  descendantIds,
-  diagramsIn,
-  isDescendant,
-} from "@/modules/diagram/utils/folderTree";
+import { ancestorIds, childFolders, descendantIds, diagramsIn, isDescendant } from "@/modules/diagram/utils/folderTree";
 import {
   diagramsRoute,
   type DiagramDetail,
@@ -360,92 +355,74 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
           setRootDragOver(false);
         }}
         onDrop={(e) => e.preventDefault()}
-        // Collapses like the chat and notes sidebars: the outer element animates its width while
-        // the inner one keeps the full width and fades, so the tree doesn't reflow on the way out.
-        className={cn(
-          "relative h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
-          sidebarOpen ? "w-67.5 border-r border-neutral-800" : "w-0",
-        )}
+        className={sidebarShell(sidebarOpen, ["relative", sidebarOpen && "border-r border-neutral-800"])}
       >
-        <div
-          className={cn(
-            "flex h-full w-67.5 flex-col gap-y-2 transition-opacity duration-300",
-            sidebarOpen ? "opacity-100" : "opacity-0",
-          )}
-        >
-        <LeftNav />
-        <div className="flex h-11.5 shrink-0 items-center gap-x-1 px-2">
-          <button
-            type="button"
-            onClick={create}
-            className="flex flex-1 cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800"
-          >
-            <SquarePenIcon className="size-4.5" />
-            New diagram
-          </button>
-          <button
-            type="button"
-            onClick={addFolder}
-            aria-label="New folder"
-            title="New folder"
-            className="shrink-0 cursor-pointer rounded-lg p-2 text-neutral-500 hover:bg-neutral-800 hover:text-white"
-          >
-            <FolderPlus className="size-4.5" />
-          </button>
-        </div>
-        {/* The way out to the top level, for a folder as much as a diagram: drag to the far left
+        <div className={sidebarShellInner(sidebarOpen)}>
+          <MainNavbar />
+          <div className="flex h-11.5 shrink-0 items-center gap-x-1 px-2">
+            <button type="button" onClick={create} className={sidebarNavRow(false, "flex-1 text-white")}>
+              <SquarePenIcon className="size-4.5" />
+              New diagram
+            </button>
+            <button
+              type="button"
+              onClick={addFolder}
+              aria-label="New folder"
+              title="New folder"
+              className="shrink-0 cursor-pointer rounded-lg p-2 text-neutral-500 hover:bg-neutral-800 hover:text-white"
+            >
+              <FolderPlus className="size-4.5" />
+            </button>
+          </div>
+          {/* The way out to the top level, for a folder as much as a diagram: drag to the far left
             edge, the way VS Code's explorer un-nests. A gutter rather than a banner — it costs no
             layout, never covers a row's label, and reads as "outdent" instead of as a button.
 
             It exists only while something nested is in flight, so it can't swallow a stray release,
             and it is overlaid, since appearing mid-gesture must not shift the list under the cursor. */}
-        {rootDropArmed && (
-          <div
-            onDragOver={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              setRootDragOver(true);
-              setDropTarget(null);
-            }}
-            onDrop={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              dropInto(null);
-            }}
-            title="Drop here to move to the top level"
-            className="absolute inset-y-0 left-0 z-20 w-4"
-          >
-            {/* The visible cue: a hairline down the edge that thickens and brightens on approach.
+          {rootDropArmed && (
+            <div
+              onDragOver={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setRootDragOver(true);
+                setDropTarget(null);
+              }}
+              onDrop={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                dropInto(null);
+              }}
+              title="Drop here to move to the top level"
+              className="absolute inset-y-0 left-0 z-20 w-4"
+            >
+              {/* The visible cue: a hairline down the edge that thickens and brightens on approach.
                 Snapped, not eased — a transition here reads as the highlight lagging the cursor. */}
-            <div className={cn("h-full", rootDragOver ? "w-1 bg-neutral-300" : "w-px bg-neutral-700")} />
-          </div>
-        )}
-        <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {folders.length === 0 && diagrams.length === 0 && (
-            <div className="px-2 caption-regular text-neutral-500">No diagrams yet</div>
+              <div className={cn("h-full", rootDragOver ? "w-1 bg-neutral-300" : "w-px bg-neutral-700")} />
+            </div>
           )}
-
-          {/* Loose diagrams first — the ones you reach for — then the folders holding the rest.
+          <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            {/* Loose diagrams first — the ones you reach for — then the folders holding the rest.
               The two sections partition the list: a diagram appears in exactly one of them. */}
-          <SidebarSection
-            label="Diagrams"
-            count={rootDiagrams.length}
-            open={showDiagrams}
-            onToggle={() => dispatch(toggleDiagramsSection())}
-            emptyLabel="No top-level diagrams"
-          >
-            <DiagramTree {...treeProps} only="diagrams" />
-          </SidebarSection>
+            <SidebarSection
+              label="Diagrams"
+              count={rootDiagrams.length}
+              open={showDiagrams}
+              onToggle={() => dispatch(toggleDiagramsSection())}
+              emptyLabel="No top-level diagrams"
+            >
+              <DiagramTree {...treeProps} only="diagrams" />
+            </SidebarSection>
 
-          <SidebarSection
-            label="Folders"
-            count={rootFolders.length}
-            open={showFolders}
-            onToggle={() => dispatch(toggleFoldersSection())}
-            emptyLabel="No folders yet"
-          >
-            <DiagramTree {...treeProps} only="folders" />
-          </SidebarSection>
+            <SidebarSection
+              label="Folders"
+              count={rootFolders.length}
+              open={showFolders}
+              onToggle={() => dispatch(toggleFoldersSection())}
+              emptyLabel="No folders yet"
+            >
+              <DiagramTree {...treeProps} only="folders" />
+            </SidebarSection>
           </div>
         </div>
       </aside>

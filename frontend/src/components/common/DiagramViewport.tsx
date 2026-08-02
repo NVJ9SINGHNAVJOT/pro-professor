@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * a <div> here would be invalid nesting. The fullscreen overlay portals to <body> to escape both
  * that <pre> and the preview pane's overflow. */
 
-const clampScale = (scale: number) => Math.min(VIEWPORT_MAX_SCALE, Math.max(VIEWPORT_MIN_SCALE, scale));
+const clampScale = (scale: number, max: number) => Math.min(max, Math.max(VIEWPORT_MIN_SCALE, scale));
 
 interface DiagramViewportProps {
   svg: string;
@@ -25,9 +25,11 @@ interface DiagramViewportProps {
    * the whole pane over to panning once you've zoomed in, and centres the diagram in it.
    */
   fill?: boolean;
+  /** Zoom ceiling, for views whose diagram is far denser than a hand-written fence. */
+  maxScale?: number;
 }
 
-const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
+const DiagramViewport = ({ svg, fill = false, maxScale = VIEWPORT_MAX_SCALE }: DiagramViewportProps) => {
   const [fullscreen, setFullscreen] = useState(false);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -73,11 +75,11 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      setScale((prev) => clampScale(prev * (e.deltaY < 0 ? VIEWPORT_ZOOM_STEP : 1 / VIEWPORT_ZOOM_STEP)));
+      setScale((prev) => clampScale(prev * (e.deltaY < 0 ? VIEWPORT_ZOOM_STEP : 1 / VIEWPORT_ZOOM_STEP), maxScale));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [fullscreen]);
+  }, [fullscreen, maxScale]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (e.button !== 0) return;
@@ -136,7 +138,7 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
       >
         <button
           type="button"
-          onClick={() => setScale((prev) => clampScale(prev / VIEWPORT_ZOOM_STEP))}
+          onClick={() => setScale((prev) => clampScale(prev / VIEWPORT_ZOOM_STEP, maxScale))}
           disabled={scale <= VIEWPORT_MIN_SCALE}
           aria-label="Zoom out"
           className={buttonClass}
@@ -150,14 +152,15 @@ const DiagramViewport = ({ svg, fill = false }: DiagramViewportProps) => {
           onClick={resetView}
           aria-label="Reset zoom to fit"
           title="Reset zoom to fit"
-          className="w-11 shrink-0 cursor-pointer rounded-lg px-1 py-1.5 text-center tabular-nums caption-small-regular text-neutral-400 hover:bg-neutral-800 hover:text-white"
+          // wide enough for the graph view's 5-digit readout, so the toolbar doesn't resize as you zoom
+          className="w-14 shrink-0 cursor-pointer rounded-lg px-1 py-1.5 text-center tabular-nums caption-small-regular text-neutral-400 hover:bg-neutral-800 hover:text-white"
         >
           {Math.round(scale * 100)}%
         </button>
         <button
           type="button"
-          onClick={() => setScale((prev) => clampScale(prev * VIEWPORT_ZOOM_STEP))}
-          disabled={scale >= VIEWPORT_MAX_SCALE}
+          onClick={() => setScale((prev) => clampScale(prev * VIEWPORT_ZOOM_STEP, maxScale))}
+          disabled={scale >= maxScale}
           aria-label="Zoom in"
           className={buttonClass}
         >

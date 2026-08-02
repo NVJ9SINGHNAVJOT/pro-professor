@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
-import type { SidebarRowAction } from "@/components/common/sidebarRow";
+import type { SidebarRowAction } from "@/components/common/sidebar";
 
 interface SidebarRowMenuProps {
   /** Named for screen readers: "Actions for My Diagram". */
@@ -17,7 +17,7 @@ interface SidebarRowMenuProps {
  *
  * Wraps the row rather than sitting beside it: with no `⋯` button there is nothing to reveal on
  * hover, nothing to reserve a lane for, and no button nested inside the row's own link — the whole
- * row is the target. See `sidebarRow.ts` for the layout contract.
+ * row is the target. See `sidebar.ts` for the layout contract.
  */
 const SidebarRowMenu = ({ label, actions, disabled, children }: SidebarRowMenuProps) => {
   /**

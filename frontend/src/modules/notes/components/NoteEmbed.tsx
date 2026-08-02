@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import Markdown, { type WikiHandlers } from "@/components/common/markdown/Markdown";
+import Markdown, { type WikiHandlers } from "@/components/common/Markdown";
 import { useApi } from "@/hooks/useApi";
 import { notesRoute, type NoteSummary } from "@/services/operations/notes/notes.route";
 import { extractSection, isImageTarget, stripFrontmatter } from "@/modules/notes/utils";

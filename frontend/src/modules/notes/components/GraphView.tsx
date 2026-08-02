@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import MermaidBlock from "@/components/common/MermaidBlock";
+import { GRAPH_VIEW_MAX_SCALE } from "@/constants/ui";
 import { useApi } from "@/hooks/useApi";
 import { notesRoute, type NoteLink, type NoteSummary } from "@/services/operations/notes/notes.route";
 
@@ -65,7 +66,7 @@ const GraphView = ({ notes }: GraphViewProps) => {
       ) : notes.length === 0 ? (
         <p className="caption-regular text-neutral-500">No notes to graph yet</p>
       ) : (
-        <MermaidBlock code={definition} fill />
+        <MermaidBlock code={definition} fill maxScale={GRAPH_VIEW_MAX_SCALE} />
       )}
     </div>
   );

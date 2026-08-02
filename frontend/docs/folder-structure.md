@@ -68,6 +68,53 @@ src/
 4. **Absolute Imports**: Always use global absolute imports (e.g., `@/modules/chat/types`)
    rather than relative paths (e.g., `../types`), even when importing between files within the
    same module.
+5. **One file per component, until there are two**: a component that is just a `.tsx` stays a
+   loose file in `components/`. The moment it needs a sibling (its CSS, a sub-component), it
+   becomes a folder — see below.
+
+## Multi-file components
+
+A component with more than one file gets a folder named exactly after it, keeping its real
+filename inside, plus a one-line `index.ts` barrel:
+
+```
+components/common/Button/
+├── Button.tsx      # the component, still named Button.tsx
+├── button.css      # camelCase sibling, matching the component name
+└── index.ts        # export { default } from "@/components/common/Button/Button";
+```
+
+The barrel is what makes this cheap: the import stays `@/components/common/Button`, so promoting
+a component to a folder never touches a call site. Do **not** name the component file `index.tsx`
+— in this repo `index.tsx` means *route page* (`src/pages/*/index.tsx`), and it would make every
+editor tab read `index.tsx`.
+
+When a folder holds more than one component, the primary one is the barrel's `default` and the rest
+are named exports, so a consumer needing both still writes a single import:
+
+```
+components/common/Markdown/
+├── Markdown.tsx        # primary — also owns the exported WikiHandlers type
+├── MarkdownBody.tsx    # the styling shell that scopes markdown.css
+├── markdown.css
+└── index.ts            # default + type WikiHandlers from Markdown, MarkdownBody named
+
+import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/Markdown";
+```
+
+Current folder components: `common/Button/`, `common/Markdown/`, `common/toast/`,
+`notes/components/NoteEditor/`, `diagram/components/DiagramEditor/`. `toast/` is the one holdout —
+it is a subsystem (`Toaster` + a store), not a component with files, so its lowercase name and
+existing barrel stay as they are.
+
+**Where the CSS gets imported decides how it is processed**, so it is not a free choice:
+
+- Uses Tailwind directives (`@layer components`, `@apply`, theme vars) → `@import` it from
+  `src/index.css` so Tailwind's pipeline sees it. This is the common case (`button.css`,
+  `noteEditor.css`, `markdown.css`).
+- Plain CSS overriding a third-party stylesheet → `import` it from the component file instead,
+  which keeps vendor overrides out of the global cascade and ships them in the component's own
+  lazy chunk. Only `diagramEditor.css` (Excalidraw overrides) does this.
 
 ## Editor title bars
 
@@ -79,21 +126,30 @@ puts the saved title back — so renaming a note can't persist an unsaved buffer
 diagram can't round-trip the scene. The parent owns the working text and the last saved title, which
 is what a commit is measured against and what a failed one reverts to.
 
-## Sidebar list rows
+## Sidebars
 
-The three left sidebars — chat history, the note explorer, the diagram tree — are separate
-components that must read as **one control**. Their rows are structurally different (a `NavLink`, a
-`NavLink` with tag chips, a draggable tree node), so they do not share a row component. What they
-share lives in [components/common/sidebarRow.ts](../src/components/common/sidebarRow.ts) (the style
-tokens) and [SidebarRowMenu.tsx](../src/components/common/SidebarRowMenu.tsx) (the menu — kept in
-its own file because a module mixing components with constants breaks Fast Refresh). A new sidebar
-list **must** use them rather than restyling rows by hand:
+The four left sidebars — chat history, the note explorer, the diagram tree, settings — are separate
+components that must read as **one panel**. They are structurally different (one collapses, one
+nests, one is a fixed list; rows are a `NavLink`, a `NavLink` with tag chips, a draggable tree
+node), so they do not share a component. What they share lives in
+[components/common/sidebar.ts](../src/components/common/sidebar.ts) (the style tokens) and in
+[SidebarRowMenu.tsx](../src/components/common/SidebarRowMenu.tsx) /
+[SidebarSection.tsx](../src/components/common/SidebarSection.tsx) /
+[MainNavbar.tsx](../src/components/common/MainNavbar.tsx) (components, so their own files — a
+module mixing components with constants breaks Fast Refresh). A new sidebar **must** use them
+rather than restyling by hand:
 
 | Export | Use |
 | --- | --- |
+| `sidebarShell(isOpen, extra?)` | the collapsing outer element — the surface, plus the width animation |
+| `sidebarShellInner(isOpen, extra?)` | its child — holds the full width and fades, so the content doesn't reflow on the way out |
+| `SIDEBAR_SURFACE` / `SIDEBAR_STACK` / `SIDEBAR_WIDTH` | the shell's parts, for a sidebar that doesn't collapse (settings folds all three into one element) |
+| `<MainNavbar>` | the header band every sidebar starts with — the logo, which opens the app menu drawer |
+| `sidebarNavRow(isActive, extra?)` | the fixed controls above the list — menu links, settings sections, the "New …" button |
 | `SIDEBAR_LIST` | on the list wrapper — the vertical gap that keeps adjacent hover states from merging into one block |
 | `SIDEBAR_ROW_WRAPPER` | on each row's wrapper — the `group` its inner chips key their hover styling off |
 | `sidebarRow(isActive, extra?)` | on the clickable element — padding, radius, truncation, hover and active fills |
+| `SIDEBAR_ICON_SLOT` / `sidebarIndent(depth)` | the `[disclosure][icon][label]` grid a tree's rows align on, and its nesting indent |
 | `<SidebarRowMenu>` | wraps a row; holds that row's actions, opened by right-click |
 | `<SidebarSection>` | a collapsible group of rows under a small header + count (the note explorer's "Tags", the diagram sidebar's "Diagrams" / "Folders") |
 | `<SidebarToggle>` | the collapse/expand control for a whole sidebar |

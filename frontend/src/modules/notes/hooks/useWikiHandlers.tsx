@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "@/components/common/toast";
-import { type WikiHandlers } from "@/components/common/markdown/Markdown";
+import { type WikiHandlers } from "@/components/common/Markdown";
 import { useApi } from "@/hooks/useApi";
 import { type NoteSummary } from "@/services/operations/notes/notes.route";
 import { diagramsRoute } from "@/services/operations/diagrams/diagrams.route";

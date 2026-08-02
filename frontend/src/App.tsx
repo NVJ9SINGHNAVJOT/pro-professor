@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router";
-import LeftNav from "@/components/common/LeftNav";
+import MainNavbar from "@/components/common/MainNavbar";
 import RouteProgress from "@/components/common/RouteProgress";
 import SearchModal from "@/components/common/SearchModal";
 import { Toaster } from "@/components/common/toast";
@@ -10,7 +10,7 @@ function App() {
   const { pathname } = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // chat/notes/diagrams/settings mount the LeftNav header inside their own sidebar;
+  // chat/notes/diagrams/settings mount the MainNavbar header inside their own sidebar;
   // every other screen gets the floating logo button instead
   const hasSidebarNav = /^\/(chat|notes|diagrams|settings)/.test(pathname);
 
@@ -36,7 +36,7 @@ function App() {
           <Outlet />
         </main>
 
-        {!hasSidebarNav && <LeftNav floating />}
+        {!hasSidebarNav && <MainNavbar floating />}
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <Toaster />

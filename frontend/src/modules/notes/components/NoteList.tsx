@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, FileTextIcon, HashIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
-import LeftNav from "@/components/common/LeftNav";
+import MainNavbar from "@/components/common/MainNavbar";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
 import SidebarSection from "@/components/common/SidebarSection";
 import {
@@ -9,8 +9,11 @@ import {
   SIDEBAR_LIST,
   SIDEBAR_ROW_WRAPPER,
   sidebarIndent,
+  sidebarNavRow,
   sidebarRow,
-} from "@/components/common/sidebarRow";
+  sidebarShell,
+  sidebarShellInner,
+} from "@/components/common/sidebar";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
@@ -118,26 +121,16 @@ const NoteList = ({ notes, onCreate, creating, isOpen }: NoteListProps) => {
   return (
     // Two elements, as in the chat sidebar: the outer one animates its width, the inner one keeps
     // the full width so the content doesn't reflow on its way out — it fades instead.
-    <aside
-      className={cn(
-        "h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
-        isOpen ? "w-67.5 border-r border-neutral-800" : "w-0",
-      )}
-    >
-      <div
-        className={cn(
-          "flex h-full w-67.5 flex-col gap-y-2 transition-opacity duration-300",
-          isOpen ? "opacity-100" : "opacity-0",
-        )}
-      >
-        <LeftNav />
+    <aside className={sidebarShell(isOpen, isOpen && "border-r border-neutral-800")}>
+      <div className={sidebarShellInner(isOpen)}>
+        <MainNavbar />
         {/* New note — shares the toolbar height for a uniform top band */}
         <div className="flex h-11.5 shrink-0 items-center px-2">
           <button
             type="button"
             onClick={onCreate}
             disabled={creating}
-            className="flex w-full cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={sidebarNavRow(false, "w-full text-white disabled:cursor-not-allowed disabled:opacity-50")}
           >
             <SquarePenIcon className="size-4.5 shrink-0" />
             New note

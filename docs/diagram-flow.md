@@ -85,7 +85,7 @@ layering (Excalidraw is the model + renderer).
 | `constants/` | `index.ts` | `EMPTY_DRAG_IMAGE` — the 1×1 GIF that suppresses the native drag ghost in the sidebar tree |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
 | `utils/` | `folderTree.ts` | pure tree helpers (`childFolders`, `diagramsIn`, `descendantIds`, `isDescendant`) — the drag guards are testable without a DOM |
-| `components/` | `DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) and shares its `EditableTitle` |
+| `components/` | `DiagramEditor/DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) and shares its `EditableTitle` |
 | `components/` | `DiagramTree.tsx` | one level of the sidebar tree, recursing into expanded folders |
 | `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | folder tree + `<DiagramEditor>`, and every mutation handler |
 
@@ -125,9 +125,10 @@ their own `diagramFolderList` slice beside `diagramList` — a second `createLis
 one slice holding both, so the diagram rows keep the upsert-to-front behavior the autosave relies
 on. `diagramsListLoader` seeds both from the single list response.
 
-**The whole sidebar collapses**, with the same mechanics as the chat and notes ones — the outer
-element animates `w-67.5` ↔ `w-0` while the inner keeps full width and fades, so the tree doesn't
-reflow on the way out, and `LeftNav` goes with it. The toggle is
+**The whole sidebar collapses**, with the same mechanics as the chat and notes ones
+(`sidebarShell` / `sidebarShellInner` — the outer element animates `w-67.5` ↔ `w-0` while the inner
+keeps full width and fades, so the tree doesn't reflow on the way out), and `MainNavbar` goes with
+it. The toggle is
 [SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), passed into `DiagramEditor`
 as its `leading` slot so it sits at the head of the editor's toolbar (and into a matching band on
 the empty state). It deliberately does **not** live inside the sidebar, which would take the button
@@ -177,7 +178,7 @@ the old title; that is unchanged and unguarded.)
 
 **Diagrams drawn *inside* a note** use **Mermaid**: a ```mermaid fenced block renders inline via
 [MermaidBlock](../frontend/src/components/common/MermaidBlock.tsx) (the `language-mermaid` case in
-[Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx)). Renders are serialized —
+[Markdown.tsx](../frontend/src/components/common/Markdown/Markdown.tsx)). Renders are serialized —
 concurrent `mermaid.render()` calls wreck each other, see
 [notes-flow.md](notes-flow.md) §5 — and each diagram gets zoom / pan / fullscreen controls from
 [DiagramViewport](../frontend/src/components/common/DiagramViewport.tsx). Mermaid is the tool for quick

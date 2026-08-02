@@ -81,12 +81,13 @@ each pane scrolls independently:
   `SidebarSection`s — a **Tags** browser tree (tag → its notes) above a **Notes** list — the same
   shape as the diagram sidebar's Diagrams/Folders split, with rows sharing one
   `[disclosure][icon][label]` grid (`SIDEBAR_ICON_SLOT` / `sidebarIndent` in
-  [sidebarRow.ts](../frontend/src/components/common/sidebarRow.ts)) so both explorers align.
+  [sidebar.ts](../frontend/src/components/common/sidebar.ts)) so both explorers align.
   **There is no search box here** — ⌘K searches notes and chats together (see
   [project-flow.md](project-flow.md) §2.8a); `GET /notes/search` is now called from there.
   The whole pane **collapses**, using
-  the chat sidebar's mechanics (outer element animates `w-67.5` ↔ `w-0`, inner keeps full width and
-  fades, so nothing reflows on the way out) minus its mobile handling. `LeftNav` collapses with it,
+  the chat sidebar's mechanics (`sidebarShell` / `sidebarShellInner`: the outer element animates
+  `w-67.5` ↔ `w-0`, the inner keeps full width and fades, so nothing reflows on the way out) minus
+  its mobile handling. `MainNavbar` collapses with it,
   as in chat, and the pane goes to *zero* width — nothing is left behind. The toggle
   ([SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), shared with the diagram
   screen) sits at the head of the center pane's top bar, left of the title field, and is
@@ -109,7 +110,7 @@ each pane scrolls independently:
   Stop** while the model runs, since the rail can be closed mid-generation and would otherwise
   strand it.
   Then editor
-  ([NoteEditor](../frontend/src/modules/notes/components/NoteEditor.tsx) — a plain `TextareaInput`
+  ([NoteEditor](../frontend/src/modules/notes/components/NoteEditor/NoteEditor.tsx) — a plain `TextareaInput`
   plus a line-number gutter and inline problem squiggles, §5a) ⟷ preview split with a hand-rolled
   draggable divider ([SplitPane](../frontend/src/modules/notes/components/SplitPane.tsx)).
   **Every programmatic edit — Tab/⇧Tab, Enter list continuation, ⌘B/⌘I, toolbar and palette
@@ -155,7 +156,7 @@ patches that one row from the response it already has (`upsertNote` / `removeNot
 title, tags and position, with **no `GET /notes`**. Outline clicks in the context panel scroll the
 preview directly rather than re-navigating to the note's own URL.
 
-## 5. Shared rendering ([components/common/markdown/Markdown.tsx](../frontend/src/components/common/markdown/Markdown.tsx))
+## 5. Shared rendering ([components/common/Markdown/Markdown.tsx](../frontend/src/components/common/Markdown/Markdown.tsx))
 
 The `Markdown` component was **extracted from ChatMessages** and is shared by chat and notes:
 `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex`, plus hand-rolled remark
@@ -237,7 +238,7 @@ counterpart to `scrollToHeading`, which moves the preview instead: a problem is 
 
 In the editor itself, as a squiggle under the offending line, with the line's messages on hover.
 Text inside a `<textarea>` can't be styled, so
-[NoteEditor](../frontend/src/modules/notes/components/NoteEditor.tsx) puts an **invisible mirror
+[NoteEditor](../frontend/src/modules/notes/components/NoteEditor/NoteEditor.tsx) puts an **invisible mirror
 layer** behind a transparent-background textarea: the same text, wrapped identically, carrying a
 line number and a squiggle per line. Because the mirror wraps exactly like the textarea, markers on
 a wrapped line align with **no measurement code** — the browser does it; this is the same trick

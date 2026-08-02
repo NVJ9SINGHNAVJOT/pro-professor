@@ -65,7 +65,16 @@ const parseErrorOf = (error: unknown): string => {
  * or mid-edit — the previous diagram stays and the parse error plus the raw source
  * show underneath.
  */
-const MermaidBlock = ({ code, fill = false }: { code: string; fill?: boolean }) => {
+const MermaidBlock = ({
+  code,
+  fill = false,
+  maxScale,
+}: {
+  code: string;
+  fill?: boolean;
+  /** Raise the viewport's zoom ceiling — see `GRAPH_VIEW_MAX_SCALE`. */
+  maxScale?: number;
+}) => {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const idRef = useRef(`mermaid-${++renderSeq}`);
@@ -119,7 +128,7 @@ const MermaidBlock = ({ code, fill = false }: { code: string; fill?: boolean }) 
           <span className="caption-small-regular text-neutral-500">Rendering diagram…</span>
         </span>
       )}
-      {svg && <DiagramViewport svg={svg} fill={fill} />}
+      {svg && <DiagramViewport svg={svg} fill={fill} maxScale={maxScale} />}
       {error && (
         <span className="block rounded-xl border border-dashed border-neutral-700 p-3">
           <span className="block whitespace-pre-wrap pb-2 caption-small-regular text-amber-400">{error}</span>

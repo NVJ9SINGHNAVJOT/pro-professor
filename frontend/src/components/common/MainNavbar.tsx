@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { HomeIcon, MessageSquareIcon, NotebookPenIcon, SettingsIcon, WorkflowIcon } from "lucide-react";
+import { SIDEBAR_WIDTH, sidebarNavRow } from "@/components/common/sidebar";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +18,21 @@ const menuItems = [
 // Continuous stream of musical notes raining behind the logo (position/timing in index.css).
 const notes = ["♪", "♫", "♬", "♩", "♭", "♯", "♮"] as const;
 
-interface LeftNavProps {
+/** The mark, shown twice: on the header band that opens the drawer, and at the drawer's own top. */
+const Logo = () => (
+  <div className="relative flex items-center gap-x-4">
+    <img
+      alt="Logo"
+      src="/images/title-logo.webp"
+      className="w-9 shrink-0 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
+    />
+    <span className="truncate bg-linear-to-br from-white to-neutral-400 bg-clip-text text-transparent para-medium-semibold tracking-wide">
+      {name}
+    </span>
+  </div>
+);
+
+interface MainNavbarProps {
   /**
    * Floating mode: a small fixed logo button at the top-left, for screens that
    * have no sidebar of their own (home/settings). Default mode is the
@@ -32,7 +47,7 @@ interface LeftNavProps {
  * to right behind it — and clicking it slides the navigation drawer in from
  * the left.
  */
-const LeftNav = ({ floating }: LeftNavProps) => {
+const MainNavbar = ({ floating }: MainNavbarProps) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -52,16 +67,7 @@ const LeftNav = ({ floating }: LeftNavProps) => {
               </span>
             ))}
           </div>
-          <div className="relative flex items-center gap-x-4">
-            <img
-              alt="Logo"
-              src="/images/title-logo.webp"
-              className="w-9 shrink-0 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
-            />
-            <span className="truncate bg-linear-to-br from-white to-neutral-400 bg-clip-text text-transparent para-medium-semibold tracking-wide">
-              {name}
-            </span>
-          </div>
+          <Logo />
         </button>
       )}
 
@@ -77,19 +83,13 @@ const LeftNav = ({ floating }: LeftNavProps) => {
       {/* Sliding menu — overlays from the left, never resizes the main screen */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-67.5 flex-col gap-y-2 border-r border-neutral-800 bg-chat-sidebar p-3 text-white shadow-2xl transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex flex-col gap-y-2 border-r border-neutral-800 bg-chat-sidebar p-3 text-white shadow-2xl transition-transform duration-300 ease-in-out",
+          SIDEBAR_WIDTH,
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center gap-x-4 px-1 py-1">
-          <img
-            alt="Logo"
-            src="/images/title-logo.webp"
-            className="w-9 shrink-0 animate-music-float drop-shadow-[0_0_5px_rgba(255,255,255,0.2)]"
-          />
-          <span className="truncate bg-linear-to-br from-white to-neutral-400 bg-clip-text text-transparent para-medium-semibold tracking-wide">
-            {name}
-          </span>
+        <div className="px-1 py-1">
+          <Logo />
         </div>
 
         <div className="mt-2 flex flex-col gap-y-1">
@@ -98,12 +98,7 @@ const LeftNav = ({ floating }: LeftNavProps) => {
               key={item.label}
               to={item.path}
               onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white",
-                  isActive && "bg-neutral-800 text-white",
-                )
-              }
+              className={({ isActive }) => sidebarNavRow(isActive)}
             >
               <item.icon className="size-5 shrink-0" />
               <span className="truncate">{item.label}</span>
@@ -115,4 +110,4 @@ const LeftNav = ({ floating }: LeftNavProps) => {
   );
 };
 
-export default LeftNav;
+export default MainNavbar;

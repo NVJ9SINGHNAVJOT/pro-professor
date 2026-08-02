@@ -29,8 +29,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "@/components/common/toast";
-import Markdown from "@/components/common/markdown/Markdown";
-import MarkdownBody from "@/components/common/markdown/MarkdownBody";
+import Markdown, { MarkdownBody } from "@/components/common/Markdown";
 import NotesBar from "@/modules/notes/components/NotesBar";
 import { useNoteAi, type NotesBarCommand } from "@/modules/notes/hooks/useNoteAi";
 

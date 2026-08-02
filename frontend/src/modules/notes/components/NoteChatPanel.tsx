@@ -13,16 +13,14 @@ import {
   WandSparklesIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import Markdown from "@/components/common/markdown/Markdown";
+import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/Markdown";
 import ModelSelector from "@/components/common/ModelSelector";
-import MarkdownBody from "@/components/common/markdown/MarkdownBody";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { WikiHandlers } from "@/components/common/markdown/Markdown";
 import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import type { NoteApplyMode, NoteChatContextMode } from "@/modules/notes/types";

@@ -1,6 +1,7 @@
 import { HardDriveIcon, NotebookPenIcon } from "lucide-react";
 import { NavLink } from "react-router";
-import LeftNav from "@/components/common/LeftNav";
+import MainNavbar from "@/components/common/MainNavbar";
+import { SIDEBAR_STACK, SIDEBAR_SURFACE, SIDEBAR_WIDTH, sidebarNavRow } from "@/components/common/sidebar";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
@@ -10,26 +11,18 @@ const sections = [
 ] as const;
 
 /**
- * The settings sidebar — same shape as the chat/notes sidebars (LeftNav header band on top,
- * navigation below), but with a fixed list of sections instead of a fetched, searchable one.
+ * The settings sidebar — same shape as the chat/notes sidebars (MainNavbar header band on top,
+ * navigation below), but with a fixed list of sections instead of a fetched, searchable one. It
+ * never collapses, so it is the shell's two elements folded into one.
  */
 const SettingsSideBar = () => {
   return (
-    <aside className="z-40 flex h-full w-67.5 shrink-0 flex-col gap-y-2 overflow-hidden bg-chat-sidebar text-white">
-      <LeftNav />
+    <aside className={cn(SIDEBAR_SURFACE, SIDEBAR_STACK, SIDEBAR_WIDTH, "z-40")}>
+      <MainNavbar />
 
       <div className="flex flex-col gap-y-1 px-2">
         {sections.map((section) => (
-          <NavLink
-            key={section.label}
-            to={section.path}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white",
-                isActive && "bg-neutral-800 text-white",
-              )
-            }
-          >
+          <NavLink key={section.label} to={section.path} className={({ isActive }) => sidebarNavRow(isActive)}>
             <section.icon className="size-4.5 shrink-0" />
             <span className="truncate">{section.label}</span>
           </NavLink>

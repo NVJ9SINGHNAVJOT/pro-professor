@@ -3,9 +3,9 @@
 @import "tw-animate-css"; /* Css configuration for shadcn */
 @import "./styles/theme.css"; /* Tailwind custom configurations */
 @import "./styles/typography.css";
-@import "./components/common/markdown/markdown.css";
-@import "./components/common/button.css";
-@import "./modules/notes/components/noteEditor.css";
+@import "./components/common/Markdown/markdown.css";
+@import "./components/common/Button/button.css";
+@import "./modules/notes/components/NoteEditor/noteEditor.css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *)); /* Typography utilities */

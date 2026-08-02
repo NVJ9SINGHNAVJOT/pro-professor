@@ -16,8 +16,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import Markdown from "@/components/common/markdown/Markdown";
-import MarkdownBody from "@/components/common/markdown/MarkdownBody";
+import Markdown, { MarkdownBody } from "@/components/common/Markdown";
 import { chatsStream } from "@/services/operations/chats/chats.stream";
 import { audioApi } from "@/services/operations/audio/audio.api";
 import { mediaApi, type MediaAttachment } from "@/services/operations/media/media.api";

@@ -1,9 +1,16 @@
 import { useMemo } from "react";
 import { SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
-import LeftNav from "@/components/common/LeftNav";
+import MainNavbar from "@/components/common/MainNavbar";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
-import { SIDEBAR_LIST, SIDEBAR_ROW_WRAPPER, sidebarRow } from "@/components/common/sidebarRow";
+import {
+  SIDEBAR_LIST,
+  SIDEBAR_ROW_WRAPPER,
+  sidebarNavRow,
+  sidebarRow,
+  sidebarShell,
+  sidebarShellInner,
+} from "@/components/common/sidebar";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
@@ -63,19 +70,15 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
         )}
       />
       <aside
-        className={cn(
-          "z-40 h-full shrink-0 overflow-hidden bg-chat-sidebar text-white transition-all duration-300 ease-in-out",
-          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-67.5",
-          isOpen ? "w-67.5 max-md:translate-x-0" : "w-0 max-md:-translate-x-full",
-        )}
+        className={sidebarShell(isOpen, [
+          // Tailwind scans for whole class names, so the mobile width is spelled out rather than
+          // built from SIDEBAR_WIDTH.
+          "z-40 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-67.5",
+          isOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+        ])}
       >
-        <div
-          className={cn(
-            "flex h-full w-67.5 flex-col gap-y-2 transition-opacity duration-300",
-            isOpen ? "opacity-100" : "opacity-0",
-          )}
-        >
-          <LeftNav />
+        <div className={sidebarShellInner(isOpen)}>
+          <MainNavbar />
           {/* New chat — shares the chat top bar's height for a uniform top band */}
           <div className="flex h-11.5 shrink-0 items-center px-2">
             <button
@@ -83,7 +86,7 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
               // Already on the new-chat screen: staying put costs nothing, whereas re-navigating
               // to the URL we're on reads as a revalidation and refetches the list.
               onClick={() => chatId !== NEW_ITEM_ID && navigate(ROUTES.CHAT_NEW)}
-              className="flex w-full cursor-pointer items-center gap-x-3 rounded-lg px-2 py-2 para-small-medium hover:bg-neutral-800"
+              className={sidebarNavRow(false, "w-full text-white")}
             >
               <SquarePenIcon className="size-4.5" />
               New chat
