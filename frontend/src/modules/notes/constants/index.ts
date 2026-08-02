@@ -13,13 +13,15 @@ import {
   ListTodoIcon,
   MegaphoneIcon,
   MinusIcon,
+  NetworkIcon,
   SigmaIcon,
   TableIcon,
   TextQuoteIcon,
   WaypointsIcon,
+  WorkflowIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { NoteViewMode } from "@/modules/notes/types";
+import type { GraphRenderer, NoteViewMode } from "@/modules/notes/types";
 
 /** Leading YAML frontmatter block — the preview renders only the body. */
 export const FRONTMATTER_BLOCK = /^---\s*\n[\s\S]*?\n---\s*\n?/;
@@ -92,6 +94,107 @@ export const VIEW_MODES: { mode: NoteViewMode; label: string; icon: typeof CodeI
   { mode: "split", label: "Split view", icon: ColumnsIcon },
   { mode: "preview", label: "Preview only", icon: EyeIcon },
 ];
+
+/* ── Graph view ─────────────────────────────────────────────────────────────────────────────── */
+
+/** The graph view's two renderers, driving the header's segmented control (twin of VIEW_MODES). */
+export const GRAPH_RENDERERS: { renderer: GraphRenderer; label: string; icon: typeof CodeIcon }[] = [
+  { renderer: "interactive", label: "Interactive graph", icon: NetworkIcon },
+  { renderer: "mermaid", label: "Hierarchy (Mermaid)", icon: WorkflowIcon },
+];
+
+/**
+ * Force tuning. `forceLink.strength` is deliberately left at d3's default (`1/min(degree)`) — it is
+ * degree-aware, so a hub doesn't get yanked apart by its own links, and no constant beats it.
+ */
+export const GRAPH_LINK_DISTANCE = 60;
+/**
+ * Extra link length per unit of √degree at the busier end. A hub with forty spokes needs a far
+ * bigger radius than a pair of notes needs a gap: at a flat distance its children land on a ring
+ * with a few pixels each and collapse into an unreadable knot.
+ */
+export const GRAPH_LINK_DISTANCE_PER_DEGREE = 16;
+export const GRAPH_CHARGE = -260;
+/**
+ * Repulsion range cap. Without it every node pushes every other one however far apart they are, so
+ * distant clusters shove each other around the canvas — and it is what keeps the Barnes–Hut
+ * approximation cheap on a large network.
+ */
+export const GRAPH_CHARGE_MAX = 900;
+export const GRAPH_COLLIDE_PADDING = 4;
+/**
+ * Pull toward the world origin, as `forceX`/`forceY` rather than `forceCenter`. `forceCenter`
+ * re-centres by *translating every node* each tick, which fights pinned nodes and silently moves
+ * the whole world out from under a persisted camera — a reload would restore a viewport aimed at
+ * nothing. Gravity keeps world coordinates stable, and still reels in disconnected notes, which
+ * charge alone would send to infinity.
+ */
+export const GRAPH_GRAVITY = 0.03;
+
+/** Alpha to re-energise the layout with: a settled graph nudged by an edit, and during a drag. */
+export const GRAPH_WARM_ALPHA = 0.15;
+export const GRAPH_DRAG_ALPHA = 0.3;
+/** Spread for a node with no position to inherit — see `seedPositions`. */
+export const GRAPH_SEED_JITTER = 60;
+
+export const GRAPH_MIN_ZOOM = 0.08;
+export const GRAPH_MAX_ZOOM = 8;
+export const GRAPH_ZOOM_STEP = 1.4;
+/** Wheel delta → zoom factor, as `exp(-dy * this)`, so zooming is smooth and multiplicative. */
+export const GRAPH_ZOOM_SENSITIVITY = 0.002;
+/** Padding around the bounding box when fitting the graph to the viewport (px). */
+export const GRAPH_FIT_PADDING = 60;
+/**
+ * Ceiling on how far *fitting* may zoom in. Framing a two-node local graph would otherwise fill the
+ * pane with two enormous circles; the wheel still goes all the way to `GRAPH_MAX_ZOOM` by hand.
+ */
+export const GRAPH_FIT_MAX_ZOOM = 1.5;
+
+export const GRAPH_NODE_MIN_RADIUS = 4;
+export const GRAPH_NODE_MAX_RADIUS = 14;
+/** Extra screen-space slop around a node, so a small dot is still easy to grab at any zoom. */
+export const GRAPH_HOVER_SLOP = 6;
+/** Total pointer travel below which a press counts as a click rather than a drag (px). */
+export const GRAPH_CLICK_SLOP_PX = 4;
+
+/** How far unhighlighted nodes fade while a node is hovered. */
+export const GRAPH_DIM_ALPHA = 0.15;
+/** Per-frame easing steps — ~150ms for a filter cross-fade, ~120ms for the hover spotlight. */
+export const GRAPH_FADE_STEP = 0.15;
+export const GRAPH_DIM_STEP = 0.2;
+/** Camera flight to a filtered subgraph, in frames (~300ms). */
+export const GRAPH_TWEEN_FRAMES = 18;
+
+/** Labels are unreadable below this zoom, so they're drawn only above it (or when highlighted). */
+export const GRAPH_LABEL_MIN_ZOOM = 0.55;
+export const GRAPH_LABEL_MAX_CHARS = 28;
+export const GRAPH_LOCAL_DEPTH_MAX = 3;
+
+/**
+ * Node colours. Canvas takes `fillStyle` strings, so Tailwind classes can't reach it — this is the
+ * same forced JS-side palette as `mermaid.initialize({ theme: "dark" })` and `<Excalidraw theme="dark">`.
+ * Picked from Tailwind's 400 ramp so they sit with the `amber-400` already used elsewhere, and
+ * assigned by a hash of the tag (see `tagColor`) so a tag keeps its colour without being persisted.
+ * `GraphFilterPanel`'s legend swatches read this same array — one source of truth for canvas and DOM.
+ */
+export const GRAPH_TAG_COLORS = [
+  "#60a5fa",
+  "#f472b6",
+  "#4ade80",
+  "#fbbf24",
+  "#a78bfa",
+  "#22d3ee",
+  "#fb923c",
+  "#a3e635",
+];
+/** Untagged notes — neutral-500. */
+export const GRAPH_NODE_COLOR = "#737373";
+/** An unresolved `[[target]]`: dimmer, and drawn as a dashed ring rather than a filled dot. */
+export const GRAPH_MISSING_COLOR = "#525252";
+export const GRAPH_EDGE_COLOR = "#404040";
+export const GRAPH_ACCENT_COLOR = "#ffffff";
+export const GRAPH_LABEL_COLOR = "#d4d4d4";
+export const GRAPH_LABEL_FONT = "11px Inter, sans-serif";
 
 /** One slash-menu block: `snippet` replaces the typed `/query`; `‸` marks the caret. */
 export interface SlashCommand {

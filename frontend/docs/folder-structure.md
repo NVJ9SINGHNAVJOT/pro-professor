@@ -45,7 +45,7 @@ src/
 ├── modules/             # [Feature Modules - see above]
 ├── pages/               # Top-level route components that render specific Module Screens and inject global context.
 │                        # Each area also holds its route `loader.ts` (see "Route data loading" below).
-├── redux/               # Global state management: `modelsSlice` + the three sidebar lists (createListSlice) — all other page data lives in route loaders
+├── redux/               # Global state management: `modelsSlice`, the three sidebar lists (createListSlice), and the two view-state slices (`diagramSidebar`, `notesGraph`) — all other page data lives in route loaders
 ├── services/            # API route definitions and network utility wrappers (e.g., fetch setup)
 ├── socket/              # Global WebSocket configuration and event definitions
 ├── styles/              # Global CSS files and Tailwind configurations (feature-scoped CSS lives beside its component, `@import`ed from index.css)
@@ -103,9 +103,15 @@ import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/M
 ```
 
 Current folder components: `common/Button/`, `common/Markdown/`, `common/toast/`,
-`notes/components/NoteEditor/`, `diagram/components/DiagramEditor/`. `toast/` is the one holdout —
-it is a subsystem (`Toaster` + a store), not a component with files, so its lowercase name and
-existing barrel stay as they are.
+`notes/components/NoteEditor/`, `notes/components/GraphView/`, `diagram/components/DiagramEditor/`.
+`toast/` is the one holdout — it is a subsystem (`Toaster` + a store), not a component with files,
+so its lowercase name and existing barrel stay as they are.
+
+**A barrel over a `lazy()` boundary exports the orchestrator only.** `GraphView/index.ts` exports
+its default and nothing else on purpose: re-exporting the sibling `ForceGraph` would make
+`import GraphView from "@/modules/notes/components/GraphView"` statically pull `d3-force` and the
+canvas painter into the eager notes chunk, and the `lazy()` inside `GraphView.tsx` would become dead
+code. Check the build output (`grep` the entry chunk) when a folder component is split this way.
 
 **Where the CSS gets imported decides how it is processed**, so it is not a free choice:
 
@@ -275,3 +281,27 @@ in `index.css`; the app is dark-only and never toggles a theme, so the class is 
 `useApi` is still correct for **mutations** and **on-demand** fetches: search-as-you-type, panels
 behind a toggle (revision history, graph view), `![[…]]` transclusions, paginated lists, and SSE
 streams. The rule is **on arrival → loader; on demand → `useApi`**.
+
+## Persisted view state
+
+Almost nothing survives a reload, and that is the default to keep: page data comes back from the
+route loaders, and view state is cheap to re-derive. The **one** exception is
+[`notesGraphSlice`](../src/redux/slices/notesGraphSlice.ts) — the graph view's renderer, camera,
+dragged node positions and filters, which represent arranging work the user would otherwise have to
+redo on every visit.
+
+It is the app's only use of `localStorage`, through
+[`utils/localStore.ts`](../src/utils/localStore.ts). Follow that shape rather than reaching for
+`localStorage` directly or adding a persistence library:
+
+- **Every access is wrapped in `try/catch`.** `localStorage` throws in Safari's private mode, under
+  enterprise policy, and on quota. Losing a preference must never take the app down.
+- **Reads validate every field.** A half-written or hand-edited blob is not a hypothetical — and
+  some corrupt values fail *silently* (a `NaN` in the graph's camera makes `setTransform` paint
+  nothing, with no error). Version the key **and** the payload.
+- **Writes are throttled and flushed on `pagehide`/`visibilitychange`**, not `beforeunload` — Chrome
+  fires that one unreliably. State that changes at gesture rate (a camera on every wheel tick) must
+  never hit storage synchronously per change.
+- **The store wiring is a plain `store.subscribe`** in [`redux/store.ts`](../src/redux/store.ts) that
+  reference-compares its slice and bails. An RTK reducer returns the identical object when nothing
+  changed, so every unrelated dispatch in the app costs one property read and one `===`.

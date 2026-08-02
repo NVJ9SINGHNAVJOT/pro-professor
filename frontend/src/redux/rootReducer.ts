@@ -5,6 +5,7 @@ import chatListReducer from "@/redux/slices/chatListSlice";
 import diagramListReducer from "@/redux/slices/diagramListSlice";
 import diagramFolderListReducer from "@/redux/slices/diagramFolderListSlice";
 import diagramSidebarReducer from "@/redux/slices/diagramSidebarSlice";
+import notesGraphReducer from "@/redux/slices/notesGraphSlice";
 
 const rootReducer = combineReducers({
   models: modelsReducer,
@@ -18,6 +19,9 @@ const rootReducer = combineReducers({
   // Which folders/sections that sidebar has open — here rather than in the screen because the
   // screen remounts on the first navigation into a diagram. See the slice.
   diagramSidebar: diagramSidebarReducer,
+  // The notes graph view: renderer, camera, dragged node positions, filters. Same remount reason as
+  // above, and the one slice that is also written to localStorage — see the subscription in store.ts.
+  notesGraph: notesGraphReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

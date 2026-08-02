@@ -35,8 +35,9 @@ import { useNoteAi, type NotesBarCommand } from "@/modules/notes/hooks/useNoteAi
 
 import NoteEditor from "@/modules/notes/components/NoteEditor";
 import { useApi } from "@/hooks/useApi";
-import { useAppDispatch } from "@/redux/store";
+import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
+import { setGraphRenderer } from "@/redux/slices/notesGraphSlice";
 import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
 import type { NoteAiAction } from "@/services/operations/notes/notes.stream";
 import { markDraftCreated } from "@/services/client/loadRoute";
@@ -72,12 +73,14 @@ import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import {
+  GRAPH_RENDERERS,
   HEADING_SCROLL_DELAY_MS,
   MERMAID_TEMPLATE,
   SCROLL_SYNC_RELEASE_MS,
   type SlashCommand,
 } from "@/modules/notes/constants";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { cn } from "@/lib/utils";
 
 interface NotesScreenProps {
   /** The explorer list, loaded by the parent `/notes` route. */
@@ -130,7 +133,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // wanted default there (nothing to preserve when no note is open yet) and it's what chat does.
   const [noteListOpen, setNoteListOpen] = useState(true);
   const toggleNoteList = () => setNoteListOpen((open) => !open);
+  // The graph view is a mode, so it stays local and resets on the remount — but *which renderer* it
+  // shows, and everything that renderer has been arranged into, is persisted. See notesGraphSlice.
   const [graphOpen, setGraphOpen] = useState(false);
+  const graphRenderer = useAppSelector((state) => state.notesGraph.renderer);
   const [aiBusy, setAiBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [revisionRefresh, setRevisionRefresh] = useState(0);
@@ -770,17 +776,38 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
             <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
             <WaypointsIcon className="size-4.5 text-neutral-400" />
             <h1 className="para-medium-semibold">Graph view</h1>
-            <button
-              type="button"
-              onClick={() => setGraphOpen(false)}
-              aria-label="Close graph view"
-              className="ml-auto cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-            >
-              <XIcon className="size-4.5" />
-            </button>
+
+            <div className="ml-auto flex shrink-0 items-center gap-x-1">
+              {/* Same segmented control as the editor's source/split/preview switch. */}
+              <div className="mr-2 flex items-center rounded-lg bg-neutral-900 p-0.5">
+                {GRAPH_RENDERERS.map(({ renderer: mode, label, icon: Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => dispatch(setGraphRenderer(mode))}
+                    aria-label={label}
+                    title={label}
+                    className={cn(
+                      "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
+                      graphRenderer === mode && "bg-neutral-700 text-white",
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setGraphOpen(false)}
+                aria-label="Close graph view"
+                className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
+              >
+                <XIcon className="size-4.5" />
+              </button>
+            </div>
           </div>
           <div className="min-h-0 flex-1">
-            <GraphView notes={notes} />
+            <GraphView notes={notes} currentNoteId={note?.id ?? null} onClose={() => setGraphOpen(false)} />
           </div>
         </>
       );

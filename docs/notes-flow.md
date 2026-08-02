@@ -123,9 +123,9 @@ each pane scrolls independently:
   panes **scroll in sync** proportionally, with a short driver lock so the pane being driven can't
   scroll the other one back. Cmd/Ctrl+S saves —
   and on `/notes/new` that save is the `POST` that creates the note (see §"New note" below);
-  the graph view ([GraphView](../frontend/src/modules/notes/components/GraphView.tsx)) renders
-  `GET /notes/links` as a *generated Mermaid definition* — solid arrows = links, dashed = embeds,
-  dashed nodes = unresolved targets.
+  the graph view ([GraphView](../frontend/src/modules/notes/components/GraphView/GraphView.tsx))
+  renders `GET /notes/links` through **either of two renderers**, chosen by a segmented control in
+  its header — see §4a.
 - **Right** — [RightRail](../frontend/src/modules/notes/components/RightRail.tsx), two tabs sharing
   one pane so a chat doesn't cost the editor a third column; **width is draggable** from its left
   edge (260–720px), the same divider mechanics as SplitPane. **Context**
@@ -155,6 +155,62 @@ which the parent route's loader dispatches into the `notesList` slice. A save/cr
 patches that one row from the response it already has (`upsertNote` / `removeNote`) — the note's new
 title, tags and position, with **no `GET /notes`**. Outline clicks in the context panel scroll the
 preview directly rather than re-navigating to the note's own URL.
+
+## 4a. Graph view ([components/GraphView/](../frontend/src/modules/notes/components/GraphView))
+
+The note network, in **two renderings of the same data**. Both consume one shared model built by
+[`utils/graph.ts`](../frontend/src/modules/notes/utils/graph.ts) `buildGraphModel(notes, links)`, so
+they can never disagree about what the network is. Nodes are namespaced ids — `note:<id>` (keyed on
+the id, so a rename never moves a node) and `ref:<lowercased target>` for an unresolved `[[link]]`.
+A `[[Title.diagram]]` target is **excluded**: it is a diagram, not an unwritten note. `degree` counts
+links in both directions and a repeated pair collapses to one edge, so it stays honest as the thing
+that sizes a node and decides what counts as an orphan.
+
+- **Interactive (default)** —
+  [ForceGraph](../frontend/src/modules/notes/components/GraphView/ForceGraph.tsx), an Obsidian-style
+  force-directed canvas. `lazy()`-loaded, so `d3-force` and the painter stay out of the notes chunk
+  (the folder's `index.ts` therefore exports the orchestrator **only** — re-exporting `ForceGraph`
+  would statically pull that chunk back in). Click a node to open it (an unresolved one opens the
+  draft it would create, `/notes/new?title=…`, mirroring `useWikiHandlers`); drag to reposition,
+  which **pins** it; Alt-click or "Unpin all" releases it; hover lights the node and its neighbours
+  and dims the rest. The open note is drawn **filled in the accent colour with a halo** — "you are
+  here" in a field of grey dots — and the camera pans to it on open if a restored viewport doesn't
+  already contain it. The toolbar's zoom readout is written to the DOM from the frame loop, not
+  through state. The [filter panel](../frontend/src/modules/notes/components/GraphView/GraphFilterPanel.tsx)
+  (⌘F, hanging under the toolbar) has a title filter, hide-unlinked, colour-by-tag with a legend,
+  and a 1–3 hop local-graph slider around the open note. Escape closes the panel, then the graph.
+- **Hierarchy** —
+  [MermaidGraph](../frontend/src/modules/notes/components/GraphView/MermaidGraph.tsx) serializes the
+  model to a `graph TD` definition and hands it to the same lazy `MermaidBlock` as a
+  ```` ```mermaid ```` fence, so it costs no extra dependency. Solid arrows = links, dashed =
+  embeds, dashed nodes = unresolved targets. Non-interactive, and the better read for a chain of
+  links as a tree.
+
+Three invariants worth not breaking:
+
+- **Filters are a visibility mask, never a re-layout.** The simulation always holds the whole graph;
+  filtering fades nodes rather than sliding the one you are hunting for out from under the cursor.
+  The depth slider *does* fly the camera (it is a deliberate change of scope), the search box does not.
+- **The layout survives an unrelated save.** `notes` is Redux state, so saving any note hands down a
+  new array; the sync effect keys on `graphSignature` and merges by id, carrying each surviving
+  node's position, velocity and pin across.
+- **Opening a node closes the graph, explicitly.** `GraphView.openNode` calls `onClose` before
+  navigating. Going from `/notes` to `/notes/:id` changes route entry and remounts the screen, which
+  resets `graphOpen` on its own — but `/notes/:a` → `/notes/:b` is the *same* entry, so without the
+  explicit close the graph would stay sitting on top of the note the click just asked for.
+
+State lives in [`notesGraphSlice`](../frontend/src/redux/slices/notesGraphSlice.ts) — renderer,
+camera, dragged positions, pins, filters — because `/notes` and `/notes/:noteId` are two route
+entries, so the first click on a node remounts the screen. It is also **the one slice written to
+localStorage** ([`utils/localStore.ts`](../frontend/src/utils/localStore.ts), throttled from a plain
+`store.subscribe`), so the graph is where you left it after a reload.
+
+What is **not** persisted is as deliberate as what is: `graphOpen` (a mode — every node click is a
+request to leave it), `panelOpen` (a filter panel that reopens itself every session is noise), and
+`filters.query` (a search is something you are doing now; one silently reappearing would hide most
+of the graph for no visible reason). `hideOrphans`, `colorByTag` and `localDepth` *are* kept — those
+are how you like the view set up. The d3 simulation's node objects never enter Redux either: d3
+rewrites each edge's `source`/`target` into object references, which makes the graph circular.
 
 ## 5. Shared rendering ([components/common/Markdown/Markdown.tsx](../frontend/src/components/common/Markdown/Markdown.tsx))
 
