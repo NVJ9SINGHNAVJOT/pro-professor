@@ -2,9 +2,9 @@ import { useEffect, useRef } from "react";
 import { buildGalaxy, drawGalaxyFrame, type GalaxyScene } from "@/modules/home/utils/galaxy";
 
 /**
- * The home screen's Milky Way. Fills its positioned parent and paints nothing but background —
- * the sky is rendered once per size change and then only drifts, so an idle home screen stays
- * cheap. Honours `prefers-reduced-motion` by painting a single still frame.
+ * The home screen's spiral galaxy. Fills its positioned parent and paints nothing but background —
+ * both layers are rendered once per size change and the frame loop only re-projects them, so an
+ * idle home screen stays cheap. Honours `prefers-reduced-motion` by painting a single still frame.
  */
 const GalaxyBackdrop = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

@@ -1,43 +1,78 @@
 /**
- * Procedural Milky Way for the home screen, drawn with Canvas 2D.
+ * Procedural spiral galaxy for the home screen, drawn with Canvas 2D.
  *
- * The whole sky — nebula band, dust lanes, stars, grain — is rendered **once** into an offscreen
- * layer, which the per-frame loop then turns very slowly about the galactic core. Nothing is
- * re-generated while it spins, so an idle home screen costs one rotated `drawImage` plus a handful
- * of sprite blits.
+ * Two layers, each rendered **once** per size change:
+ *
+ * - **sky** — deep space, a fixed field of foreground stars and grain, exactly viewport-sized.
+ * - **disc** — a *face-on* spiral galaxy on transparent black: square, core dead centre, rim faded
+ *   to nothing so the layer has no edge to catch the eye.
+ *
+ * Every frame the disc is tipped away from the camera and turned a little further about its own
+ * axis, then added over the sky. Nothing is regenerated while it spins, so an idle home screen
+ * costs two `drawImage` calls plus a handful of sprite blits.
  */
 
 const TAU = Math.PI * 2;
 
-/** Tilt of the galactic band: lower-left → upper-right, ~35° above horizontal. */
-const BAND_ANGLE = -0.62;
+/** How far the disc is tipped away from the camera: 0 looks straight down onto it, π/2 is edge-on.
+ *  ~70° keeps the arms readable while the foreshortening reads unmistakably as depth. */
+const TILT = 1.22;
 
-/** Where the band's bright core sits, as a fraction of the viewport. */
-const CORE_X = 0.52;
-const CORE_Y = 0.55;
+/** In-plane roll, applied outside the tilt — swings the ellipse's long axis off horizontal. */
+const ROLL = -0.3;
+
+/** Where the core sits, as a fraction of the viewport. */
+const CORE_X = 0.5;
+const CORE_Y = 0.5;
 
 /** Fixed seed — the sky must be identical across reloads and resizes. */
 const SEED = 20260731;
 
-/** Overall size of the galaxy relative to the frame. Scales the band, the dust and the star field
- *  together, so the whole thing stays in proportion when tuned. */
-const GALAXY_SCALE = 0.8;
+/** Milliseconds for one full turn of the disc. Slow enough to read as drift rather than spin. */
+const ROTATION_PERIOD = 1_200_000;
 
-/** Milliseconds for one full turn of the sky. Slow enough to read as drift rather than spin: at
- *  twelve minutes a star near the frame edge creeps by ~8px/s. */
-const ROTATION_PERIOD = 720_000;
+/** Disc radius as a fraction of the frame diagonal. Much past 0.45 and the arms run off-frame. */
+const DISC_SPAN = 0.44;
 
 /**
- * Device-pixel ceiling for one side of the sky layer. Because the layer has to be the square that
- * covers the viewport at *every* angle, it is 2–3× the viewport's area — at full DPR a 1080p screen
- * would want an 85 MB canvas. Capping the side trades a little sharpness (the layer is upscaled on
- * the way out) for a bounded ~45 MB, and keeps it clear of Safari's canvas-area limit. Rotation
- * resamples the sky anyway, so the softening barely shows.
+ * Device-pixel ceiling for the disc layer's side. The tilt squashes the disc to ~34% of its texture
+ * height on screen, so full DPR mostly buys resolution the projection throws away; capping holds it
+ * near 35 MB. The sky layer stays at full DPR, and it is the one carrying the crisp pinprick stars.
  */
-const MAX_LAYER_SIDE = 3400;
+const MAX_DISC_SIDE = 3000;
 
-/** One star bright enough to be worth re-lighting every frame. Positioned relative to the core, so
- *  it can be blitted inside the same rotated transform as the sky it belongs to. */
+/** Tightness of the winding: r = r₀·e^(PITCH·θ). Lower winds tighter. */
+const PITCH = 0.26;
+/** How far each arm wraps, in radians — a bit over a full turn, so the curve is unmistakable. */
+const ARM_SWEEP = 5.6;
+/** Where the arms lift off the bulge, as a fraction of the disc radius. Inside the bulge's own
+ *  glow, so the arms grow out of it rather than ringing it at a distance. */
+const ARM_START = 0.19;
+/**
+ * `[angle, strength, tStart, tEnd]` — four arms spaced evenly, plus two shorter branches between
+ * them.
+ *
+ * Arms are separated by **angle alone**: log spirals sharing a PITCH are pure rotations of one
+ * another, so scaling an arm's radius would only be another way of writing an angle offset — and
+ * one that quietly lands two arms on top of each other. That also means no two of these can cross.
+ *
+ * Each gets its own `tStart`/`tEnd` because arms all launching from one radius draw hard spokes out
+ * of the bulge, which is the tell that this came out of a formula.
+ */
+const ARM_SET: [number, number, number, number][] = [
+  [0, 1, 0, 1],
+  [Math.PI * 0.5, 0.9, 0.04, 0.97],
+  [Math.PI, 1, 0.02, 1],
+  [Math.PI * 1.5, 0.86, 0, 0.94],
+  [Math.PI * 0.28, 0.42, 0.3, 0.85],
+  [Math.PI * 1.26, 0.38, 0.34, 0.9],
+];
+/** Samples per arm — enough that the puffs overlap into one continuous lane. */
+const ARM_STEPS = 260;
+/** Total growth in radius across a full sweep — the constant that makes arc-length sampling work. */
+const ARM_GROWTH = Math.exp(PITCH * ARM_SWEEP);
+
+/** One star bright enough to be worth re-lighting every frame. */
 interface Twinkle {
   x: number;
   y: number;
@@ -48,16 +83,20 @@ interface Twinkle {
 }
 
 export interface GalaxyScene {
-  /** The pre-rendered sky: a `2 × radius` square in CSS px, with the core dead centre. */
-  layer: HTMLCanvasElement;
+  /** Deep space and the fixed foreground stars, exactly viewport-sized in CSS px. */
+  sky: HTMLCanvasElement;
+  /** The face-on spiral on transparent black — square, core dead centre. */
+  disc: HTMLCanvasElement;
   /** Soft white dot reused for every twinkle highlight. */
   glow: HTMLCanvasElement;
   twinkles: Twinkle[];
-  /** Half the layer's side — far enough to reach the viewport's furthest corner from the core. */
-  radius: number;
-  /** The point the sky turns about, in viewport CSS px. */
+  /** Half the disc layer's side, in CSS px. */
+  discRadius: number;
+  /** The point the disc turns about, in viewport CSS px. */
   pivotX: number;
   pivotY: number;
+  width: number;
+  height: number;
 }
 
 /** Tiny deterministic PRNG (mulberry32) — same seed, same sky, every time. */
@@ -71,76 +110,45 @@ const makeRandom = (seed: number) => {
   };
 };
 
-/**
- * An elliptical radial-gradient blob placed in the band's frame of reference: `u` runs along the
- * band axis, `v` across it, `flat` squashes the circle into the band's proportions, and `tilt`
- * rotates it off the axis (how the dust lanes cut across).
- */
-const blob = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  u: number,
-  v: number,
-  radius: number,
-  flat: number,
-  tilt: number,
-  color: string,
-  alpha: number,
-) => {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(BAND_ANGLE);
-  ctx.translate(u, v);
-  ctx.rotate(tilt);
-  ctx.scale(1, flat);
-
-  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+/** A soft circular puff of light — the building block for arms, bulge and dust. */
+const puff = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number) => {
+  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
   gradient.addColorStop(0, `rgba(${color},${alpha})`);
-  gradient.addColorStop(0.5, `rgba(${color},${alpha * 0.42})`);
+  gradient.addColorStop(0.45, `rgba(${color},${alpha * 0.38})`);
   gradient.addColorStop(1, `rgba(${color},0)`);
   ctx.fillStyle = gradient;
   ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, TAU);
+  ctx.arc(x, y, radius, 0, TAU);
   ctx.fill();
-  ctx.restore();
 };
 
 /**
- * The band, as overlapping blobs stacked additively. The colours are **saturated** on purpose: a
- * broad warm wash sets the hue, brighter tan blobs build the bulge, and only the extreme ends go
- * cool. Stacking near-neutral greys instead — the obvious first guess — sums straight to grey fog
- * and loses the photo entirely, so keep R well clear of B here.
- * `[u, v, radius, flat, rgb, alpha]`, distances as a fraction of the frame diagonal.
+ * A point on one logarithmic-spiral arm, relative to the core. `t` runs 0 (just off the bulge) → 1
+ * (arm tip); `angle` picks the arm, `radiusScale` pulls a spur in tighter than its parent.
  */
-const BAND: [number, number, number, number, string, number][] = [
-  [0.0, 0.0, 0.5, 0.3, "196,138,84", 0.15],
-  [-0.46, 0.005, 0.26, 0.22, "88,108,150", 0.085],
-  [-0.24, 0.0, 0.24, 0.24, "176,132,96", 0.16],
-  [-0.09, 0.005, 0.2, 0.22, "228,168,106", 0.2],
-  [0.0, 0.0, 0.14, 0.26, "246,198,140", 0.22],
-  [0.02, 0.005, 0.075, 0.4, "255,226,182", 0.24],
-  [0.03, 0.0, 0.035, 0.55, "255,246,226", 0.2],
-  [0.19, -0.005, 0.22, 0.24, "182,146,116", 0.16],
-  [0.42, 0.0, 0.26, 0.22, "94,112,152", 0.085],
-];
+const spiralPoint = (t: number, angle: number, radiusScale: number, discRadius: number) => {
+  const theta = t * ARM_SWEEP;
+  const r = discRadius * ARM_START * radiusScale * Math.exp(PITCH * theta);
+  return [Math.cos(angle + theta) * r, Math.sin(angle + theta) * r];
+};
 
 /**
- * Dark dust cutting through the band. Hand-placed rather than randomised — these are the specific
- * wisps that give the reference photo its shape, including the near-perpendicular finger left of
- * the core. Browner than the sky behind them, which is what reads as dust rather than a hole.
- * `[u, v, radius, flat, tilt, rgb, alpha]`.
+ * A smooth seeded wiggle in roughly [-1, 1]: three sines of incommensurate frequency beaten
+ * together, which is enough to spoil the analytic perfection of a log spiral without dragging in a
+ * real noise field. Used both to bend an arm off its ideal curve and to make it clumpy along it.
  */
-const DUST: [number, number, number, number, number, string, number][] = [
-  [-0.12, -0.05, 0.3, 0.1, 0.05, "20,13,11", 0.92],
-  [0.13, 0.042, 0.26, 0.085, -0.06, "16,11,10", 0.85],
-  [-0.32, 0.018, 0.22, 0.12, 0.1, "26,17,13", 0.72],
-  [-0.06, 0.075, 0.17, 0.11, -0.28, "20,13,11", 0.68],
-  [-0.07, -0.015, 0.075, 0.3, 1.3, "14,9,9", 0.7],
-  [0.06, -0.03, 0.1, 0.24, 0.95, "18,12,11", 0.5],
-  [0.3, -0.028, 0.18, 0.1, 0.18, "26,17,13", 0.6],
-  [-0.2, 0.05, 0.13, 0.14, 0.35, "16,11,10", 0.55],
-];
+const makeWobble = (random: () => number) => {
+  const waves = [1.7, 3.3, 6.1].map((freq) => ({ freq, phase: random() * TAU, amp: 1 / freq }));
+  const norm = waves.reduce((sum, wave) => sum + wave.amp, 0);
+  return (t: number) => waves.reduce((sum, w) => sum + w.amp * Math.sin(t * w.freq + w.phase), 0) / norm;
+};
+
+/**
+ * Turn a uniform `u` into a position along an arm that is even in *arc length*. Sampling the spiral
+ * parameter directly instead piles points into the tightly-wound inner turn — where arc length per
+ * unit parameter is smallest — and that pile-up is what reads as a straight spoke off the bulge.
+ */
+const alongArm = (u: number) => Math.log(1 + u * (ARM_GROWTH - 1)) / (PITCH * ARM_SWEEP);
 
 /** Star colours, blue-white through to amber. Sampled with a heavy blue bias. */
 const STAR_COLORS = ["150,182,255", "205,220,255", "255,255,255", "255,238,205", "255,200,142"];
@@ -151,6 +159,33 @@ const pickStarColor = (t: number) => {
   if (t < 0.84) return STAR_COLORS[2];
   if (t < 0.95) return STAR_COLORS[3];
   return STAR_COLORS[4];
+};
+
+/** One star: a bare sub-pixel dot, or — for the rare big ones — a white core inside a halo. */
+const plotStar = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, alpha: number, size: number) => {
+  if (size < 1) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `rgb(${color})`;
+    ctx.fillRect(x, y, size * 1.5, size * 1.5);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const halo = ctx.createRadialGradient(x, y, 0, x, y, size * 3);
+  halo.addColorStop(0, `rgba(${color},${alpha * 0.8})`);
+  halo.addColorStop(0.3, `rgba(${color},${alpha * 0.22})`);
+  halo.addColorStop(1, `rgba(${color},0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 3, 0, TAU);
+  ctx.fill();
+
+  ctx.globalAlpha = Math.min(1, alpha + 0.3);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.5, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 };
 
 /** Four fading spikes through a point — the diffraction cross on the brightest stars. */
@@ -203,12 +238,7 @@ const buildGlowSprite = () => {
  * Photographic grain. Drawn in device pixels (transform reset) so it stays 1:1 crisp on HiDPI
  * instead of being stretched by the DPR scale.
  */
-const drawGrain = (
-  ctx: CanvasRenderingContext2D,
-  random: () => number,
-  deviceWidth: number,
-  deviceHeight: number,
-) => {
+const drawGrain = (ctx: CanvasRenderingContext2D, random: () => number, deviceWidth: number, deviceHeight: number) => {
   const tile = document.createElement("canvas");
   tile.width = 128;
   tile.height = 128;
@@ -237,139 +267,55 @@ const drawGrain = (
   ctx.restore();
 };
 
-/**
- * Render the whole sky into an offscreen layer. Called on mount and on resize only.
- *
- * The layer is a square centred on the galactic core, big enough that the viewport's furthest
- * corner stays inside it however far the sky has turned — so everything below is drawn in *layer*
- * coordinates, with `offsetX/offsetY` mapping the composed-for-the-viewport positions across.
- */
-export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyScene => {
-  const pivotX = width * CORE_X;
-  const pivotY = height * CORE_Y;
-  // Furthest corner, plus a hair so the layer's own edge never grazes into view.
-  const radius =
-    Math.max(
-      Math.hypot(pivotX, pivotY),
-      Math.hypot(width - pivotX, pivotY),
-      Math.hypot(pivotX, height - pivotY),
-      Math.hypot(width - pivotX, height - pivotY),
-    ) + 4;
-  const side = radius * 2;
-  const scale = Math.min(dpr, MAX_LAYER_SIDE / side);
-
-  const layer = document.createElement("canvas");
-  layer.width = Math.round(side * scale);
-  layer.height = Math.round(side * scale);
-  const ctx = layer.getContext("2d");
+/** The still backdrop: deep space and the foreground stars the disc turns behind. */
+const buildSky = (width: number, height: number, dpr: number, random: () => number) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
   const twinkles: Twinkle[] = [];
-  const scene: GalaxyScene = { layer, glow: buildGlowSprite(), twinkles, radius, pivotX, pivotY };
-  if (!ctx) return scene;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { canvas, twinkles };
 
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
-
-  const random = makeRandom(SEED);
-  const cx = radius;
-  const cy = radius;
-  const offsetX = radius - pivotX;
-  const offsetY = radius - pivotY;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const diagonal = Math.hypot(width, height);
 
-  // 1. Deep space, with the reference photo's faint blue haze in the lower right.
+  // Deep space, with a faint blue haze low and to the right.
   ctx.fillStyle = "#020308";
-  ctx.fillRect(0, 0, side, side);
-  const hazeX = offsetX + width * 0.78;
-  const hazeY = offsetY + height * 0.84;
+  ctx.fillRect(0, 0, width, height);
+  const hazeX = width * 0.78;
+  const hazeY = height * 0.84;
   const haze = ctx.createRadialGradient(hazeX, hazeY, 0, hazeX, hazeY, diagonal * 0.4);
   haze.addColorStop(0, "rgba(26,38,68,0.2)");
   haze.addColorStop(1, "rgba(26,38,68,0)");
   ctx.fillStyle = haze;
-  ctx.fillRect(0, 0, side, side);
+  ctx.fillRect(0, 0, width, height);
 
-  const span = diagonal * GALAXY_SCALE;
-
-  // 2. The band, stacked additively so the overlaps brighten toward the core.
+  // Foreground stars, spread evenly and kept sparser than the disc's own so the galaxy stays the
+  // densest thing on screen. These never move — they are what the spin is measured against.
   ctx.globalCompositeOperation = "lighter";
-  for (const [u, v, radius, flat, color, alpha] of BAND) {
-    blob(ctx, cx, cy, u * span, v * span, radius * span, flat, 0, color, alpha);
-  }
-
-  // 3. Dust lanes, painted back over the band.
-  ctx.globalCompositeOperation = "source-over";
-  for (const [u, v, radius, flat, tilt, color, alpha] of DUST) {
-    blob(ctx, cx, cy, u * span, v * span, radius * span, flat, tilt, color, alpha);
-  }
-
-  // 4. Stars. Two thirds are drawn from the band (uniform along the axis, Gaussian across it) so
-  //    the field thins out naturally toward the corners; the rest fill the whole frame.
-  ctx.globalCompositeOperation = "lighter";
-  const target = Math.min(24000, Math.round((side * side) / 190));
-  const spread = height * 0.34 * GALAXY_SCALE;
-  const reach = span * 0.62;
-  const cos = Math.cos(BAND_ANGLE);
-  const sin = Math.sin(BAND_ANGLE);
-
-  let placed = 0;
-  for (let attempt = 0; placed < target && attempt < target * 6; attempt++) {
-    let x: number;
-    let y: number;
-    if (random() < 0.78) {
-      const u = (random() * 2 - 1) * reach;
-      // three uniforms ≈ a bell curve: dense on the axis, sparse at the band's edges
-      const v = ((random() + random() + random()) / 1.5 - 1) * spread;
-      x = cx + u * cos - v * sin;
-      y = cy + u * sin + v * cos;
-    } else {
-      x = random() * side;
-      y = random() * side;
-    }
-    if (x < 0 || y < 0 || x > side || y > side) continue;
-    placed++;
-
-    const color = pickStarColor(random());
+  const target = Math.min(9000, Math.round((width * height) / 320));
+  for (let i = 0; i < target; i++) {
+    const x = random() * width;
+    const y = random() * height;
     const alpha = 0.28 + random() * 0.72;
     // steep power law: nearly every star is a pinprick, a handful are large
-    const radius = 0.35 + Math.pow(random(), 8) * 2.4;
+    const size = 0.35 + Math.pow(random(), 8) * 2.4;
+    plotStar(ctx, x, y, pickStarColor(random()), alpha, size);
 
-    if (radius < 1) {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = `rgb(${color})`;
-      ctx.fillRect(x, y, radius * 1.5, radius * 1.5);
-      continue;
-    }
-
-    ctx.globalAlpha = 1;
-    const halo = ctx.createRadialGradient(x, y, 0, x, y, radius * 3);
-    halo.addColorStop(0, `rgba(${color},${alpha * 0.8})`);
-    halo.addColorStop(0.3, `rgba(${color},${alpha * 0.22})`);
-    halo.addColorStop(1, `rgba(${color},0)`);
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 3, 0, TAU);
-    ctx.fill();
-
-    ctx.globalAlpha = Math.min(1, alpha + 0.3);
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 0.5, 0, TAU);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    if (radius > 1.8 && twinkles.length < 55 && random() < 0.4) {
+    if (size > 1.8 && twinkles.length < 40 && random() < 0.4) {
       twinkles.push({
-        x: x - cx,
-        y: y - cy,
-        size: 5 + radius * 2.5,
+        x,
+        y,
+        size: 5 + size * 2.5,
         phase: random() * TAU,
         speed: 0.0006 + random() * 0.0012,
       });
     }
   }
-  ctx.globalAlpha = 1;
 
-  // 5. The one conspicuous star upper-left of the core.
-  const heroX = offsetX + width * 0.38;
-  const heroY = offsetY + height * 0.27;
+  // One conspicuous star, placed clear of the disc so its spikes stay legible.
+  const heroX = width * 0.16;
+  const heroY = height * 0.2;
   const bloom = ctx.createRadialGradient(heroX, heroY, 0, heroX, heroY, 24);
   bloom.addColorStop(0, "rgba(255,255,255,0.95)");
   bloom.addColorStop(0.12, "rgba(226,236,255,0.45)");
@@ -380,35 +326,209 @@ export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyS
   ctx.arc(heroX, heroY, 24, 0, TAU);
   ctx.fill();
   drawSpikes(ctx, heroX, heroY, 32, 0.7);
-  twinkles.push({ x: heroX - cx, y: heroY - cy, size: 18, phase: 0, speed: 0.0004 });
+  twinkles.push({ x: heroX, y: heroY, size: 18, phase: 0, speed: 0.0004 });
 
-  // 6. Grain over everything.
-  drawGrain(ctx, random, layer.width, layer.height);
-
-  return scene;
+  drawGrain(ctx, random, canvas.width, canvas.height);
+  return { canvas, twinkles };
 };
 
 /**
- * One frame: the sky turned a little further about its core, plus a gentle pulse on the brightest
- * stars. The layer is opaque and always overhangs the viewport, so there is nothing to clear first.
+ * The galaxy itself, drawn face-on into a transparent square so the projection at draw time is
+ * free to tip it wherever it likes. Everything is additive light; the dust lanes and the rim
+ * falloff are cut back out with `destination-out`, which leaves the sky showing through rather
+ * than smearing an opaque black square over it.
  */
-export const drawGalaxyFrame = (ctx: CanvasRenderingContext2D, scene: GalaxyScene, time: number) => {
-  const { layer, glow, twinkles, radius, pivotX, pivotY } = scene;
+const buildDisc = (discRadius: number, dpr: number, random: () => number) => {
+  const side = discRadius * 2;
+  const scale = Math.min(dpr, MAX_DISC_SIDE / side);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(side * scale);
+  canvas.height = Math.round(side * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
 
-  ctx.save();
-  ctx.translate(pivotX, pivotY);
-  ctx.rotate(-(time / ROTATION_PERIOD) * TAU); // counter-clockwise, like the northern sky
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  const cx = discRadius;
+  const cy = discRadius;
+
+  // Each arm carries its own pair of wobbles: `drift` bends it off the ideal spiral, `patchy`
+  // breaks it into brighter and fainter stretches. Both the light and the stars read from these,
+  // so the stars follow the arm they belong to rather than a curve it no longer sits on.
+  const arms = ARM_SET.map(([angle, strength, tStart, tEnd]) => ({
+    angle,
+    strength,
+    tStart,
+    tEnd,
+    drift: makeWobble(random),
+    patchy: makeWobble(random),
+  }));
+  type Arm = (typeof arms)[number];
+
+  /** How far the arm has wandered off its ideal spiral at `t`, as a multiplier on its radius. */
+  const armDrift = (arm: Arm, t: number) => 1 + 0.09 * arm.drift(t * 4);
+
+  /** A point on the wobbled arm. `local` runs 0 → 1 across that arm's own stretch of the sweep. */
+  const armPoint = (arm: Arm, local: number) => {
+    const t = arm.tStart + (arm.tEnd - arm.tStart) * local;
+    return spiralPoint(t, arm.angle, armDrift(arm, t), discRadius);
+  };
+
+  /**
+   * Arm brightness along its length: up fast out of the bulge, held, then trailing away at the tip.
+   * Deliberately **asymmetric** — fading at both ends leaves the arms floating as a detached ring
+   * with the core stranded in the hole. The short ramp-in lands inside the bulge's glow, so the
+   * junction is hidden rather than drawn.
+   */
+  const taper = (local: number) => {
+    const ease = (x: number) => x * x * (3 - 2 * x);
+    const rise = ease(Math.min(1, local / 0.12));
+    const fall = ease(Math.min(1, (1 - local) / 0.45));
+    return rise * fall;
+  };
+
+  // 1. A broad haze filling the disc, so the arms sit in something rather than float in a void.
+  ctx.globalCompositeOperation = "lighter";
+  puff(ctx, cx, cy, discRadius * 0.9, "78,96,150", 0.09);
+
+  // 2. Arms. Overlapping puffs walked along a logarithmic spiral — warm and tight near the bulge,
+  //    wide and blue by the tip, where the young stars are.
+  for (const arm of arms) {
+    for (let i = 0; i <= ARM_STEPS; i++) {
+      const local = i / ARM_STEPS;
+      const t = arm.tStart + (arm.tEnd - arm.tStart) * local;
+      const [x, y] = armPoint(arm, local);
+      const clump = 0.55 + 0.45 * (0.5 + 0.5 * arm.patchy(t * 9));
+      const width = discRadius * (0.04 + 0.075 * t) * (0.8 + random() * 0.4);
+      const color = t < 0.32 ? "255,206,152" : t < 0.66 ? "216,208,226" : "150,186,255";
+      puff(ctx, cx + x, cy + y, width, color, 0.04 * arm.strength * taper(local) * clump);
+    }
+  }
+
+  // 3. Star-forming knots along the arms — the bright blue clumps that stop an arm from reading as
+  //    one evenly painted stroke.
+  for (const arm of arms) {
+    for (let i = 0; i < 14; i++) {
+      const local = 0.12 + random() * 0.76;
+      const [x, y] = armPoint(arm, local);
+      const jitter = discRadius * 0.022;
+      puff(
+        ctx,
+        cx + x + (random() - 0.5) * jitter,
+        cy + y + (random() - 0.5) * jitter,
+        discRadius * (0.016 + random() * 0.03),
+        "170,200,255",
+        0.09 * arm.strength * taper(local),
+      );
+    }
+  }
+
+  // 4. The bulge, stacked warm to white. The widest puff reaches past ARM_START so the core and the
+  //    arm roots run into one another instead of leaving a gap for the eye to catch.
+  puff(ctx, cx, cy, discRadius * 0.52, "204,156,108", 0.1);
+  puff(ctx, cx, cy, discRadius * 0.34, "236,176,110", 0.16);
+  puff(ctx, cx, cy, discRadius * 0.17, "255,214,158", 0.24);
+  puff(ctx, cx, cy, discRadius * 0.075, "255,240,214", 0.34);
+  puff(ctx, cx, cy, discRadius * 0.028, "255,252,244", 0.5);
+
+  // 5. Stars, mostly clustered onto the arms — these are what make the rotation legible.
+  const target = Math.min(11000, Math.round((discRadius * discRadius) / 74));
+  for (let i = 0; i < target; i++) {
+    let x: number;
+    let y: number;
+    if (random() < 0.62) {
+      const arm = arms[Math.floor(random() * arms.length)];
+      const local = alongArm(random());
+      // thin out toward both ends, matching the light so stars never outrun their own arm
+      if (random() > taper(local)) continue;
+      const t = arm.tStart + (arm.tEnd - arm.tStart) * local;
+      const [ax, ay] = armPoint(arm, local);
+      // three uniforms ≈ a bell curve: dense on the arm, sparse either side of it
+      const spread = discRadius * (0.035 + 0.07 * t);
+      x = ax + ((random() + random() + random()) / 1.5 - 1) * spread;
+      y = ay + ((random() + random() + random()) / 1.5 - 1) * spread;
+    } else {
+      const angle = random() * TAU;
+      const r = discRadius * 0.92 * Math.pow(random(), 0.75);
+      x = Math.cos(angle) * r;
+      y = Math.sin(angle) * r;
+    }
+
+    const alpha = 0.28 + random() * 0.72;
+    const size = 0.35 + Math.pow(random(), 8) * 2.2;
+    plotStar(ctx, cx + x, cy + y, pickStarColor(random()), alpha, size);
+  }
+
+  // 6. Dust riding the inner edge of each grand-design arm — the dark rim that makes an arm read
+  //    as an arm rather than a smear. It has to share the arm's own drift, or it cuts straight
+  //    across the thing it is supposed to hug.
+  ctx.globalCompositeOperation = "destination-out";
+  for (const arm of arms.slice(0, 4)) {
+    for (let i = 0; i <= ARM_STEPS; i++) {
+      const local = i / ARM_STEPS;
+      const t = arm.tStart + (arm.tEnd - arm.tStart) * local;
+      // 0.9 sets the lane a tenth of a radius inside the arm — right on its inner edge, given the
+      // arm is about that wide.
+      const [x, y] = spiralPoint(t, arm.angle, 0.9 * armDrift(arm, t), discRadius);
+      puff(ctx, cx + x, cy + y, discRadius * (0.022 + 0.035 * t), "0,0,0", 0.05 * taper(local));
+    }
+  }
+
+  // 7. Erase the rim, so the square never shows a corner or an edge as it turns. Held out to 0.84
+  //    so it clips the spurs — which reach ~0.95 — rather than the grand-design arms.
+  const rim = ctx.createRadialGradient(cx, cy, discRadius * 0.84, cx, cy, discRadius);
+  rim.addColorStop(0, "rgba(0,0,0,0)");
+  rim.addColorStop(1, "rgba(0,0,0,1)");
+  ctx.fillStyle = rim;
+  ctx.fillRect(0, 0, side, side);
+
+  return canvas;
+};
+
+/** Render both layers. Called on mount and on resize only. */
+export const buildGalaxy = (width: number, height: number, dpr: number): GalaxyScene => {
+  const discRadius = Math.hypot(width, height) * DISC_SPAN;
+  const sky = buildSky(width, height, dpr, makeRandom(SEED));
+
+  return {
+    sky: sky.canvas,
+    disc: buildDisc(discRadius, dpr, makeRandom(SEED + 1)),
+    glow: buildGlowSprite(),
+    twinkles: sky.twinkles,
+    discRadius,
+    pivotX: width * CORE_X,
+    pivotY: height * CORE_Y,
+    width,
+    height,
+  };
+};
+
+/** One frame: the still sky, the disc turned a little further, then a pulse on the brightest stars. */
+export const drawGalaxyFrame = (ctx: CanvasRenderingContext2D, scene: GalaxyScene, time: number) => {
+  const { sky, disc, glow, twinkles, discRadius, pivotX, pivotY, width, height } = scene;
 
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1;
-  ctx.drawImage(layer, -radius, -radius, radius * 2, radius * 2);
+  ctx.drawImage(sky, 0, 0, width, height);
 
-  // Twinkles ride along inside the rotation — their coordinates are already core-relative.
+  // The disc texture is face-on, so `scale(1, cos TILT)` is the orthographic projection of it
+  // tipped away from the camera: points on it sweep along ellipses, quickly across the near rim
+  // and slowly across the far one, which is the parallax that reads as depth. `rotate` runs inside
+  // that squash (the disc turning on its own axis); ROLL runs outside it (the camera's head tilt).
+  ctx.save();
+  ctx.translate(pivotX, pivotY);
+  ctx.rotate(ROLL);
+  ctx.scale(1, Math.cos(TILT));
+  ctx.rotate(-(time / ROTATION_PERIOD) * TAU);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.drawImage(disc, -discRadius, -discRadius, discRadius * 2, discRadius * 2);
+  ctx.restore();
+
   ctx.globalCompositeOperation = "lighter";
   for (const star of twinkles) {
     ctx.globalAlpha = 0.06 + 0.16 * (0.5 + 0.5 * Math.sin(time * star.speed + star.phase));
     ctx.drawImage(glow, star.x - star.size / 2, star.y - star.size / 2, star.size, star.size);
   }
 
-  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 };

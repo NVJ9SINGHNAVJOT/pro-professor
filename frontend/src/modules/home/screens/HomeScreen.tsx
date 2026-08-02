@@ -7,7 +7,7 @@ const professorName = import.meta.env.VITE_PROFESSOR_NAME;
 const spikeFill = (accent: string) => `linear-gradient(to right, transparent, ${accent}, transparent)`;
 
 /**
- * The galaxy landing page: a procedurally drawn Milky Way over which a small constellation of
+ * The galaxy landing page: a procedurally drawn spiral galaxy over which a small constellation of
  * launcher stars doubles as the app's navigation. It is the app's index route ("/").
  */
 const HomeScreen = () => {
@@ -15,13 +15,13 @@ const HomeScreen = () => {
     <div className="relative flex min-h-full w-full items-center justify-center overflow-hidden bg-black">
       <GalaxyBackdrop />
 
-      {/* Vignette so the center content stays legible */}
+      {/* Vignette so the center content stays legible. Kept light at the edges — that is where the
+          disc's arms sweep past, and crushing it to black there hides the rotation. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.5) 62%, rgba(0,0,0,0.92) 100%)",
+          background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0.8) 100%)",
         }}
       />
 
