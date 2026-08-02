@@ -423,14 +423,34 @@ const buildDisc = (discRadius: number, dpr: number, random: () => number) => {
   }
 
   // 4. The bulge, stacked warm to white. The widest puff reaches past ARM_START so the core and the
-  //    arm roots run into one another instead of leaving a gap for the eye to catch.
-  puff(ctx, cx, cy, discRadius * 0.52, "204,156,108", 0.1);
-  puff(ctx, cx, cy, discRadius * 0.34, "236,176,110", 0.16);
-  puff(ctx, cx, cy, discRadius * 0.17, "255,214,158", 0.24);
-  puff(ctx, cx, cy, discRadius * 0.075, "255,240,214", 0.34);
-  puff(ctx, cx, cy, discRadius * 0.028, "255,252,244", 0.5);
+  //    arm roots run into one another instead of leaving a gap for the eye to catch. Each step is
+  //    deliberately shallow — additive light compounds, and two heavy puffs are all it takes to clip
+  //    the centre to a featureless white disc.
+  puff(ctx, cx, cy, discRadius * 0.62, "188,144,102", 0.08);
+  puff(ctx, cx, cy, discRadius * 0.46, "204,156,108", 0.11);
+  puff(ctx, cx, cy, discRadius * 0.32, "236,176,110", 0.16);
+  puff(ctx, cx, cy, discRadius * 0.19, "255,214,158", 0.22);
+  puff(ctx, cx, cy, discRadius * 0.1, "255,236,206", 0.28);
+  puff(ctx, cx, cy, discRadius * 0.045, "255,244,224", 0.34);
+  puff(ctx, cx, cy, discRadius * 0.016, "255,252,244", 0.5);
 
-  // 5. Stars, mostly clustered onto the arms — these are what make the rotation legible.
+  // 5. Bulge stars. What makes a core look massive is *resolved* density — glow alone only reads as
+  //    a lamp behind the disc. `r ∝ u^2.4` piles them steeply toward the centre; they stay small and
+  //    old-yellow, and dim as they approach it so they read through the glow instead of blowing it
+  //    out to white. This is by far the densest star field in the scene, and deliberately so: it is
+  //    the only thing that gives the core weight against arms carrying thousands of their own.
+  const bulgeRadius = discRadius * 0.36;
+  const bulgeTarget = Math.min(16000, Math.round((discRadius * discRadius) / 58));
+  for (let i = 0; i < bulgeTarget; i++) {
+    const angle = random() * TAU;
+    const spread = Math.pow(random(), 2.4);
+    const r = bulgeRadius * spread;
+    const alpha = (0.22 + random() * 0.6) * (0.4 + 0.6 * spread);
+    const size = 0.28 + Math.pow(random(), 9) * 1.7;
+    plotStar(ctx, cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, pickStarColor(0.6 + random() * 0.4), alpha, size);
+  }
+
+  // 6. Stars, mostly clustered onto the arms — these are what make the rotation legible.
   const target = Math.min(11000, Math.round((discRadius * discRadius) / 74));
   for (let i = 0; i < target; i++) {
     let x: number;
@@ -458,7 +478,7 @@ const buildDisc = (discRadius: number, dpr: number, random: () => number) => {
     plotStar(ctx, cx + x, cy + y, pickStarColor(random()), alpha, size);
   }
 
-  // 6. Dust riding the inner edge of each grand-design arm — the dark rim that makes an arm read
+  // 7. Dust riding the inner edge of each grand-design arm — the dark rim that makes an arm read
   //    as an arm rather than a smear. It has to share the arm's own drift, or it cuts straight
   //    across the thing it is supposed to hug.
   ctx.globalCompositeOperation = "destination-out";
@@ -473,7 +493,7 @@ const buildDisc = (discRadius: number, dpr: number, random: () => number) => {
     }
   }
 
-  // 7. Erase the rim, so the square never shows a corner or an edge as it turns. Held out to 0.84
+  // 8. Erase the rim, so the square never shows a corner or an edge as it turns. Held out to 0.84
   //    so it clips the spurs — which reach ~0.95 — rather than the grand-design arms.
   const rim = ctx.createRadialGradient(cx, cy, discRadius * 0.84, cx, cy, discRadius);
   rim.addColorStop(0, "rgba(0,0,0,0)");
