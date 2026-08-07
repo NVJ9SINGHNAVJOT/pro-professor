@@ -1,5 +1,15 @@
 # Pro Professor
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=000)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=fff)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F?style=flat&logo=springboot&logoColor=fff)
+![Java](https://img.shields.io/badge/Java-25-ED8B00?style=flat&logo=openjdk&logoColor=fff)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=fff)
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat&logo=go&logoColor=fff)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=fff)
+![100% Local](https://img.shields.io/badge/100%25-Local--First-success?style=flat)
+
 **A fully local, multimodal AI workspace.** Chat, Obsidian-style notes, and a diagram
 editor — text, voice, and file-attachment conversations with open-source LLMs running entirely on
 your own machine, no cloud provider, no API keys, no data leaving the device.
@@ -15,9 +25,9 @@ the gateway fans out to everything else.
 
 - [Why it exists](#why-it-exists)
 - [What you can do with it](#what-you-can-do-with-it)
-- [Highlights](#highlights)
+- [Engineering Highlights](#engineering-highlights)
 - [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
+- [System Design](#system-design)
 - [Repository Layout](#repository-layout)
 - [Documentation Map](#documentation-map)
 - [Getting Started](#getting-started)
@@ -81,7 +91,7 @@ mid-conversation changes are diffed and rendered as inline markers in the transc
 
 ---
 
-## Highlights
+## Engineering Highlights
 
 - **Token-by-token streaming** over Server-Sent Events, including live model reasoning
   ("thinking") and per-response performance metrics.
@@ -91,13 +101,17 @@ mid-conversation changes are diffed and rendered as inline markers in the transc
 - **Native multimodal input** — audio-capable models receive the raw clip directly rather than a
   transcript.
 - **Bytes never touch the JVM** — the gateway records a storage reference and hands the browser a
-  direct storage-server URL.
+  direct storage-server URL; uploads and downloads stream straight to the Go storage server.
 - **Production-minded gateway** — request-ID correlation across logs (MDC), clean mid-stream
-  abort handling, actuator health checks, Flyway migrations, and compile-time-safe SQL via jOOQ.
+  abort handling, actuator + Kafka health checks, Flyway migrations, and compile-time-safe SQL
+  via jOOQ.
 - **Route-loader data fetching** — every page's on-arrival data is fetched by a React Router
   loader before the screen renders, not by a `useEffect` after mount.
 - **Lean dependency budget** — the storage server is Go stdlib only, zero dependencies; heavy
   frontend libraries (Excalidraw, Mermaid) are lazy-loaded out of the main bundle.
+- **Real-time channels chosen per use case** — SSE for token streaming (cancellable,
+  reconnect-friendly), a WebSocket for lightweight server→client notifications, plain REST for
+  everything else.
 
 ---
 
@@ -114,29 +128,93 @@ mid-conversation changes are diffed and rendered as inline markers in the transc
 
 ---
 
-## Architecture
+## System Design
 
-```text
-Browser ──► central-server ──┬──► ai-service   (MLX inference, STT, TTS)
-   │                         ├──► Ollama       (open-source models)
-   │                         ├──► storage-server (upload)
-   │                         └──► PostgreSQL   (conversations, notes, diagrams, refs)
-   │
-   └──────────────────────────────► storage-server (download — bytes stream direct)
+```mermaid
+flowchart TB
+    subgraph ClientTier["Client — :5173"]
+        Browser["🌐 React 19 SPA<br/>Vite · Redux Toolkit · React Router 8"]
+    end
+
+    subgraph GatewayTier["Gateway — central-server :4000"]
+        Central["🧠 Spring Boot 3.5 · Java 25<br/>REST · SSE · WebSocket"]
+    end
+
+    subgraph InferenceTier["Inference"]
+        AI["🤖 ai-service — :8000<br/>FastAPI · MLX-LM / MLX-VLM<br/>Whisper STT · MLX TTS"]
+        Ollama["📦 Ollama — :11434<br/>open-source models"]
+    end
+
+    subgraph DataTier["Data"]
+        DB[("🐘 PostgreSQL<br/>jOOQ · Flyway")]
+        Kafka["📨 Kafka<br/>health-checked"]
+    end
+
+    subgraph StorageTier["Storage — storage-server :9000"]
+        StorageSrv["🗄️ Go · stdlib only<br/>file bytes on disk"]
+    end
+
+    Browser -->|"REST — CRUD"| Central
+    Browser -->|"SSE — token stream"| Central
+    Browser -->|"WebSocket — notifications"| Central
+    Browser -.->|"GET — bytes stream direct"| StorageSrv
+
+    Central -->|"jOOQ"| DB
+    Central -.->|"health check"| Kafka
+    Central -->|"OpenAI-compatible API"| AI
+    Central -->|"OpenAI-compatible API"| Ollama
+    Central -->|"multipart upload"| StorageSrv
 ```
 
-| Service          | Stack                                  | Default URL             | Role                                                    |
-| ---------------- | -------------------------------------- | ----------------------- | ------------------------------------------------------- |
-| `frontend`       | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173` | Web client — chat, notes, diagrams UI                   |
-| `central-server` | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000` | API gateway; REST + SSE + WebSocket, PostgreSQL         |
-| `ai-service`     | Python, FastAPI, MLX-LM                | `http://localhost:8000` | Local LLM inference + STT/TTS (Apple Silicon)           |
-| `storage-server` | Go 1.25 (stdlib only)                  | `http://localhost:9000` | Local file storage — uploads + direct browser downloads |
+The browser talks to **one** backend. Every request goes through the gateway, which fans out to
+inference, storage, and Postgres. The one exception is media **downloads**: the gateway hands back
+a direct storage-server URL and file bytes stream straight to the browser, never through the JVM.
+
+| Service          | Stack                                  | Default URL              | Role                                                    |
+| ---------------- | -------------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `frontend`       | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173`  | Web client — chat, notes, diagrams UI                   |
+| `central-server` | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000`  | API gateway; REST + SSE + WebSocket, PostgreSQL         |
+| `ai-service`     | Python, FastAPI, MLX-LM                | `http://localhost:8000`  | Local LLM inference + STT/TTS (Apple Silicon)           |
+| `storage-server` | Go 1.25 (stdlib only)                  | `http://localhost:9000`  | Local file storage — uploads + direct browser downloads |
+| `ollama`         | external inference engine              | `http://localhost:11434` | Open-source model serving                               |
 
 The gateway exposes one versioned REST surface under `/api/v1`: `chats`, `notes`, `diagrams`,
 `diagram-folders`, `media`, `audio`, `models`, `settings`.
 
 **`ai-service`** is a git submodule maintained in its own repository. **`storage-server`** is a
 first-class service committed in this repo under `backend/storage-server/`.
+
+### Request Flow: Streaming Chat (SSE)
+
+The core interaction — a chat send — is fully asynchronous end to end: the gateway opens a
+long-lived SSE response and streams model tokens back as they're generated, persisting to Postgres
+without blocking the stream.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant FE as Browser (React)
+    participant GW as central-server
+    participant DB as PostgreSQL
+    participant M as ai-service / Ollama
+
+    User->>FE: submit prompt
+    FE->>GW: POST /api/v1/chats/send
+    GW->>DB: persist user message, touch conversation
+    GW->>M: POST /v1/chat/completions (stream)
+    activate GW
+    loop token stream
+        M-->>GW: completion chunk
+        GW-->>FE: SSE chat.chunk
+    end
+    deactivate GW
+    GW->>DB: persist assistant reply
+    GW-->>FE: SSE chat.done
+```
+
+If the client disconnects mid-stream (user hits Stop), the gateway detects it, aborts generation
+cleanly, and skips the write — no orphaned completions.
 
 ---
 
