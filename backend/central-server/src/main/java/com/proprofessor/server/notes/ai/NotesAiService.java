@@ -51,13 +51,25 @@ public class NotesAiService {
             number repeated on both edges where branches rejoin. Leave structural edges (an import, \
             "depends on") unlabelled, and leave sequence and state diagrams unnumbered.""";
 
+    /**
+     * Mermaid's own syntax, not house style — kept apart from {@link #MERMAID_NUMBERING} because
+     * that constant is the numbering convention, which {@code skills/pro-professor-notes/SKILL.md}
+     * owns and must be kept in step with. A bare bracket in a label is a hard parse error (the
+     * lexer reads "(" as the start of a round node even inside an edge label), so the diagram
+     * renders as an error box rather than looking merely off-style.
+     */
+    private static final String MERMAID_SYNTAX = """
+            In a mermaid diagram, wrap node and edge label text in double quotes whenever it contains \
+            a bracket, brace, parenthesis, # or quote — write A -->|"Command (SET key value)"| B, \
+            never A -->|Command (SET key value)| B. Unquoted brackets break the diagram entirely.""";
+
     /** The model's whole job: hand back the complete updated note, nothing else. */
     private static final String FULL_NOTE_SYSTEM_PROMPT = """
             You are a note-editing assistant inside a Markdown note app. \
             You will be given a note and a task; respond with ONLY the complete updated Markdown note. \
             Do not add explanations before or after it, and do not wrap the whole note in a code fence. \
             Preserve the YAML frontmatter block (--- ... ---) when present, updating it only when the task asks. \
-            """ + MARKDOWN_DIALECT + " " + MERMAID_NUMBERING;
+            """ + MARKDOWN_DIALECT + " " + MERMAID_SYNTAX + " " + MERMAID_NUMBERING;
 
     private static final Pattern WRAPPING_FENCE =
             Pattern.compile("\\A```[a-zA-Z]*\\s*\\n(.*)\\n```\\s*\\z", Pattern.DOTALL);

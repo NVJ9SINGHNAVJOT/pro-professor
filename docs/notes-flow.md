@@ -324,8 +324,13 @@ runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` 
 > why this path writes no `note_revisions` snapshot — the only thing that still does is a restore.
 > The table now only grows through §6a's history, and an AI edit is undone with ⌘Z or by not saving.
 
-1. System prompt: `FULL_NOTE_SYSTEM_PROMPT`, which also describes the Markdown dialect and the
-   mermaid edge-numbering convention. The task prompt follows.
+1. System prompt: `FULL_NOTE_SYSTEM_PROMPT`, which also describes the Markdown dialect, mermaid
+   label **syntax**, and the mermaid edge-**numbering** convention. Those last two are separate
+   constants on purpose: `MERMAID_NUMBERING` is house style that
+   [SKILL.md](../skills/pro-professor-notes/SKILL.md) owns and must be kept in step with, while
+   `MERMAID_SYNTAX` is mermaid's own grammar — an unquoted `(` in a label is read as the start of a
+   round node even inside an edge label, so the diagram fails to parse outright. Local models emit
+   that regularly; the rule is what keeps them from it. The task prompt follows.
 2. **The task prompt branches on whether the note is empty.** A non-empty note gets
    `"Task: apply this instruction to the note… Current note:\n" + content`; an empty one gets
    `"Task: the note is currently empty — write it from scratch."` instead. Ending a prompt with

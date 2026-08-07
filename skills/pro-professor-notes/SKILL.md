@@ -43,6 +43,10 @@ your output into the app's source editor exactly as you produce it.
   draw a diagram inside a note, and its edges carry the step numbers described below. For a
   standalone, hand-drawn diagram, link to it with `[[Title.diagram]]` (the user creates that
   diagram in the app's diagram editor).
+  **Quote any label text containing a bracket, brace, parenthesis, `#` or quote** — write
+  `A -->|"Command (SET key value)"| B`, never `A -->|Command (SET key value)| B`. Mermaid reads a
+  bare `(` as the start of a round node even inside an edge label, so the whole diagram fails to
+  parse and renders as an error box. The examples below quote throughout for this reason.
 
 ## Numbering the edges
 
