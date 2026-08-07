@@ -12,7 +12,7 @@ interop; only Obsidian's *syntax and interaction model* is borrowed.
   central-server added **zero** jars (frontmatter parsing uses the SnakeYAML Spring Boot already
   ships).
 - Notes are optimized for **AI-authored Markdown**: content usually arrives pasted from a chat or
-  is rewritten in place by the AI actions (§6), and everything round-trips through one `content`
+  from the AI update's staged proposal (§6), and everything round-trips through one `content`
   text column.
 
 ## 2. Database
@@ -24,7 +24,7 @@ The notes tables live in the consolidated `V1__init_schema.sql`:
 | `notes` | id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb, generated `content_tsv` tsvector column + GIN index for full-text search |
 | `tags` / `note_tags` | `tags` (unique name) + `note_tags` link table |
 | `note_links` | source_note_id, target_ref, link_type `link\|embed` — also read outside notes, by the media delete guard (see [project-flow.md](project-flow.md) §2.4) |
-| `note_revisions` | note_id, content snapshot, created_at — written before every AI overwrite/restore |
+| `note_revisions` | note_id, content snapshot, created_at — written before a restore. **Not** by the AI update, which no longer writes the note at all (§6) |
 
 Conventions that matter:
 
@@ -98,8 +98,7 @@ each pane scrolls independently:
   (explorer toggle, **editable title**, graph view, view toggle source/split/preview — an existing
   note opens in **preview**, a draft in **split**, re-applied whenever the route hands over a
   different note so a manual toggle stands until then, save, revision
-  history, AI panel, right rail), plus a transient status strip while a *fragment* AI action runs,
-  since those don't write to the editor. The title is the shared
+  history, AI panel, right rail). The title is the shared
   [EditableTitle](../frontend/src/components/common/EditableTitle.tsx) (diagrams use the same one):
   **Enter or blur commits a rename** through `PUT /{id}/title` and Escape reverts it, so a rename
   never persists the editor buffer — the note stays as dirty as it was, and no revision is written.
@@ -313,62 +312,49 @@ MermaidBlock reports mermaid's own parse error (§5). Syntax highlighting of the
 out of reach on a textarea and largely redundant here: the preview renders from the *live* buffer, so
 whenever it is on screen it already shows what is being typed, styled.
 
-## 6. AI note actions (`notes.ai` package)
+## 6. The AI note update (`notes.ai` package)
 
-`POST /api/v1/notes/{id}/ai-update | summarize | continue` — SSE endpoints shaped exactly like
+`POST /api/v1/notes/{id}/ai-update` — one SSE endpoint, shaped like
 chat ([NotesAiController](../backend/central-server/src/main/java/com/proprofessor/server/notes/ai/NotesAiController.java)
 runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` / `note.done` /
 `note.error`). Flow in [NotesAiService](../backend/central-server/src/main/java/com/proprofessor/server/notes/ai/NotesAiService.java):
 
-**Two shapes of action, carried on `note.start` as `mode`:**
+> **The server never writes the note.** It generates a *proposal* and streams it back; the frontend
+> stages it and the user applies or discards it (§6a). That review step is the safety net, which is
+> why this path writes no `note_revisions` snapshot — the only thing that still does is a restore.
+> The table now only grows through §6a's history, and an AI edit is undone with ⌘Z or by not saving.
 
-| Action | `mode` | The model returns | The server does |
-| --- | --- | --- | --- |
-| `ai-update` | `replace` | the complete updated note | saves it as-is |
-| `summarize` | `fragment` | `<summary>…</summary>` only | replaces/inserts the note's Summary section |
-| `continue` | `fragment` | `<continuation>…</continuation>` only | appends it |
-
-Only a rewrite legitimately needs the whole note back. Asking a local model to echo a long note
-verbatim just to add one section makes it drift — reflowed paragraphs, dropped callouts — which
-reads as the AI mangling the note, so the fragment actions ask for the new text alone.
-
-1. System prompt: `FULL_NOTE_SYSTEM_PROMPT` for the rewrite, `FRAGMENT_SYSTEM_PROMPT` otherwise;
-   both describe the Markdown dialect. A per-action task prompt follows. Fragment actions are fed
-   `Frontmatter.parse(content).body()` — the YAML block is noise for them.
-2. Stream through a local model — `ollama`/`ai-service` → the existing `ChatCompletionClient`
+1. System prompt: `FULL_NOTE_SYSTEM_PROMPT`, which also describes the Markdown dialect and the
+   mermaid edge-numbering convention. The task prompt follows.
+2. **The task prompt branches on whether the note is empty.** A non-empty note gets
+   `"Task: apply this instruction to the note… Current note:\n" + content`; an empty one gets
+   `"Task: the note is currently empty — write it from scratch."` instead. Ending a prompt with
+   `Current note:` and nothing after it leaves a small local model no content to anchor on, and it
+   hands back the last text it *did* see — its own system prompt, straight into the editor.
+3. Stream through a local model — `ollama`/`ai-service` → the existing `ChatCompletionClient`
    (OpenAI-compatible), guarded by `ModelActivationService.acquireForChat`/`releaseAfterChat`
-   like a chat turn.
-3. **Fragment pipeline** — `extractBlock` (the delimiter is what makes the answer identifiable: a
-   model that echoes the note *around* its answer still splices cleanly, and preambles fall outside
-   the tag; an unclosed tag means a token cap, so the remainder is salvaged) → `stripWrappingFence`
-   → drop a stray leading `# Summary` → empty check → **echo guard**: with no tag at all, a
-   fragment reproducing the note's first 120 characters is the note handed back, so the action
-   fails with `502` and saves nothing. Notes under 80 characters skip the check. Applied **whether
-   or not the tag was used** — wrapping output in a delimiter is the easy half of the instruction
-   and condensing the note is the hard half, so a model can comply with the format while handing
-   the note straight back inside it.
-4. On completion: **snapshot the old content into `note_revisions`** → save through
-   `NotesService.updateNote` (re-parses frontmatter/links/tags) → emit `note.done` with the revision
-   id. A restore snapshots the current content first, so restores are themselves undoable. Nothing
-   is persisted on error/abort.
+   like a chat turn. Inference params come from the Notes settings row (§2 of
+   [project-flow.md](project-flow.md) §2.8's `app_settings`).
+4. Validate, then emit `note.done`: `stripWrappingFence` (models fence the whole note despite
+   instructions) → empty check → **prompt-echo guard**, which fails with `502` when the reply opens
+   with the system prompt's own first 120 characters. Either failure throws before `note.done`, so
+   the client drops what it staged.
 
 The AI tab's model picker lists the locally activated models and **starts empty** — no model is
 preselected, because which model rewrites a note is worth an explicit choice and a pre-filled picker
 reads as one already made. Until one is chosen, a chat turn or note action stops with "Select a
 model first".
-On `replace` the frontend streams tokens straight into the editor; on `fragment` it leaves the
-buffer alone (the note is spliced server-side) and shows the text in a status strip, then refetches
-on `note.done`. The editor is read-only during both — a fragment action's refetch would discard
-anything typed meanwhile.
+Tokens stream into the AI tab's proposal block, never into the editor — **the editor stays fully
+editable while the model runs**, since nothing is writing to it.
 
-**AI actions save first.** They read the note from the database, so running one over a dirty buffer
-would work off the stale saved copy and then the refetch would replace what was typed. NotesScreen
-saves before dispatching and aborts if that fails.
+**The update saves first.** It builds its prompt from the note in the database, so running one over
+a dirty buffer would rewrite a version of the note the user isn't looking at. NotesScreen saves
+before dispatching and aborts if that fails.
 
 ## 6a. The AI tab (`NoteChatPanel`)
 
-The **one** AI surface in the workspace: the chat thread, the §6 note actions, and a single
-composer, as the right rail's AI tab. Everything reuses `POST /api/v1/chats/send` through the
+The **one** AI surface in the workspace: the chat thread, the §6 note update, and a single
+composer, as the right rail's AI tab. The chat half reuses `POST /api/v1/chats/send` through the
 shared `chats.stream.ts` client (global `src/services`, so no cross-module import). The **model
 picker** heads the tab (shared `ModelSelector` in its `fullWidth` mode, embeddings filtered out,
 locked while generating) — one control for both the chat turns and the note actions, and the only
@@ -378,16 +364,31 @@ the name with an ellipsis** instead of sizing to it: same `ModelOptionLabel` row
 which is the only way to give the name `min-w-0 truncate` while the badges keep their size. The
 whole name is in a tooltip.
 
-**One input, two jobs.** The composer is the single text box: **Enter** sends it to the chat,
-**Rewrite** applies the same text as the note-edit instruction, and Summarize/Continue ignore it.
-The three action buttons sit directly under the composer, which is what makes the second reading
-discoverable. `useNoteAi` therefore holds no `instruction` state — `runAction(action, instruction)`
-takes it as an argument and returns whether generation started, so the caller only clears the
-composer on a real dispatch.
+**One input, one send key, a mode switch.** The composer is the single text box and **Enter** is
+the only way to submit it; an **Ask / Update** radio pair directly beneath decides where it goes —
+Ask answers from the note, Update rewrites it. A mode switch rather than a second button because the
+two are mutually exclusive: with both on screen you could press the wrong one and not notice which
+had consumed your text. The highlight is keyed on the *effective* mode, so opening an unsaved draft
+(where Update is locked — it runs on the saved copy) visibly falls back to Ask instead of leaving a
+selected mode whose send button is dead. `useNoteAi` holds no `instruction` state —
+`runAction(instruction)` takes it as an argument and returns whether generation started, so the
+caller only clears the composer on a real dispatch.
+
+**Updates are staged, never applied.** The proposal streams into a scrollable block above the
+composer, rendered through the same `Markdown`/`MarkdownBody`/`wiki` handlers as a chat reply so
+`[[links]]` and mermaid look exactly as they will in the note. Its **top edge drags** to grow the
+review area (a whole note rarely fits the default 256px), measured from the block's own bottom so it
+grows upward under the cursor and clamped against the *tab's* height, not the viewport's — it may
+eat the thread above it, never its own composer below. **Apply** replaces the whole buffer
+via `applyTextState`/`replaceRange` — *not* `setContent`, which would wipe the browser's native undo
+stack and make Apply the one edit ⌘Z can't take back (§4) — leaving the note dirty and unsaved, so
+saving stays the user's call. **Discard** drops it and the note is untouched. Stopping mid-stream
+*keeps* what arrived: a cancelled run usually means "that's enough", and Discard is one click away.
+`note.error` clears it, since that text is what the server just rejected.
 
 The scope selector is labelled **"Chat context"** deliberately: it governs the chat turn only. The
-note actions always run server-side over the whole *saved* note, so an unlabelled control sitting
-next to them would misread.
+update always runs server-side over the whole *saved* note, so an unlabelled control sitting next to
+it would misread.
 
 - The note travels as **`noteContext`**, a per-turn field injected as a system message right before
   the current question and **never persisted**. Not `systemPrompt`: that is only honored when
@@ -397,7 +398,13 @@ next to them would misread.
   at `NOTE_CONTEXT_MAX_CHARS`. Trimming is the client's job — it is the side that knows about
   selections — and the panel shows what it will send.
 - New conversations started this way get `conversations.mode = 'note'`, which
-  `ConversationRepository.findAll` filters out, so they stay out of the chat history.
+  `ConversationRepository.findAll` and its `search` filter out, so they stay out of both the chat
+  history and the ⌘K palette. The panel says so with an explicit **`noteChat: true`** on the send
+  — *not* inferred from `noteContext` being present, because an empty note (or scope "None") sends
+  no context and is still a note chat; inferring it filed those threads under chat history.
+- The panel sends **no inference params**. The server fills them from the Notes settings row, so the
+  sliders on the settings page govern the note chat as well as the update — one control for both AI
+  surfaces of the notes module. (They are also `NOT NULL` on `conversations`, so something has to.)
   `findById` is unfiltered, so one can still be opened directly.
 - History is **component state**, cleared (and any stream aborted) when the note changes. The
   conversation row survives server-side — that is where persistence would later hook in.

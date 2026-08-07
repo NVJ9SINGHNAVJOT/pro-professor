@@ -80,7 +80,8 @@ public class ChatController {
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
                         request.attachmentIds() == null ? List.of() : request.attachmentIds(),
-                        request.systemPrompt(), request.noteContext(), options);
+                        request.systemPrompt(), request.noteContext(),
+                        Boolean.TRUE.equals(request.noteChat()), options);
                 log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={} "
                                 + "noteContextLength={}",
                         command.conversationId(), command.provider(), command.model(),

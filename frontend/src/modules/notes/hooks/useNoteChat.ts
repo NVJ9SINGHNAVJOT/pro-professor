@@ -81,7 +81,12 @@ export const useNoteChat = ({ noteId, content, selection, selectedText }: UseNot
         model: selection.model,
         content: question,
         noteContext: buildContext().text || undefined,
+        // Says where the turn came from, so the conversation is filed under the note rather than
+        // the chat history. Not inferable from noteContext: an empty note (or "None") sends none.
+        noteChat: true,
         verbose: false,
+        // No inference params on purpose — the server fills them from the Notes settings row, which
+        // is the user-facing control for this panel. Hardcoding them here would ignore those sliders.
       },
       {
         onStart: ({ conversationId }) => {

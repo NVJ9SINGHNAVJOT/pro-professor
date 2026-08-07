@@ -54,22 +54,13 @@ public class NotesAiController {
         this.logFormat = logFormat;
     }
 
-    /** Rewrites the note per the request's instruction, streaming the new content. */
+    /**
+     * Streams the note rewritten per the request's instruction. The note is <em>not</em> written —
+     * the client stages the result and the user applies or discards it.
+     */
     @PostMapping(value = "/{id}/ai-update", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter aiUpdate(@PathVariable Long id, @RequestBody NoteAiRequest request) {
-        return stream(id, NotesAiService.Action.UPDATE, request);
-    }
-
-    /** Adds/refreshes a summary section, streaming the new content. */
-    @PostMapping(value = "/{id}/summarize", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter summarize(@PathVariable Long id, @RequestBody NoteAiRequest request) {
-        return stream(id, NotesAiService.Action.SUMMARIZE, request);
-    }
-
-    /** Continues writing from the end of the note, streaming the new content. */
-    @PostMapping(value = "/{id}/continue", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter continueWriting(@PathVariable Long id, @RequestBody NoteAiRequest request) {
-        return stream(id, NotesAiService.Action.CONTINUE, request);
+        return stream(id, request);
     }
 
     @GetMapping("/{id}/revisions")
@@ -82,7 +73,7 @@ public class NotesAiController {
         return ApiResponse.ok("Revision restored.", notesAiService.restoreRevision(id, revisionId));
     }
 
-    private SseEmitter stream(long noteId, NotesAiService.Action action, NoteAiRequest request) {
+    private SseEmitter stream(long noteId, NoteAiRequest request) {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         emitter.onTimeout(() -> log.warn("Note AI stream timed out after {} ms", STREAM_TIMEOUT_MS));
 
@@ -90,10 +81,10 @@ public class NotesAiController {
             // Streamed frames never reach ResponseLoggingAdvice; accumulate and log once at the end.
             List<Object> frames = new ArrayList<>();
             try {
-                log.info("Note AI {}: noteId={} provider={} model={} instructionLength={}",
-                        action, noteId, request.provider(), request.model(),
+                log.info("Note AI update: noteId={} provider={} model={} instructionLength={}",
+                        noteId, request.provider(), request.model(),
                         request.instruction() == null ? 0 : request.instruction().length());
-                notesAiService.streamNoteAction(noteId, action, request, new SseNoteAiListener(emitter, frames));
+                notesAiService.streamNoteAction(noteId, request, new SseNoteAiListener(emitter, frames));
             } catch (ClientDisconnectedException ex) {
                 log.info("Client disconnected mid-stream; note AI action aborted");
             } catch (ModelBusyException ex) {
@@ -151,9 +142,9 @@ public class NotesAiController {
         }
 
         @Override
-        public void onStart(long noteId, String mode) {
+        public void onStart(long noteId) {
             this.noteId = noteId;
-            emitEvent(emitter, frames, NoteStreamEvent.NoteStart.of(noteId, mode));
+            emitEvent(emitter, frames, NoteStreamEvent.NoteStart.of(noteId));
         }
 
         @Override
@@ -162,8 +153,8 @@ public class NotesAiController {
         }
 
         @Override
-        public void onComplete(long noteId, long revisionId) {
-            emitEvent(emitter, frames, NoteStreamEvent.NoteDone.of(noteId, revisionId));
+        public void onComplete(long noteId) {
+            emitEvent(emitter, frames, NoteStreamEvent.NoteDone.of(noteId));
         }
     }
 }

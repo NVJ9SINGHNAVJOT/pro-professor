@@ -17,6 +17,8 @@ import java.util.List;
  *                       conversation; ignored for existing conversations (may be {@code null}/blank)
  * @param noteContext    the note this turn is about, or {@code null}; injected for this turn only
  *                       and never persisted (see {@code ChatService.generate})
+ * @param noteChat       whether the turn came from a note's chat panel; decides the new
+ *                       conversation's mode, and so whether it appears in the chat history
  * @param options        per-request inference settings (never {@code null}; see {@link InferenceOptions})
  */
 public record ChatSendCommand(
@@ -27,6 +29,12 @@ public record ChatSendCommand(
         List<Long> attachmentIds,
         String systemPrompt,
         String noteContext,
+        boolean noteChat,
         InferenceOptions options
 ) {
+    /** This command with resolved inference settings — see {@code ChatService.withDefaults}. */
+    public ChatSendCommand withOptions(InferenceOptions resolved) {
+        return new ChatSendCommand(conversationId, provider, model, content, attachmentIds,
+                systemPrompt, noteContext, noteChat, resolved);
+    }
 }

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
-  ArrowRightIcon,
   CodeIcon,
   ColumnsIcon,
   EyeIcon,
@@ -14,14 +13,12 @@ import {
   IndentIncreaseIcon,
   ListIcon,
   ListOrderedIcon,
-  ListPlusIcon,
   MessageSquareIcon,
   NotebookPenIcon,
   NotebookTextIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PanelRightOpenIcon,
-  SparklesIcon,
   SquarePenIcon,
   TextQuoteIcon,
   WandSparklesIcon,
@@ -31,7 +28,7 @@ import {
 import { toast } from "@/components/common/toast";
 import Markdown, { MarkdownBody } from "@/components/common/Markdown";
 import NotesBar from "@/modules/notes/components/NotesBar";
-import { useNoteAi, type NotesBarCommand } from "@/modules/notes/hooks/useNoteAi";
+import { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 
 import NoteEditor from "@/modules/notes/components/NoteEditor";
 import { useApi } from "@/hooks/useApi";
@@ -39,7 +36,6 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
 import { setGraphRenderer } from "@/redux/slices/notesGraphSlice";
 import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
-import type { NoteAiAction } from "@/services/operations/notes/notes.stream";
 import { markDraftCreated } from "@/services/client/loadRoute";
 import NoteList from "@/modules/notes/components/NoteList";
 import SidebarToggle from "@/components/common/SidebarToggle";
@@ -113,7 +109,6 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const [searchParams] = useSearchParams();
   const draftTitle = isDraft ? searchParams.get("title") : null;
 
-  const { execute: fetchNote } = useApi(notesRoute.getNote);
   const { execute: createNote, loading: creating } = useApi(notesRoute.createNote);
   const { execute: updateNote, loading: saving } = useApi(notesRoute.updateNote);
   const { execute: renameNote } = useApi(notesRoute.renameNote);
@@ -137,12 +132,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // shows, and everything that renderer has been arranged into, is persisted. See notesGraphSlice.
   const [graphOpen, setGraphOpen] = useState(false);
   const graphRenderer = useAppSelector((state) => state.notesGraph.renderer);
-  const [aiBusy, setAiBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [revisionRefresh, setRevisionRefresh] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // A palette-issued AI command, run by an effect below (cleared once it has been acknowledged).
-  const [aiCommand, setAiCommand] = useState<NotesBarCommand | null>(null);
   // The editor's selected text, mirrored into state because the chat panel *displays* what it will
   // send — a ref read during render wouldn't update when the selection changes.
   const [selectedText, setSelectedText] = useState("");
@@ -184,17 +177,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     setRevisionRefresh((key) => key + 1);
   };
 
-  /** The AI action saved the note server-side — pull the fresh copy (title/tags may have changed). */
-  const refetchAfterAi = async () => {
-    if (!note) return; // the id, not the param — which is `new` on an unsaved draft
-    const res = await fetchNote(note.id);
-    if (!res.error) applyDetail(res.response.data);
-  };
-
-  const ai = useNoteAi(note?.id, setContent, refetchAfterAi, setAiBusy);
+  const ai = useNoteAi(note?.id);
   const chat = useNoteChat({ noteId: note?.id, content, selection: ai.activeSelection, selectedText });
 
-  const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle) && !aiBusy;
+  const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle);
 
   // Markdown mistakes that render as something else instead of failing. Memoized against the
   // buffer: this screen re-renders on every chat token too, and none of that changes the note.
@@ -241,7 +227,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
 
   /** @returns whether the note is now persisted — false on a refused or failed save. */
   const handleSave = async (): Promise<boolean> => {
-    if (saving || creating || aiBusy) return false;
+    if (saving || creating) return false;
     if (!note) {
       if (!isDraft) return false;
       // First save of a draft: the row is born here. A blank title lands as "Untitled"
@@ -298,16 +284,14 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   /**
    * Runs an AI action against the note — saving it first when the buffer is dirty.
    *
-   * The server reads the note from the database, not from this buffer, so an action started with
-   * unsaved edits would work off the stale saved copy and then the refetch on completion would
-   * replace the buffer with the result — silently discarding whatever had been typed. (The
-   * revision snapshot wouldn't hold it either; that captures the *saved* content.)
+   * The server builds its prompt from the note in the database, not from this buffer, so running
+   * one over unsaved edits would rewrite a version of the note the user isn't looking at.
    */
-  const runAiAction = async (action: NoteAiAction) => {
+  const runAiAction = async () => {
     if (dirty && !(await handleSave())) return;
-    // The AI tab's composer is the single input: what's typed there is the Rewrite instruction,
+    // The AI tab's composer is the single input: what's typed there is the update instruction,
     // and it's cleared only once generation has actually started.
-    if (ai.runAction(action, chat.input)) chat.setInput("");
+    if (ai.runAction(chat.input)) chat.setInput("");
   };
 
   // Cmd/Ctrl+S saves the active note. The ref always points at the latest save
@@ -460,7 +444,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   /** Runs a toolbar/shortcut transform against the textarea's live selection. */
   const applyTextAction = (action: TextAction) => {
     const textarea = textareaRef.current;
-    if (!textarea || aiBusy) return;
+    if (!textarea) return;
     applyTextState(
       action({ value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd }),
     );
@@ -495,6 +479,36 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     // "Insert at cursor" is the zero-width case of "replace selection".
     const to = mode === "selection" ? state.selectionEnd : state.selectionStart;
     applyTextState(replaceRange(state, state.selectionStart, to, text));
+  };
+
+  /**
+   * Accepts the AI's staged proposal: the whole note is replaced, and that's it — the buffer goes
+   * dirty like any hand edit, so saving stays the user's call and ⌘Z still walks it back. This is
+   * the only path by which an AI update reaches the note; the server never writes one.
+   */
+  const applyProposal = () => {
+    if (ai.proposal === null) return;
+    const proposal = ai.proposal;
+    ai.clearProposal();
+    const textarea = textareaRef.current;
+    // Preview-only renders no editor, so there is no textarea to write through — same fallback as
+    // applyChatReply, and switching to split makes the result visible either way.
+    if (!textarea) {
+      if (viewMode === "preview") setViewMode("split");
+      setContent(proposal);
+      return;
+    }
+    // Routed through applyTextState (execCommand) rather than setContent: assigning .value on a
+    // controlled textarea wipes the browser's native undo stack, which would make Apply the one
+    // edit in this editor that ⌘Z can't take back.
+    applyTextState(
+      replaceRange(
+        { value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
+        0,
+        textarea.value.length,
+        proposal,
+      ),
+    );
   };
 
   /**
@@ -535,16 +549,6 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       anchor: { top: pos.top, left: pos.left, lineHeight: pos.lineHeight },
     });
   };
-
-  // Execute a command handed down from the Cmd+P palette.
-  useEffect(() => {
-    if (!aiCommand) return;
-    // The instruction input is the AI tab's composer, so "focus" means "open that tab".
-    if (aiCommand === "focus") setRightPanel("ai");
-    else void runAiAction(aiCommand);
-    setAiCommand(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiCommand]);
 
   const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
@@ -615,7 +619,6 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
         syncScroll("editor");
         repositionSlash();
       }}
-      readOnly={aiBusy}
       placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
       spellCheck={false}
     />
@@ -746,14 +749,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
           run: () => applyTextAction(outdent),
         },
         {
-          id: "ai-rewrite",
-          label: "AI: rewrite with instruction…",
+          id: "ai-update",
+          label: "AI: update note with an instruction…",
+          hint: "Opens the AI tab",
           icon: WandSparklesIcon,
-          run: () => setAiCommand("focus"),
+          run: () => setRightPanel("ai"),
         },
-        { id: "ai-summarize", label: "AI: summarize note", icon: ListPlusIcon, run: () => setAiCommand("summarize") },
-        { id: "ai-continue", label: "AI: continue writing", icon: ArrowRightIcon, run: () => setAiCommand("continue") },
-        { id: "ai-focus", label: "Open AI panel and type an instruction", icon: SparklesIcon, run: () => setAiCommand("focus") },
       );
     }
     notes.forEach((item) => {
@@ -920,11 +921,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
               chat={chat}
               ai={ai}
               wiki={wiki}
-              onApply={aiBusy ? null : applyChatReply}
-              onRunAction={(action) => void runAiAction(action)}
+              onApply={applyChatReply}
+              onRunAction={() => void runAiAction()}
+              onApplyProposal={applyProposal}
               // The note actions edit the saved row, so they need one — unlike the chat half,
               // which works on a draft straight from the buffer.
-              noteActionsEnabled={note !== null && !aiBusy}
+              noteActionsEnabled={note !== null && !ai.busy}
             />
           }
         />

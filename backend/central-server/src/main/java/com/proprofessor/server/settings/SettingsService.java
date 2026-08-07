@@ -9,8 +9,10 @@ import com.proprofessor.server.settings.repository.SettingsRepository;
 import org.springframework.stereotype.Service;
 
 /**
- * Global default inference params. The Notes AI actions read their defaults here (chat carries its
- * own per-conversation settings and does not use this). The settings page reads and writes these via
+ * Global default inference params, backing both notes AI surfaces: the note update action, and a
+ * chat turn that omits its params — which is how the note chat panel sends every turn, so one set
+ * of sliders governs both. The chat screen sends concrete per-conversation params and never reads
+ * these. The settings page reads and writes them via
  * {@link com.proprofessor.server.settings.SettingsController}.
  */
 @Service
@@ -32,7 +34,7 @@ public class SettingsService {
         return get();
     }
 
-    /** Defaults applied to Notes AI actions (rewrite/summarize/continue). */
+    /** Defaults applied to the AI note update and to note chat turns. */
     public InferenceOptions notesInferenceOptions() {
         return toOptions(settingsRepository.find().notes());
     }

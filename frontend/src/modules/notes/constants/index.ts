@@ -62,9 +62,6 @@ export const TOOLTIP_CLEARANCE = 96;
 /** Matches the problem tooltip's max-w-80, for keeping it off the right edge. */
 export const TOOLTIP_MAX_WIDTH = 320;
 
-/** How much of a fragment action's live output the status strip shows (chars). */
-export const PREVIEW_TAIL_CHARS = 160;
-
 /** Gap between the caret's line and the slash menu, whichever side it lands on (px). */
 export const CARET_GAP = 4;
 
@@ -75,6 +72,15 @@ export const EDGE_MARGIN = 8;
 export const RAIL_DEFAULT_WIDTH = 320;
 export const RAIL_MIN_WIDTH = 260;
 export const RAIL_MAX_WIDTH = 720;
+
+/** Proposal review block height: where it opens and how far its drag handle may shrink it (px). */
+export const PROPOSAL_DEFAULT_HEIGHT = 256;
+export const PROPOSAL_MIN_HEIGHT = 96;
+/**
+ * Room the proposal block leaves for the rest of the tab when dragged to its tallest (px) — the
+ * composer plus a sliver of thread. Without it the drag could swallow its own send button.
+ */
+export const PROPOSAL_RESERVED_HEIGHT = 168;
 
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;

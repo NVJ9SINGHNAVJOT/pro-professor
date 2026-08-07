@@ -3,17 +3,8 @@ import { rawFetch } from "@/services/client/rawFetch";
 
 /* ── Payload & callback types ─────────────────────────────────────────────── */
 
-export type NoteAiAction = "ai-update" | "summarize" | "continue";
-
-/**
- * What the stream carries. `replace` is the complete new note — stream it into the editor.
- * `fragment` is one piece the server splices in, so the buffer must be left alone and the note
- * refetched on `note.done`.
- */
-export type NoteAiMode = "replace" | "fragment";
-
 export interface NoteAiPayload {
-  /** Required for "ai-update"; ignored by the other actions. */
+  /** What the AI should change — required. */
   instruction?: string;
   /** "ollama" or "ai-service". */
   provider: string;
@@ -22,10 +13,10 @@ export interface NoteAiPayload {
 }
 
 export interface NoteAiStreamCallbacks {
-  onStart: (data: { noteId: number; mode: NoteAiMode }) => void;
+  onStart: (data: { noteId: number }) => void;
   onChunk: (data: { delta: string }) => void;
-  /** The note was saved; revisionId points at the snapshot of the prior content. */
-  onDone: (data: { noteId: number; revisionId: number }) => void;
+  /** Generation finished and the proposal passed validation. Nothing was written to the note. */
+  onDone: (data: { noteId: number }) => void;
   onError: (message: string, meta?: { requestId?: string }) => void;
 }
 
@@ -34,7 +25,6 @@ export interface NoteAiStreamCallbacks {
 interface NoteStartFrame {
   type: "note.start";
   noteId: number;
-  mode: NoteAiMode;
 }
 
 interface NoteChunkFrame {
@@ -46,7 +36,6 @@ interface NoteChunkFrame {
 interface NoteDoneFrame {
   type: "note.done";
   noteId: number;
-  revisionId: number;
 }
 
 interface NoteErrorFrame {
@@ -60,15 +49,15 @@ type NoteStreamFrame = NoteStartFrame | NoteChunkFrame | NoteDoneFrame | NoteErr
 /* ── Stream parser ────────────────────────────────────────────────────────── */
 
 /**
- * Calls one of the {@code POST /api/v1/notes/{id}/(ai-update|summarize|continue)}
- * SSE endpoints and dispatches each frame, mirroring {@link chatsStream.send}.
+ * Calls {@code POST /api/v1/notes/{id}/ai-update} and dispatches each frame, mirroring
+ * {@link chatsStream.send}. The endpoint only *generates* — the caller stages the streamed text
+ * and the user applies or discards it, so nothing here writes to the note.
  *
  * @returns An {@link AbortController} to cancel mid-stream; the backend catches
- *          the disconnect and stops generation (the note is left untouched).
+ *          the disconnect and stops generation.
  */
 function run(
   noteId: number,
-  action: NoteAiAction,
   payload: NoteAiPayload,
   callbacks: NoteAiStreamCallbacks,
 ): AbortController {
@@ -77,7 +66,7 @@ function run(
   (async () => {
     try {
       const res = await rawFetch(
-        `${BASE_URL_SERVER}/notes/${noteId}/${action}`,
+        `${BASE_URL_SERVER}/notes/${noteId}/ai-update`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -132,13 +121,13 @@ function run(
 function dispatch(event: NoteStreamFrame, cb: NoteAiStreamCallbacks) {
   switch (event.type) {
     case "note.start":
-      cb.onStart({ noteId: event.noteId, mode: event.mode });
+      cb.onStart({ noteId: event.noteId });
       break;
     case "note.chunk":
       cb.onChunk({ delta: event.delta });
       break;
     case "note.done":
-      cb.onDone({ noteId: event.noteId, revisionId: event.revisionId });
+      cb.onDone({ noteId: event.noteId });
       break;
     case "note.error":
       cb.onError(event.message, { requestId: event.requestId });

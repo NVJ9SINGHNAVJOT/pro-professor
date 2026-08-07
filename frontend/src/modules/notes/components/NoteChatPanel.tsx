@@ -1,18 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLineIcon,
-  ArrowRightIcon,
+  CheckIcon,
   ClipboardIcon,
   CornerDownLeftIcon,
-  ListPlusIcon,
   MessageSquareIcon,
   MoreHorizontal,
   ReplaceIcon,
   SquareIcon,
   TextCursorInputIcon,
   WandSparklesIcon,
+  XIcon,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/Markdown";
 import ModelSelector from "@/components/common/ModelSelector";
 import {
@@ -24,7 +23,7 @@ import {
 import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import type { NoteApplyMode, NoteChatContextMode } from "@/modules/notes/types";
-import type { NoteAiAction } from "@/services/operations/notes/notes.stream";
+import { PROPOSAL_DEFAULT_HEIGHT, PROPOSAL_MIN_HEIGHT, PROPOSAL_RESERVED_HEIGHT } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 
 const CONTEXT_MODES: { mode: NoteChatContextMode; label: string }[] = [
@@ -33,34 +32,87 @@ const CONTEXT_MODES: { mode: NoteChatContextMode; label: string }[] = [
   { mode: "none", label: "None" },
 ];
 
+/** What the composer does on Enter. One box, one send key, this picks the destination. */
+type ComposerMode = "ask" | "update";
+
+const COMPOSER_MODES: { mode: ComposerMode; label: string; hint: string }[] = [
+  { mode: "ask", label: "Ask", hint: "Answer from the note — nothing changes" },
+  { mode: "update", label: "Update", hint: "Rewrite the note — you review it before it lands" },
+];
+
 interface NoteChatPanelProps {
   chat: ReturnType<typeof useNoteChat>;
   /** Owns the model picked for this tab — both the chat and the note actions run on it. */
   ai: ReturnType<typeof useNoteAi>;
   /** Makes `[[links]]` in replies clickable, same as the preview pane. */
   wiki: WikiHandlers;
-  /** Writes a reply into the editor. Absent while an AI action owns the buffer. */
+  /** Writes a reply into the editor. */
   onApply: ((mode: NoteApplyMode, text: string) => void) | null;
-  /** Runs a note-editing action with whatever is in the composer. */
-  onRunAction: (action: NoteAiAction) => void;
-  /** False on an unsaved draft or mid-generation: the actions need a saved note and a free model. */
+  /** Runs the note update with whatever is in the composer. */
+  onRunAction: () => void;
+  /** Replaces the whole note with the staged proposal. */
+  onApplyProposal: () => void;
+  /** False on an unsaved draft or mid-generation: the update needs a saved note and a free model. */
   noteActionsEnabled: boolean;
 }
 
 /**
- * Chat about the open note without changing it. Replies land in the note only through the
- * per-message apply menu — nothing here writes to the editor on its own.
+ * Chat about the open note, and propose edits to it. Neither half writes to the editor on its own:
+ * a chat reply lands only through the per-message apply menu, and an update lands only when its
+ * staged proposal is applied.
  */
-const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnabled }: NoteChatPanelProps) => {
+const NoteChatPanel = ({
+  chat,
+  ai,
+  wiki,
+  onApply,
+  onRunAction,
+  onApplyProposal,
+  noteActionsEnabled,
+}: NoteChatPanelProps) => {
   const endRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const proposalRef = useRef<HTMLDivElement | null>(null);
+  const [proposalHeight, setProposalHeight] = useState(PROPOSAL_DEFAULT_HEIGHT);
+  const [mode, setMode] = useState<ComposerMode>("ask");
 
   // Follow the stream, the way the main chat does.
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [chat.messages]);
 
+  /**
+   * Which half the composer drives. `update` is gated on the same condition as the action itself,
+   * so a draft can't be left in a mode whose send button is permanently dead.
+   */
+  const updating = mode === "update" && noteActionsEnabled;
+  const busy = updating ? ai.busy : chat.busy;
+  const submit = () => (updating ? onRunAction() : chat.send());
+
+  /**
+   * Drags the proposal block's top edge. Measured from its own bottom (which doesn't move) so the
+   * block grows upward under the cursor, and clamped against the tab's height rather than the
+   * viewport's — it may eat the thread above it, never its own composer below.
+   */
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const bottom = proposalRef.current?.getBoundingClientRect().bottom;
+    const available = panelRef.current?.getBoundingClientRect().height;
+    if (bottom === undefined || available === undefined) return;
+    const max = Math.max(PROPOSAL_MIN_HEIGHT, available - PROPOSAL_RESERVED_HEIGHT);
+    const onMouseMove = (event: MouseEvent) => {
+      setProposalHeight(Math.min(max, Math.max(PROPOSAL_MIN_HEIGHT, bottom - event.clientY)));
+    };
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
   return (
-    <>
+    <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
       {/* The model this tab runs on — chat turns and the note actions below both use it. Lives
           here rather than in the toolbar: this tab is the only thing that reads it. Unlabelled: the
           provider badge and name say what it is, and the row is narrow enough to need the width. */}
@@ -75,8 +127,8 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
         />
       </div>
 
-      {/* What the next *chat turn* will carry — shown, not guessed at. Labelled explicitly because
-          the note actions below ignore it: those always run server-side over the whole saved note. */}
+      {/* What the next *Ask* turn will carry — shown, not guessed at. Labelled explicitly because
+          Update mode ignores it: that always runs server-side over the whole saved note. */}
       <div className="flex shrink-0 flex-col gap-y-1.5 border-b border-neutral-800 px-3 py-2">
         <span className="caption-small-medium text-neutral-500">Chat context</span>
         <div className="flex items-center rounded-lg bg-neutral-900 p-0.5">
@@ -115,9 +167,7 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
               <MarkdownBody className="para-small-regular text-neutral-200">
                 <Markdown wiki={wiki}>{message.content}</Markdown>
               </MarkdownBody>
-              {message.content !== "" && onApply && (
-                <ApplyMenu text={message.content} onApply={onApply} />
-              )}
+              {message.content !== "" && onApply && <ApplyMenu text={message.content} onApply={onApply} />}
             </div>
           ),
         )}
@@ -125,6 +175,63 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
       </div>
 
       <div className="shrink-0 border-t border-neutral-800 p-2">
+        {/* The staged update. It sits above the composer, between the thread and the button that
+            produced it, so the review step is unmissable — the note itself is untouched until
+            Apply. Capped and scrollable: a proposal is a whole note and would otherwise eat the
+            rail. */}
+        {ai.proposal !== null && (
+          <div
+            ref={proposalRef}
+            className="mb-2 flex flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900"
+          >
+            {/* Drag the top edge to grow the review area — a whole note rarely fits in the default
+                height, and the thread above it is the cheapest space to borrow. */}
+            <div
+              onMouseDown={handleResizeMouseDown}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize the proposed note"
+              className="group flex h-2 shrink-0 cursor-row-resize items-center justify-center"
+            >
+              <span className="h-0.5 w-8 rounded-full bg-neutral-700 transition-colors group-hover:bg-neutral-500" />
+            </div>
+            <div className="flex shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2.5 pb-1.5">
+              <WandSparklesIcon className={cn("size-3.5 shrink-0 text-neutral-400", ai.busy && "animate-pulse")} />
+              <span className="caption-small-medium text-neutral-300">
+                {ai.busy ? "Writing proposed note…" : "Proposed note"}
+              </span>
+            </div>
+            <div style={{ height: proposalHeight }} className="chat-scroll overflow-y-auto px-2.5 py-2">
+              {ai.proposal === "" ? (
+                <span className="caption-small-regular text-neutral-500">Generating…</span>
+              ) : (
+                <MarkdownBody className="para-small-regular text-neutral-200">
+                  <Markdown wiki={wiki}>{ai.proposal}</Markdown>
+                </MarkdownBody>
+              )}
+            </div>
+            {/* Apply replaces the note in the editor and leaves it unsaved, so it is still one ⌘Z
+                (and one un-saved close) away from being undone. */}
+            <div className="flex shrink-0 items-center gap-x-1 border-t border-neutral-800 p-1.5">
+              <ProposalAction
+                label="Apply to note"
+                hint="Replace the note with this — you still have to save"
+                icon={CheckIcon}
+                onClick={onApplyProposal}
+                disabled={ai.busy || ai.proposal === ""}
+                primary
+              />
+              <ProposalAction
+                label="Discard"
+                hint="Throw this away; the note is unchanged"
+                icon={XIcon}
+                onClick={ai.clearProposal}
+                disabled={ai.busy}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex items-end gap-x-1.5 rounded-lg bg-neutral-900 px-2 py-1.5">
           <textarea
             value={chat.input}
@@ -132,17 +239,17 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                chat.send();
+                submit();
               }
             }}
             rows={2}
-            placeholder="Ask about this note, or describe an edit…"
+            placeholder={updating ? "Describe the edit to make…" : "Ask about this note…"}
             className="chat-scroll min-w-0 flex-1 resize-none bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
           />
-          {chat.busy ? (
+          {busy ? (
             <button
               type="button"
-              onClick={chat.stop}
+              onClick={updating ? ai.stop : chat.stop}
               aria-label="Stop generating"
               title="Stop"
               className="shrink-0 cursor-pointer rounded-lg bg-white p-1.5 text-black hover:bg-neutral-200"
@@ -152,10 +259,10 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
           ) : (
             <button
               type="button"
-              onClick={chat.send}
+              onClick={submit}
               disabled={!chat.input.trim()}
-              aria-label="Send"
-              title="Send (Enter)"
+              aria-label={updating ? "Update the note" : "Send"}
+              title={updating ? "Update the note (Enter)" : "Send (Enter)"}
               className="shrink-0 cursor-pointer rounded-lg bg-white p-1.5 text-black hover:bg-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
             >
               <CornerDownLeftIcon className="size-3.5" />
@@ -163,54 +270,66 @@ const NoteChatPanel = ({ chat, ai, wiki, onApply, onRunAction, noteActionsEnable
           )}
         </div>
 
-        {/* The same box feeds both: Enter asks, Rewrite applies it to the note. Summarize and
-            Continue need no text and ignore it. Sitting under the composer is what makes that
-            second reading discoverable. */}
-        <div className="flex items-center gap-x-1 pt-1.5">
-          <NoteAction
-            label="Rewrite"
-            hint={
-              noteActionsEnabled
-                ? "Apply what you typed to the note"
-                : "Save the note first — AI edits run on the saved copy"
-            }
-            icon={WandSparklesIcon}
-            onClick={() => onRunAction("ai-update")}
-            disabled={!noteActionsEnabled}
-          />
-          <NoteAction
-            label="Summarize"
-            hint="Add or refresh the summary section"
-            icon={ListPlusIcon}
-            onClick={() => onRunAction("summarize")}
-            disabled={!noteActionsEnabled}
-          />
-          <NoteAction
-            label="Continue"
-            hint="Continue writing from the end"
-            icon={ArrowRightIcon}
-            onClick={() => onRunAction("continue")}
-            disabled={!noteActionsEnabled}
-          />
+        {/* One box, one send key — this picks where Enter sends it. A mode switch rather than a
+            second button: the two are mutually exclusive, and the old pair let you press the wrong
+            one without noticing which of them had consumed your text. */}
+        <div
+          role="radiogroup"
+          aria-label="What Enter does"
+          className="mt-1.5 flex items-center rounded-lg bg-neutral-900 p-0.5"
+        >
+          {COMPOSER_MODES.map(({ mode: value, label, hint }) => {
+            // Update needs a saved note; offering it on a draft would arm a dead send button.
+            const locked = value === "update" && !noteActionsEnabled;
+            // Keyed on `updating`, not `mode`, so the highlight always shows what Enter will really
+            // do — opening a draft while "Update" is picked falls back to Ask, and this says so.
+            const active = (value === "update") === updating;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setMode(value)}
+                disabled={busy || locked}
+                title={locked ? "Save the note first — AI edits run on the saved copy" : hint}
+                className={cn(
+                  "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1 caption-small-medium",
+                  "text-neutral-400 transition-colors hover:text-white",
+                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
+                  active && "bg-neutral-700 text-white",
+                )}
+              >
+                {value === "update" ? (
+                  <WandSparklesIcon className="size-3.5 shrink-0" />
+                ) : (
+                  <MessageSquareIcon className="size-3.5 shrink-0" />
+                )}
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
-/** One note-editing action. Quieter than the send button — these change the note, so they read as secondary. */
-const NoteAction = ({
+/** Accept or reject the staged proposal. Apply is the primary of the pair; Discard reads as an out. */
+const ProposalAction = ({
   label,
   hint,
   icon: Icon,
   onClick,
   disabled,
+  primary,
 }: {
   label: string;
   hint: string;
-  icon: LucideIcon;
+  icon: typeof CheckIcon;
   onClick: () => void;
   disabled?: boolean;
+  primary?: boolean;
 }) => (
   <button
     type="button"
@@ -218,9 +337,11 @@ const NoteAction = ({
     title={hint}
     disabled={disabled}
     className={cn(
-      "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-lg px-2 py-1.5 caption-small-medium",
-      "text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white",
-      "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+      "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1.5 caption-small-medium",
+      "transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+      primary
+        ? "bg-white text-black hover:bg-neutral-200 disabled:hover:bg-white"
+        : "text-neutral-400 hover:bg-neutral-800 hover:text-white disabled:hover:bg-transparent",
     )}
   >
     <Icon className="size-3.5 shrink-0" />
@@ -246,7 +367,10 @@ const ApplyMenu = ({ text, onApply }: { text: string; onApply: (mode: NoteApplyM
       <MoreHorizontal className="size-4" />
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="w-auto min-w-44">
-      <DropdownMenuItem onSelect={() => onApply("cursor", text)} className="cursor-pointer px-2 py-1.5 para-small-medium">
+      <DropdownMenuItem
+        onSelect={() => onApply("cursor", text)}
+        className="cursor-pointer px-2 py-1.5 para-small-medium"
+      >
         <TextCursorInputIcon className="size-4" />
         Insert at cursor
       </DropdownMenuItem>
@@ -257,7 +381,10 @@ const ApplyMenu = ({ text, onApply }: { text: string; onApply: (mode: NoteApplyM
         <ReplaceIcon className="size-4" />
         Replace selection
       </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => onApply("append", text)} className="cursor-pointer px-2 py-1.5 para-small-medium">
+      <DropdownMenuItem
+        onSelect={() => onApply("append", text)}
+        className="cursor-pointer px-2 py-1.5 para-small-medium"
+      >
         <ArrowDownToLineIcon className="size-4" />
         Append to note
       </DropdownMenuItem>

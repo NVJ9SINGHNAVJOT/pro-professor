@@ -19,6 +19,12 @@ export interface ChatSendPayload {
    * size before sending; the server takes it as-is.
    */
   noteContext?: string;
+  /**
+   * Marks the turn as coming from a note's chat panel, filing a new conversation under its note
+   * instead of the chat history. Declared rather than inferred from `noteContext`, which is absent
+   * whenever the note is empty or the scope is "None".
+   */
+  noteChat?: boolean;
   maxTokens?: number;
   temperature?: number;
   topP?: number;

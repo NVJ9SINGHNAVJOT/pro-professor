@@ -22,6 +22,7 @@ import com.proprofessor.server.media.MediaService;
 import com.proprofessor.server.model.ModelActivationService;
 import com.proprofessor.server.model.ModelService;
 import com.proprofessor.server.model.dto.ModelProvider;
+import com.proprofessor.server.settings.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -81,6 +82,7 @@ public class ChatService {
     private final ChatCompletionClient chatCompletionClient;
     private final AudioClient audioClient;
     private final ChatMapper chatMapper;
+    private final SettingsService settingsService;
 
     public ChatService(
             ConversationRepository conversationRepository,
@@ -91,7 +93,8 @@ public class ChatService {
             ModelActivationService modelActivationService,
             ChatCompletionClient chatCompletionClient,
             AudioClient audioClient,
-            ChatMapper chatMapper
+            ChatMapper chatMapper,
+            SettingsService settingsService
     ) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
@@ -102,9 +105,14 @@ public class ChatService {
         this.chatCompletionClient = chatCompletionClient;
         this.audioClient = audioClient;
         this.chatMapper = chatMapper;
+        this.settingsService = settingsService;
     }
 
-    public void streamReply(ChatSendCommand command, ChatStreamListener listener) {
+    public void streamReply(ChatSendCommand rawCommand, ChatStreamListener listener) {
+        // Resolved once, here, rather than at conversation creation: generate() also diffs these
+        // against the stored settings on every later turn, so filling them later would make each
+        // turn of a params-omitting client look like a settings change.
+        ChatSendCommand command = rawCommand.withOptions(withDefaults(rawCommand.options()));
         // Resolve the target model up front (read-only) so the global single-model lock can be
         // enforced before anything is persisted: a rejected turn (a different model is mid-generation)
         // throws out of acquireForChat and leaves no conversation/message rows behind.
@@ -283,14 +291,35 @@ public class ChatService {
         return command.provider();
     }
 
+    /**
+     * Fills unset sampling params from the stored Notes defaults, so a client may omit them
+     * entirely — the note chat panel does, since those sliders are the user-facing setting for it.
+     * Needed either way: the four columns are NOT NULL, so a null would fail the insert.
+     *
+     * <p>The main chat always sends concrete params, so it returns early and never queries.
+     */
+    private InferenceOptions withDefaults(InferenceOptions options) {
+        if (options.maxTokens() != null && options.temperature() != null
+                && options.topP() != null && options.repetitionPenalty() != null) {
+            return options;
+        }
+        InferenceOptions defaults = settingsService.notesInferenceOptions();
+        return new InferenceOptions(
+                options.maxTokens() != null ? options.maxTokens() : defaults.maxTokens(),
+                options.temperature() != null ? options.temperature() : defaults.temperature(),
+                options.topP() != null ? options.topP() : defaults.topP(),
+                options.repetitionPenalty() != null
+                        ? options.repetitionPenalty() : defaults.repetitionPenalty(),
+                options.verbose(), options.thinkingEnabled());
+    }
+
     /** Creates a new conversation (title from the first message) and its optional persona system row. */
     private ConversationRow createConversation(ChatSendCommand command) {
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
-        // A turn carrying note context came from a note's chat panel, so the conversation is scoped
-        // to that note rather than being one the user started from the chat screen.
-        String mode = command.noteContext() == null || command.noteContext().isBlank()
-                ? DEFAULT_MODE
-                : ConversationRepository.NOTE_MODE;
+        // Scoped to a note when the client says so, not when the turn happens to carry note text:
+        // an empty note (or "Chat context: None") sends no context but is still a note chat, and
+        // tagging it 'simple' would leak the thread into the chat history and the ⌘K palette.
+        String mode = command.noteChat() ? ConversationRepository.NOTE_MODE : DEFAULT_MODE;
         ConversationRow conversation = conversationRepository.insert(
                 model.id(), deriveTitle(command.content()), mode, settingsFrom(command.options()));
         // A persona is the conversation's first (oldest) system row, so it replays to the model on

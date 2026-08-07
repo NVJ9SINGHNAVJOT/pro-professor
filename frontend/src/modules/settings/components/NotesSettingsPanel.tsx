@@ -44,7 +44,7 @@ const NotesSettingsPanel = ({ initial }: NotesSettingsPanelProps) => {
       <div className="flex flex-col gap-6">
         <InferenceParamsPanel
           title="Notes"
-          description="Used when the AI rewrites, summarizes, or continues a note."
+          description="Used when the AI updates a note or answers in the note chat."
           params={notesParams}
           onChange={setNotesParams}
           onReset={() => setNotesParams(NOTES_DEFAULT_PARAMS)}

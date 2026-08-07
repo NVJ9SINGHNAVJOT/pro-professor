@@ -1,28 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/common/toast";
-import { notesStream, type NoteAiAction, type NoteAiMode } from "@/services/operations/notes/notes.stream";
+import { notesStream } from "@/services/operations/notes/notes.stream";
 import type { SelectedModel } from "@/modules/chat/types";
 
 /**
- * The delimiters a fragment action asks the model for. Stripped for the preview strip only —
- * the server does its own extraction and is the authority on what gets saved.
+ * The AI note update, as a *proposal*.
+ *
+ * The server only generates — it never writes the note — so everything the model produces lands in
+ * `proposal` and stays there until the user applies or discards it. That review step is why this
+ * hook touches neither the editor buffer nor the saved note: the caller owns both, and applying is
+ * an ordinary undoable edit it makes on the user's say-so.
  */
-const FRAGMENT_TAGS = /<\/?(?:summary|continuation)>/gi;
-
-export const useNoteAi = (
-  noteId: number | undefined,
-  onContent: (content: string) => void,
-  onSaved: () => void,
-  onBusyChange: (busy: boolean) => void,
-) => {
+export const useNoteAi = (noteId: number | undefined) => {
   const [selected, setSelected] = useState<SelectedModel | null>(null);
   const [busy, setBusy] = useState(false);
-  /** Live text of a fragment action, for the status strip; null whenever one isn't running. */
-  const [preview, setPreview] = useState<string | null>(null);
+  /** The staged note, streaming in; null whenever there is nothing to review. */
+  const [proposal, setProposal] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Switching notes drops both the stream and anything staged — a proposal written for one note
+  // must never be applicable to another.
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    return () => {
+      abortRef.current?.abort();
+      setBusy(false);
+      setProposal(null);
+    };
   }, [noteId]);
 
   /**
@@ -32,20 +35,14 @@ export const useNoteAi = (
    */
   const activeSelection = selected;
 
-  const setBusyState = (value: boolean) => {
-    setBusy(value);
-    onBusyChange(value);
-  };
-
   /**
-   * @param instruction what the AI should change — required by `ai-update`, ignored by the others.
-   *        Passed in rather than held here: the AI tab's one composer is the single source of that
-   *        text, and it doubles as the chat input.
+   * @param instruction what the AI should change. Passed in rather than held here: the AI tab's one
+   *        composer is the single source of that text, and it doubles as the chat input.
    * @returns whether generation actually started — the caller clears its composer on true.
    */
-  const runAction = (action: NoteAiAction, instruction: string): boolean => {
+  const runAction = (instruction: string): boolean => {
     if (busy || !noteId) return false;
-    if (action === "ai-update" && !instruction.trim()) {
+    if (!instruction.trim()) {
       toast.error("Describe what the AI should change");
       return false;
     }
@@ -55,35 +52,25 @@ export const useNoteAi = (
     }
     const { provider, model } = activeSelection;
 
-    setBusyState(true);
-    setPreview(null);
+    setBusy(true);
+    // Clear on start, not on done: the previous proposal is stale the moment a new run begins.
+    setProposal("");
     let full = "";
-    let mode: NoteAiMode = "replace";
     abortRef.current = notesStream.run(
       noteId,
-      action,
-      { instruction: instruction.trim() || undefined, provider, model },
+      { instruction: instruction.trim(), provider, model },
       {
-        onStart: (data) => {
-          mode = data.mode;
-          if (mode === "fragment") setPreview("");
-        },
+        onStart: () => {},
         onChunk: ({ delta }) => {
           full += delta;
-          // A fragment is not the note — the server splices it into the stored copy, so the buffer
-          // stays as it is and the result arrives with the refetch on note.done. Streaming it into
-          // the editor would momentarily replace the whole note with a paragraph.
-          if (mode === "replace") onContent(full);
-          else setPreview(full.replace(FRAGMENT_TAGS, ""));
+          setProposal(full);
         },
-        onDone: () => {
-          setBusyState(false);
-          setPreview(null);
-          onSaved();
-        },
+        onDone: () => setBusy(false),
         onError: (message) => {
-          setBusyState(false);
-          setPreview(null);
+          setBusy(false);
+          // The server rejected this text (empty, or the system prompt echoed back), so it is not
+          // something to offer for review.
+          setProposal(null);
           toast.error(message);
         },
       },
@@ -91,22 +78,25 @@ export const useNoteAi = (
     return true;
   };
 
+  /**
+   * Stops generating but *keeps* what arrived — a cancelled run usually means "that's enough",
+   * not "throw it away", and Discard is one click away if it isn't.
+   */
   const stop = () => {
     abortRef.current?.abort();
-    setBusyState(false);
-    setPreview(null);
+    setBusy(false);
   };
+
+  const clearProposal = () => setProposal(null);
 
   return {
     selected,
     setSelected,
     activeSelection,
     busy,
-    preview,
+    proposal,
     runAction,
+    clearProposal,
     stop,
   };
 };
-
-/** A command the palette hands to NotesScreen: an AI action to run, or "focus" to open the popover. */
-export type NotesBarCommand = NoteAiAction | "focus";

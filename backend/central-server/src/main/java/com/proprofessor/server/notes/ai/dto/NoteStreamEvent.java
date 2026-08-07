@@ -15,21 +15,14 @@ public sealed interface NoteStreamEvent
 
     String type();
 
-    /**
-     * {@code note.start} — generation began; the prior content is snapshotted once it finishes.
-     *
-     * @param mode {@code replace} when the stream is the complete new note (the client streams it
-     *             straight into the editor), or {@code fragment} when it is one piece the server
-     *             splices in — the client must then leave the buffer alone and refetch on
-     *             {@code note.done}.
-     */
-    record NoteStart(String type, long noteId, String mode) implements NoteStreamEvent {
-        public static NoteStart of(long noteId, String mode) {
-            return new NoteStart(TYPE_START, noteId, mode);
+    /** {@code note.start} — generation began. The note itself is never written by this stream. */
+    record NoteStart(String type, long noteId) implements NoteStreamEvent {
+        public static NoteStart of(long noteId) {
+            return new NoteStart(TYPE_START, noteId);
         }
     }
 
-    /** {@code note.chunk} — one streamed token of the note or fragment. */
+    /** {@code note.chunk} — one streamed token of the proposed note. */
     record NoteChunk(String type, long noteId, String delta) implements NoteStreamEvent {
         public static NoteChunk of(long noteId, String delta) {
             return new NoteChunk(TYPE_CHUNK, noteId, delta);
@@ -37,16 +30,16 @@ public sealed interface NoteStreamEvent
     }
 
     /**
-     * {@code note.done} — the note was saved. {@code revisionId} points at the snapshot of the
-     * pre-AI content, so the edit is reversible.
+     * {@code note.done} — generation finished and the proposal passed validation. Nothing was
+     * written: the client stages the streamed text for the user to apply or discard.
      */
-    record NoteDone(String type, long noteId, long revisionId) implements NoteStreamEvent {
-        public static NoteDone of(long noteId, long revisionId) {
-            return new NoteDone(TYPE_DONE, noteId, revisionId);
+    record NoteDone(String type, long noteId) implements NoteStreamEvent {
+        public static NoteDone of(long noteId) {
+            return new NoteDone(TYPE_DONE, noteId);
         }
     }
 
-    /** {@code note.error} — generation failed; the note was left untouched. */
+    /** {@code note.error} — generation failed; discard whatever was staged. */
     record NoteError(String type, String requestId, String message) implements NoteStreamEvent {
         public static NoteError of(String requestId, String message) {
             return new NoteError(TYPE_ERROR, requestId, message);

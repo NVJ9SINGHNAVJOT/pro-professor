@@ -184,11 +184,11 @@ than ⌘Space, which macOS reserves for Spotlight; the notes command palette kep
 An Obsidian-like Markdown notes workspace at `/notes` (backend vertical
 `com.proprofessor.server.notes`, frontend `modules/notes`): wiki-links/backlinks/embeds, tags,
 Postgres full-text search, inline Mermaid diagrams, a graph view (an interactive force-directed
-canvas, or a generated Mermaid hierarchy), and AI note actions
-(local models) with reversible revision snapshots — a rewrite returns the whole note, while
-summarize/continue return only delimited new text that the server splices in. A note-scoped chat
-panel reuses the chat SSE endpoint with a per-turn `noteContext` and applies replies to the note
-only on request. Full architecture and flow: [notes-flow.md](notes-flow.md).
+canvas, or a generated Mermaid hierarchy), and one AI note update (local models) that **only
+proposes**: it streams the rewritten note back for review and never writes it, so applying is an
+ordinary undoable editor edit the user still has to save. A note-scoped chat panel reuses the chat
+SSE endpoint with a per-turn `noteContext`, marks itself with `noteChat` so its threads stay out of
+the chat history, and applies replies to the note only on request. Full architecture and flow: [notes-flow.md](notes-flow.md).
 
 ### 2.10 Diagram module
 
