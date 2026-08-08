@@ -1,13 +1,8 @@
-import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TextareaHTMLAttributes } from "react";
 import { TextareaInput } from "@/components/inputs/TextareaInput";
 import type { Problem, ProblemSeverity } from "@/modules/notes/editor/lintMarkdown";
-import {
-  EDITOR_GUTTER,
-  EDITOR_TEXT_STYLE,
-  TOOLTIP_CLEARANCE,
-  TOOLTIP_MAX_WIDTH,
-} from "@/modules/notes/constants";
+import { EDITOR_GUTTER, EDITOR_TEXT_STYLE, TOOLTIP_CLEARANCE, TOOLTIP_MAX_WIDTH } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 
 /* ── Line numbers + inline problem markers ────────────────────────────────────
@@ -59,8 +54,11 @@ interface NoteEditorProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElemen
   problems: Problem[];
 }
 
-const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
-  ({ value, problems, className, onScroll, ...props }, ref) => {
+const NoteEditor = memo(
+  forwardRef<HTMLTextAreaElement, NoteEditorProps>(function NoteEditor(
+    { value, problems, className, onScroll, ...props },
+    ref,
+  ) {
     const innerRef = useRef<HTMLTextAreaElement | null>(null);
     const mirrorRef = useRef<HTMLDivElement | null>(null);
     const contentRef = useRef<HTMLDivElement | null>(null);
@@ -205,7 +203,7 @@ const NoteEditor = forwardRef<HTMLTextAreaElement, NoteEditorProps>(
         )}
       </div>
     );
-  },
+  }),
 );
 NoteEditor.displayName = "NoteEditor";
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import {
   SettingsIcon,
   Scale as ScaleIcon,
@@ -52,7 +52,7 @@ interface ChatSettingsProps {
   disabled?: boolean;
 }
 
-const ChatSettings = ({
+const ChatSettings = memo(function ChatSettings({
   params,
   onParamsChange,
   systemPrompt,
@@ -66,7 +66,7 @@ const ChatSettings = ({
   maxContextTokens,
   modelSelected,
   disabled,
-}: ChatSettingsProps) => {
+}: ChatSettingsProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -290,6 +290,6 @@ const ChatSettings = ({
       )}
     </div>
   );
-};
+});
 
 export default ChatSettings;

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   ArrowUpRightIcon,
   HashIcon,
@@ -53,7 +54,7 @@ interface ContextPanelProps {
  * Problems, backlinks, outbound links, outline, and tags of the active note — the Context tab of
  * {@link RightRail}, which owns the pane chrome around it.
  */
-const ContextPanel = ({
+const ContextPanel = memo(function ContextPanel({
   backlinks,
   content,
   tags,
@@ -61,7 +62,7 @@ const ContextPanel = ({
   onWikiClick,
   onHeadingClick,
   onProblemClick,
-}: ContextPanelProps) => {
+}: ContextPanelProps) {
   const navigate = useNavigate();
 
   const outline = extractOutline(content);
@@ -196,6 +197,6 @@ const ContextPanel = ({
       </section>
     </div>
   );
-};
+});
 
 export default ContextPanel;

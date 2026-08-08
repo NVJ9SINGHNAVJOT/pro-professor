@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import Tooltip from "@/components/common/Tooltip";
 import { ModelOptionLabel } from "@/components/common/ModelOptionLabel";
 import {
@@ -37,7 +37,14 @@ interface ModelSelectorProps {
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
 
-const ModelSelector = ({ value, onChange, disabled, align = "start", filter, fullWidth }: ModelSelectorProps) => {
+const ModelSelector = memo(function ModelSelector({
+  value,
+  onChange,
+  disabled,
+  align = "start",
+  filter,
+  fullWidth,
+}: ModelSelectorProps) {
   const { models, loaded } = useAppSelector((state) => state.models);
 
   const current = value ? encode(value.provider, value.model) : undefined;
@@ -211,6 +218,6 @@ const ModelSelector = ({ value, onChange, disabled, align = "start", filter, ful
       </SelectContent>
     </Select>
   );
-};
+});
 
 export default ModelSelector;

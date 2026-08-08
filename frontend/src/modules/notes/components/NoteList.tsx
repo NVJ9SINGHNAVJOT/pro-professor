@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, FileTextIcon, HashIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import MainNavbar from "@/components/common/MainNavbar";
@@ -43,7 +43,7 @@ interface NoteListProps {
  * Searching is not here — it lives in the global ⌘K modal, which searches notes *and* chats.
  * The whole pane scrolls on its own, independent of the editor and context panel.
  */
-const NoteList = ({ notes, onCreate, creating, isOpen }: NoteListProps) => {
+const NoteList = memo(function NoteList({ notes, onCreate, creating, isOpen }: NoteListProps) {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const noteId = useParams().noteId;
@@ -183,6 +183,6 @@ const NoteList = ({ notes, onCreate, creating, isOpen }: NoteListProps) => {
       </div>
     </aside>
   );
-};
+});
 
 export default NoteList;

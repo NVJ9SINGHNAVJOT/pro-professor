@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import {
   HistoryIcon,
   PanelRightCloseIcon,
@@ -14,10 +14,12 @@ import SidebarToggle from "@/components/common/SidebarToggle";
 import { VIEW_MODES } from "@/modules/notes/constants";
 import { cn } from "@/lib/utils";
 import type { NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
-import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 
 interface NotesBarProps {
-  ai: ReturnType<typeof useNoteAi>;
+  /** Whether an AI action is currently generating for this note. */
+  aiBusy: boolean;
+  /** Stops the in-flight AI action but keeps whatever it produced so far. */
+  onStopAi: () => void;
   /** False on an unsaved draft: everything needing a note id is disabled until the first save. */
   hasNote: boolean;
   /** The note's title, renamed in place here — its own request, not part of the save. */
@@ -41,8 +43,9 @@ interface NotesBarProps {
   onSave: () => void;
 }
 
-const NotesBar = ({
-  ai,
+const NotesBar = memo(function NotesBar({
+  aiBusy,
+  onStopAi,
   hasNote,
   title,
   setTitle,
@@ -61,7 +64,7 @@ const NotesBar = ({
   onToggleNoteList,
   setGraphOpen,
   onSave,
-}: NotesBarProps) => {
+}: NotesBarProps) {
   return (
     <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
       <SidebarToggle isOpen={noteListOpen} onToggle={onToggleNoteList} label="note explorer" />
@@ -130,10 +133,10 @@ const NotesBar = ({
         {/* Opens the rail's AI tab — and doubles as Stop, because the rail can be closed while
               the model runs and this is then the only control left on screen. Not gated on
               hasNote: the chat half works on an unsaved draft, only the note actions inside don't. */}
-        {ai.busy ? (
+        {aiBusy ? (
           <button
             type="button"
-            onClick={ai.stop}
+            onClick={onStopAi}
             aria-label="Stop generating"
             title="Stop"
             className="flex h-8 shrink-0 cursor-pointer items-center gap-x-1.5 rounded-lg bg-white px-2.5 caption-small-medium text-black hover:bg-neutral-200"
@@ -170,6 +173,6 @@ const NotesBar = ({
       </div>
     </div>
   );
-};
+});
 
 export default NotesBar;

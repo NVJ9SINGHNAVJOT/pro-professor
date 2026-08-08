@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
@@ -23,7 +23,6 @@ import {
   TextQuoteIcon,
   WandSparklesIcon,
   WaypointsIcon,
-  XIcon,
 } from "lucide-react";
 import { toast } from "@/components/common/toast";
 import Markdown, { MarkdownBody } from "@/components/common/Markdown";
@@ -45,6 +44,7 @@ import NoteChatPanel from "@/modules/notes/components/NoteChatPanel";
 import { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import SplitPane from "@/modules/notes/components/SplitPane";
 import GraphView from "@/modules/notes/components/GraphView";
+import NotesGraphHeader from "@/modules/notes/components/NotesGraphHeader";
 import RevisionList from "@/modules/notes/components/RevisionList";
 import CommandPalette, { type PaletteCommand } from "@/modules/notes/components/CommandPalette";
 import SlashMenu from "@/modules/notes/components/SlashMenu";
@@ -69,14 +69,12 @@ import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
 import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import {
-  GRAPH_RENDERERS,
   HEADING_SCROLL_DELAY_MS,
   MERMAID_TEMPLATE,
   SCROLL_SYNC_RELEASE_MS,
   type SlashCommand,
 } from "@/modules/notes/constants";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
-import { cn } from "@/lib/utils";
 
 interface NotesScreenProps {
   /** The explorer list, loaded by the parent `/notes` route. */
@@ -86,6 +84,9 @@ interface NotesScreenProps {
   /** Notes linking to the open one, loaded alongside it. */
   backlinks: NoteSummary[];
 }
+
+/** Stable empty-tags reference so a tagless note doesn't hand ContextPanel a new array every render. */
+const EMPTY_TAGS: string[] = [];
 
 /** The explorer row hiding inside a full note — a list row is a strict subset of the detail. */
 const summaryOf = (detail: NoteDetail): NoteSummary => ({
@@ -127,7 +128,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // two route entries, so opening the first note remounts this screen and resets it. That's the
   // wanted default there (nothing to preserve when no note is open yet) and it's what chat does.
   const [noteListOpen, setNoteListOpen] = useState(true);
-  const toggleNoteList = () => setNoteListOpen((open) => !open);
+  const toggleNoteList = useCallback(() => setNoteListOpen((open) => !open), []);
   // The graph view is a mode, so it stays local and resets on the remount — but *which renderer* it
   // shows, and everything that renderer has been arranged into, is persisted. See notesGraphSlice.
   const [graphOpen, setGraphOpen] = useState(false);
@@ -159,23 +160,26 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   const appliedIdRef = useRef<number | null>(loadedNote?.id ?? null);
 
   /** Puts a server copy of the note into every bit of editor state. */
-  const seedFromDetail = (detail: NoteDetail) => {
+  const seedFromDetail = useCallback((detail: NoteDetail) => {
     appliedIdRef.current = detail.id;
     setNote(detail);
     setContent(detail.content);
     setSavedContent(detail.content);
     setTitle(detail.title);
     setSavedTitle(detail.title);
-  };
+  }, []);
 
   /** Applies a fresh detail from the server (save, AI save, restore) to every bit of local state. */
-  const applyDetail = (detail: NoteDetail) => {
-    seedFromDetail(detail);
-    // The explorer row is a subset of what we just got back — patch it (title, tags, and the new
-    // updatedAt, which floats the note to the top) rather than refetching the whole list.
-    dispatch(upsertNote(summaryOf(detail)));
-    setRevisionRefresh((key) => key + 1);
-  };
+  const applyDetail = useCallback(
+    (detail: NoteDetail) => {
+      seedFromDetail(detail);
+      // The explorer row is a subset of what we just got back — patch it (title, tags, and the new
+      // updatedAt, which floats the note to the top) rather than refetching the whole list.
+      dispatch(upsertNote(summaryOf(detail)));
+      setRevisionRefresh((key) => key + 1);
+    },
+    [seedFromDetail, dispatch],
+  );
 
   const ai = useNoteAi(note?.id);
   const chat = useNoteChat({ noteId: note?.id, content, selection: ai.activeSelection, selectedText });
@@ -221,12 +225,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * revalidation and would refetch the explorer on every click. (A *seeded* draft, opened from an
    * unresolved `[[link]]`, still clears back to an empty one.)
    */
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     if (!isDraft || draftTitle) navigate(ROUTES.NOTES_NEW);
-  };
+  }, [isDraft, draftTitle, navigate]);
 
   /** @returns whether the note is now persisted — false on a refused or failed save. */
-  const handleSave = async (): Promise<boolean> => {
+  const handleSave = useCallback(async (): Promise<boolean> => {
     if (saving || creating) return false;
     if (!note) {
       if (!isDraft) return false;
@@ -255,31 +259,48 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     }
     applyDetail(res.response.data);
     return true;
-  };
+  }, [
+    saving,
+    creating,
+    note,
+    isDraft,
+    title,
+    content,
+    createNote,
+    dispatch,
+    navigate,
+    updateNote,
+    seedFromDetail,
+    applyDetail,
+  ]);
 
   /**
    * Commits a rename from the toolbar — a request of its own, so an unsaved buffer stays unsaved.
    * Only the title (and the explorer row) moves; the content, revisions and backlinks don't.
    */
-  const handleRenameTitle = async (next: string) => {
-    // A draft has no row to rename yet; the typed title rides along on its first save.
-    if (!note) {
-      setTitle(next);
-      return;
-    }
-    const res = await renameNote(note.id, next);
-    if (res.error) {
-      toast.error(res.error.message || "Failed to rename note");
-      setTitle(savedTitle);
-      return;
-    }
-    const detail = res.response.data;
-    setNote(detail);
-    // The server's copy, which may carry a "… 2" suffix from a title clash.
-    setTitle(detail.title);
-    setSavedTitle(detail.title);
-    dispatch(upsertNote(summaryOf(detail)));
-  };
+  const handleRenameTitle = useCallback(
+    async (next: string) => {
+      // A draft has no row to rename yet; the typed title rides along on its first save.
+      if (!note) {
+        setTitle(next);
+        return;
+      }
+      const res = await renameNote(note.id, next);
+      if (res.error) {
+        toast.error(res.error.message || "Failed to rename note");
+        setTitle(savedTitle);
+        return;
+      }
+      const detail = res.response.data;
+      setNote(detail);
+      // The server's copy, which may carry a "… 2" suffix from a title clash.
+      setTitle(detail.title);
+      setSavedTitle(detail.title);
+      dispatch(upsertNote(summaryOf(detail)));
+    },
+    [note, savedTitle, renameNote, dispatch],
+  );
+  const handleRenameTitleVoid = useCallback((next: string) => void handleRenameTitle(next), [handleRenameTitle]);
 
   /**
    * Runs an AI action against the note — saving it first when the buffer is dirty.
@@ -321,25 +342,29 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * Scrolls the preview to a heading. Deferred, because the anchor may not be painted yet —
    * the view mode just switched, or the note itself just arrived.
    */
-  const scrollToHeading = (heading: string) => {
-    if (viewMode === "source") setViewMode("split"); // the anchor lives in the preview
-    return setTimeout(() => {
-      const container = previewRef.current;
-      if (!container) return;
-      const wanted = heading.trim().toLowerCase();
-      const headings = container.querySelectorAll("h1, h2, h3, h4, h5, h6");
-      for (const element of headings) {
-        if (element.textContent?.trim().toLowerCase() === wanted) {
-          // scrollTo on the pane itself, not scrollIntoView — the latter scrolls EVERY
-          // scrollable ancestor, and App's <main> is one, so it would drag the toolbar
-          // off-screen by whatever slack the horizontal scrollbar leaves it.
-          const top = container.scrollTop + element.getBoundingClientRect().top - container.getBoundingClientRect().top;
-          container.scrollTo({ top, behavior: "smooth" });
-          break;
+  const scrollToHeading = useCallback(
+    (heading: string) => {
+      if (viewMode === "source") setViewMode("split"); // the anchor lives in the preview
+      return setTimeout(() => {
+        const container = previewRef.current;
+        if (!container) return;
+        const wanted = heading.trim().toLowerCase();
+        const headings = container.querySelectorAll("h1, h2, h3, h4, h5, h6");
+        for (const element of headings) {
+          if (element.textContent?.trim().toLowerCase() === wanted) {
+            // scrollTo on the pane itself, not scrollIntoView — the latter scrolls EVERY
+            // scrollable ancestor, and App's <main> is one, so it would drag the toolbar
+            // off-screen by whatever slack the horizontal scrollbar leaves it.
+            const top =
+              container.scrollTop + element.getBoundingClientRect().top - container.getBoundingClientRect().top;
+            container.scrollTo({ top, behavior: "smooth" });
+            break;
+          }
         }
-      }
-    }, HEADING_SCROLL_DELAY_MS);
-  };
+      }, HEADING_SCROLL_DELAY_MS);
+    },
+    [viewMode],
+  );
 
   // [[Note#Heading]] navigation to ANOTHER note: the heading arrives as router state; once the
   // note's content is in the preview, scroll its matching heading into view. (Headings of the
@@ -361,7 +386,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * The driver lock is what stops a feedback loop — scrolling the target fires its own scroll
    * event, which would drive the source straight back.
    */
-  const syncScroll = (driver: "editor" | "preview") => {
+  const syncScroll = useCallback((driver: "editor" | "preview") => {
     if (scrollDriverRef.current && scrollDriverRef.current !== driver) return;
     // In source-only / preview-only the other pane isn't rendered, so its ref is null and this
     // no-ops on its own — no need to check the view mode.
@@ -379,34 +404,37 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     const targetRange = target.scrollHeight - target.clientHeight;
     if (sourceRange <= 0 || targetRange <= 0) return;
     target.scrollTop = (source.scrollTop / sourceRange) * targetRange;
-  };
+  }, []);
 
   /**
    * Selects a problem's line in the editor and centers it — the Problems list's click target.
    * The counterpart to `scrollToHeading`, which moves the *preview*: a problem is a fact about
    * the source, so the caret has to land on the line that has to be fixed.
    */
-  const jumpToLine = (line: number) => {
-    const focusLine = () => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const lines = textarea.value.split("\n");
-      const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
-      textarea.focus();
-      textarea.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
-      // measureCaret reports against the border box (scroll already subtracted), so adding the
-      // scroll back gives the line's offset within the content.
-      const caret = measureCaret(textarea, start);
-      textarea.scrollTop = Math.max(0, textarea.scrollTop + caret.top - textarea.clientHeight / 2);
-    };
-    if (viewMode !== "preview") {
-      focusLine();
-      return;
-    }
-    // Preview-only doesn't render the editor at all — switch first, then wait for the paint.
-    setViewMode("split");
-    setTimeout(focusLine, HEADING_SCROLL_DELAY_MS);
-  };
+  const jumpToLine = useCallback(
+    (line: number) => {
+      const focusLine = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const lines = textarea.value.split("\n");
+        const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
+        textarea.focus();
+        textarea.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
+        // measureCaret reports against the border box (scroll already subtracted), so adding the
+        // scroll back gives the line's offset within the content.
+        const caret = measureCaret(textarea, start);
+        textarea.scrollTop = Math.max(0, textarea.scrollTop + caret.top - textarea.clientHeight / 2);
+      };
+      if (viewMode !== "preview") {
+        focusLine();
+        return;
+      }
+      // Preview-only doesn't render the editor at all — switch first, then wait for the paint.
+      setViewMode("split");
+      setTimeout(focusLine, HEADING_SCROLL_DELAY_MS);
+    },
+    [viewMode],
+  );
 
   /**
    * Applies a pure textActions result: new content + restored focus/selection.
@@ -421,7 +449,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * Only the span that actually changed is rewritten (`changedRange`), so indenting three lines
    * doesn't re-type the whole note into a single undo entry.
    */
-  const applyTextState = (next: TextState) => {
+  const applyTextState = useCallback((next: TextState) => {
     const textarea = textareaRef.current;
     if (!textarea) {
       setContent(next.value);
@@ -439,47 +467,57 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       if (!written) flushSync(() => setContent(next.value));
     }
     textarea.setSelectionRange(next.selectionStart, next.selectionEnd);
-  };
+  }, []);
 
   /** Runs a toolbar/shortcut transform against the textarea's live selection. */
-  const applyTextAction = (action: TextAction) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    applyTextState(
-      action({ value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd }),
-    );
-  };
+  const applyTextAction = useCallback(
+    (action: TextAction) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      applyTextState(
+        action({
+          value: textarea.value,
+          selectionStart: textarea.selectionStart,
+          selectionEnd: textarea.selectionEnd,
+        }),
+      );
+    },
+    [applyTextState],
+  );
 
   /**
    * Writes a chat reply into the note. The note goes dirty like any other edit — saving stays the
    * user's call, so an applied reply is undoable with the editor's own history before it is ever
    * persisted.
    */
-  const applyChatReply = (mode: NoteApplyMode, text: string) => {
-    const textarea = textareaRef.current;
-    // Preview-only doesn't render the editor, so there is no caret or selection to land on —
-    // appending is the only honest option, and there is no textarea to write it through. Switch to
-    // split so the result is visible either way.
-    if (!textarea) {
-      if (viewMode === "preview") setViewMode("split");
-      setContent((current) => `${current.trimEnd()}\n\n${text}\n`);
-      return;
-    }
-    const state = {
-      value: textarea.value,
-      selectionStart: textarea.selectionStart,
-      selectionEnd: textarea.selectionEnd,
-    };
-    // Appending is a replace of the note's trailing whitespace — routed through applyTextState like
-    // every other insert so it lands on the undo stack rather than wiping it.
-    if (mode === "append") {
-      applyTextState(replaceRange(state, state.value.trimEnd().length, state.value.length, `\n\n${text}\n`));
-      return;
-    }
-    // "Insert at cursor" is the zero-width case of "replace selection".
-    const to = mode === "selection" ? state.selectionEnd : state.selectionStart;
-    applyTextState(replaceRange(state, state.selectionStart, to, text));
-  };
+  const applyChatReply = useCallback(
+    (mode: NoteApplyMode, text: string) => {
+      const textarea = textareaRef.current;
+      // Preview-only doesn't render the editor, so there is no caret or selection to land on —
+      // appending is the only honest option, and there is no textarea to write it through. Switch
+      // to split so the result is visible either way.
+      if (!textarea) {
+        if (viewMode === "preview") setViewMode("split");
+        setContent((current) => `${current.trimEnd()}\n\n${text}\n`);
+        return;
+      }
+      const state = {
+        value: textarea.value,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+      };
+      // Appending is a replace of the note's trailing whitespace — routed through applyTextState
+      // like every other insert so it lands on the undo stack rather than wiping it.
+      if (mode === "append") {
+        applyTextState(replaceRange(state, state.value.trimEnd().length, state.value.length, `\n\n${text}\n`));
+        return;
+      }
+      // "Insert at cursor" is the zero-width case of "replace selection".
+      const to = mode === "selection" ? state.selectionEnd : state.selectionStart;
+      applyTextState(replaceRange(state, state.selectionStart, to, text));
+    },
+    [viewMode, applyTextState],
+  );
 
   /**
    * Accepts the AI's staged proposal: the whole note is replaced, and that's it — the buffer goes
@@ -520,7 +558,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * see) while the typed `/query` stays exactly as written, so scrolling back brings it straight
    * back. Deleting the `/` instead would throw away text the user may well have meant literally.
    */
-  const repositionSlash = () => {
+  const repositionSlash = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea || !slash) return;
     const pos = measureCaret(textarea, slash.start);
@@ -530,10 +568,10 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       return;
     }
     setSlash({ ...slash, anchor: { top: pos.top, left: pos.left, lineHeight: pos.lineHeight } });
-  };
+  }, [slash]);
 
   /** Opens/updates the slash menu when the caret sits right after a line-start `/query`. */
-  const syncSlash = (textarea: HTMLTextAreaElement) => {
+  const syncSlash = useCallback((textarea: HTMLTextAreaElement) => {
     const caret = textarea.selectionStart;
     const lineStart = textarea.value.lastIndexOf("\n", caret - 1) + 1;
     const match = /^\/([\w-]*)$/.exec(textarea.value.slice(lineStart, caret));
@@ -548,41 +586,47 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       query: match[1],
       anchor: { top: pos.top, left: pos.left, lineHeight: pos.lineHeight },
     });
-  };
+  }, []);
 
-  const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
-    syncSlash(e.target);
-  };
+  const handleEditorChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setContent(e.target.value);
+      syncSlash(e.target);
+    },
+    [syncSlash],
+  );
 
-  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slash) return; // the open menu's capture listener owns ↑/↓/Enter/Esc
-    if (e.key === "Tab") {
-      e.preventDefault();
-      applyTextAction(e.shiftKey ? outdent : indent);
-      return;
-    }
-    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-      const textarea = e.currentTarget;
-      const next = continueListOnEnter({
-        value: textarea.value,
-        selectionStart: textarea.selectionStart,
-        selectionEnd: textarea.selectionEnd,
-      });
-      if (next) {
+  const handleEditorKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slash) return; // the open menu's capture listener owns ↑/↓/Enter/Esc
+      if (e.key === "Tab") {
         e.preventDefault();
-        applyTextState(next);
+        applyTextAction(e.shiftKey ? outdent : indent);
+        return;
       }
-      return;
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
-      e.preventDefault();
-      applyTextAction((s) => wrapInline(s, "**"));
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
-      e.preventDefault();
-      applyTextAction((s) => wrapInline(s, "*"));
-    }
-  };
+      if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        const textarea = e.currentTarget;
+        const next = continueListOnEnter({
+          value: textarea.value,
+          selectionStart: textarea.selectionStart,
+          selectionEnd: textarea.selectionEnd,
+        });
+        if (next) {
+          e.preventDefault();
+          applyTextState(next);
+        }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        applyTextAction((s) => wrapInline(s, "**"));
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        applyTextAction((s) => wrapInline(s, "*"));
+      }
+    },
+    [slash, applyTextAction, applyTextState],
+  );
 
   /** Slash-menu pick: the `/query` range becomes the block snippet. */
   const handleSlashSelect = (command: SlashCommand) => {
@@ -600,6 +644,21 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     );
   };
 
+  // Fires on every caret move, but only a real change to the *selected text* re-renders —
+  // moving the caret leaves it "" both times.
+  const handleEditorSelect = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const next = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+    setSelectedText((current) => (current === next ? current : next));
+  }, []);
+
+  const handleEditorBlur = useCallback(() => setSlash(null), []);
+
+  const handleEditorScroll = useCallback(() => {
+    syncScroll("editor");
+    repositionSlash();
+  }, [syncScroll, repositionSlash]);
+
   const editorPane = (
     <NoteEditor
       ref={textareaRef}
@@ -607,18 +666,9 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       problems={problems}
       onChange={handleEditorChange}
       onKeyDown={handleEditorKeyDown}
-      // Fires on every caret move, but only a real change to the *selected text* re-renders —
-      // moving the caret leaves it "" both times.
-      onSelect={(e) => {
-        const textarea = e.currentTarget;
-        const next = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
-        setSelectedText((current) => (current === next ? current : next));
-      }}
-      onBlur={() => setSlash(null)}
-      onScroll={() => {
-        syncScroll("editor");
-        repositionSlash();
-      }}
+      onSelect={handleEditorSelect}
+      onBlur={handleEditorBlur}
+      onScroll={handleEditorScroll}
       placeholder="Write Markdown… (/ for blocks, ---, # headings, > [!note] callouts, $math$)"
       spellCheck={false}
     />
@@ -773,40 +823,13 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     if (graphOpen) {
       return (
         <>
-          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
-            <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
-            <WaypointsIcon className="size-4.5 text-neutral-400" />
-            <h1 className="para-medium-semibold">Graph view</h1>
-
-            <div className="ml-auto flex shrink-0 items-center gap-x-1">
-              {/* Same segmented control as the editor's source/split/preview switch. */}
-              <div className="mr-2 flex items-center rounded-lg bg-neutral-900 p-0.5">
-                {GRAPH_RENDERERS.map(({ renderer: mode, label, icon: Icon }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => dispatch(setGraphRenderer(mode))}
-                    aria-label={label}
-                    title={label}
-                    className={cn(
-                      "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
-                      graphRenderer === mode && "bg-neutral-700 text-white",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => setGraphOpen(false)}
-                aria-label="Close graph view"
-                className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
-              >
-                <XIcon className="size-4.5" />
-              </button>
-            </div>
-          </div>
+          <NotesGraphHeader
+            noteListOpen={noteListOpen}
+            onToggleNoteList={toggleNoteList}
+            graphRenderer={graphRenderer}
+            onGraphRendererChange={(renderer) => dispatch(setGraphRenderer(renderer))}
+            onClose={() => setGraphOpen(false)}
+          />
           <div className="min-h-0 flex-1">
             <GraphView notes={notes} currentNoteId={note?.id ?? null} onClose={() => setGraphOpen(false)} />
           </div>
@@ -818,12 +841,13 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       return (
         <>
           <NotesBar
-            ai={ai}
+            aiBusy={ai.busy}
+            onStopAi={ai.stop}
             hasNote={note !== null}
             title={title}
             setTitle={setTitle}
             savedTitle={savedTitle}
-            onRenameTitle={(next) => void handleRenameTitle(next)}
+            onRenameTitle={handleRenameTitleVoid}
             dirty={dirty}
             saving={saving}
             viewMode={viewMode}
@@ -907,7 +931,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
             <ContextPanel
               backlinks={backlinks}
               content={content}
-              tags={note?.tags ?? []}
+              tags={note?.tags ?? EMPTY_TAGS}
               problems={problems}
               onWikiClick={wiki.onLinkClick}
               onHeadingClick={scrollToHeading}

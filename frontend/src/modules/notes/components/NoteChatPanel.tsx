@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLineIcon,
   CheckIcon,
@@ -22,9 +22,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
-import type { NoteApplyMode, NoteChatContextMode } from "@/modules/notes/types";
+import type { NoteApplyMode, NoteChatContextMode, NoteChatMessage } from "@/modules/notes/types";
 import { PROPOSAL_DEFAULT_HEIGHT, PROPOSAL_MIN_HEIGHT, PROPOSAL_RESERVED_HEIGHT } from "@/modules/notes/constants";
+import type { ProviderModel } from "@/services/operations/models/models.route";
 import { cn } from "@/lib/utils";
+
+/** Excludes embedding models from the tab's picker — closes over nothing, so it stays one stable
+ *  reference across renders (a fresh inline function here would defeat ModelSelector's memo). */
+const isNotEmbeddingModel = (m: ProviderModel) => m.role !== "embedding" && !m.name.toLowerCase().includes("embed");
 
 const CONTEXT_MODES: { mode: NoteChatContextMode; label: string }[] = [
   { mode: "auto", label: "Auto" },
@@ -70,16 +75,10 @@ const NoteChatPanel = ({
   onApplyProposal,
   noteActionsEnabled,
 }: NoteChatPanelProps) => {
-  const endRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const proposalRef = useRef<HTMLDivElement | null>(null);
   const [proposalHeight, setProposalHeight] = useState(PROPOSAL_DEFAULT_HEIGHT);
   const [mode, setMode] = useState<ComposerMode>("ask");
-
-  // Follow the stream, the way the main chat does.
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [chat.messages]);
 
   /**
    * Which half the composer drives. `update` is gated on the same condition as the action itself,
@@ -123,7 +122,7 @@ const NoteChatPanel = ({
           disabled={ai.busy}
           align="start"
           fullWidth
-          filter={(m) => m.role !== "embedding" && !m.name.toLowerCase().includes("embed")}
+          filter={isNotEmbeddingModel}
         />
       </div>
 
@@ -150,28 +149,7 @@ const NoteChatPanel = ({
       </div>
 
       <div className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto p-3">
-        {chat.messages.length === 0 && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-y-2 px-4 text-center text-neutral-600">
-            <MessageSquareIcon className="size-7" />
-            <p className="caption-regular">Ask about this note. Nothing changes unless you apply it.</p>
-          </div>
-        )}
-
-        {chat.messages.map((message, index) =>
-          message.role === "user" ? (
-            <div key={index} className="self-end rounded-lg bg-neutral-800 px-3 py-2 para-small-medium text-white">
-              {message.content}
-            </div>
-          ) : (
-            <div key={index} className="group relative">
-              <MarkdownBody className="para-small-regular text-neutral-200">
-                <Markdown wiki={wiki}>{message.content}</Markdown>
-              </MarkdownBody>
-              {message.content !== "" && onApply && <ApplyMenu text={message.content} onApply={onApply} />}
-            </div>
-          ),
-        )}
-        <div ref={endRef} />
+        <ChatThread messages={chat.messages} wiki={wiki} onApply={onApply} />
       </div>
 
       <div className="shrink-0 border-t border-neutral-800 p-2">
@@ -314,6 +292,55 @@ const NoteChatPanel = ({
     </div>
   );
 };
+
+interface ChatThreadProps {
+  messages: NoteChatMessage[];
+  /** Makes `[[links]]` in replies clickable, same as the preview pane. */
+  wiki: WikiHandlers;
+  /** Writes a reply into the editor; null while an AI action owns the buffer. */
+  onApply: ((mode: NoteApplyMode, text: string) => void) | null;
+}
+
+/**
+ * The message thread — split out so a turn (which only changes `chat.messages`) doesn't repaint
+ * markdown for replies nobody touched, and so composer/proposal-panel-local state changes in the
+ * parent (mode switches, resizing the proposal) don't re-render the thread at all.
+ */
+const ChatThread = memo(function ChatThread({ messages, wiki, onApply }: ChatThreadProps) {
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Follow the stream, the way the main chat does.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
+
+  return (
+    <>
+      {messages.length === 0 && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-y-2 px-4 text-center text-neutral-600">
+          <MessageSquareIcon className="size-7" />
+          <p className="caption-regular">Ask about this note. Nothing changes unless you apply it.</p>
+        </div>
+      )}
+
+      {messages.map((message, index) =>
+        message.role === "user" ? (
+          <div key={index} className="self-end rounded-lg bg-neutral-800 px-3 py-2 para-small-medium text-white">
+            {message.content}
+          </div>
+        ) : (
+          <div key={index} className="group relative">
+            <MarkdownBody className="para-small-regular text-neutral-200">
+              <Markdown wiki={wiki}>{message.content}</Markdown>
+            </MarkdownBody>
+            {message.content !== "" && onApply && <ApplyMenu text={message.content} onApply={onApply} />}
+          </div>
+        ),
+      )}
+      <div ref={endRef} />
+    </>
+  );
+});
 
 /** Accept or reject the staged proposal. Apply is the primary of the pair; Discard reads as an out. */
 const ProposalAction = ({

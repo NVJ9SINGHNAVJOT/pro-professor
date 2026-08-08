@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/components/common/toast";
 import { notesStream } from "@/services/operations/notes/notes.stream";
 import type { SelectedModel } from "@/modules/chat/types";
@@ -82,10 +82,10 @@ export const useNoteAi = (noteId: number | undefined) => {
    * Stops generating but *keeps* what arrived — a cancelled run usually means "that's enough",
    * not "throw it away", and Discard is one click away if it isn't.
    */
-  const stop = () => {
+  const stop = useCallback(() => {
     abortRef.current?.abort();
     setBusy(false);
-  };
+  }, []);
 
   const clearProposal = () => setProposal(null);
 
