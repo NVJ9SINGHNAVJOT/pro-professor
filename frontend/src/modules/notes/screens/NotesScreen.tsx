@@ -67,7 +67,7 @@ import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { lintMarkdown } from "@/modules/notes/editor/lintMarkdown";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter } from "@/modules/notes/utils";
-import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
+import type { NoteApplyMode, NoteEditTarget, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import {
   HEADING_SCROLL_DELAY_MS,
   MERMAID_TEMPLATE,
@@ -307,12 +307,24 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    *
    * The server builds its prompt from the note in the database, not from this buffer, so running
    * one over unsaved edits would rewrite a version of the note the user isn't looking at.
+   *
+   * The edit target is read **before** the save: saving re-renders the editor, and the range the
+   * user selected is what the update is about.
    */
   const runAiAction = async () => {
+    const textarea = textareaRef.current;
+    const target: NoteEditTarget | null =
+      chat.updateUsesSelection && textarea && textarea.selectionStart !== textarea.selectionEnd
+        ? {
+            start: textarea.selectionStart,
+            end: textarea.selectionEnd,
+            text: textarea.value.slice(textarea.selectionStart, textarea.selectionEnd),
+          }
+        : null;
     if (dirty && !(await handleSave())) return;
     // The AI tab's composer is the single input: what's typed there is the update instruction,
     // and it's cleared only once generation has actually started.
-    if (ai.runAction(chat.input)) chat.setInput("");
+    if (ai.runAction(chat.input, target)) chat.setInput("");
   };
 
   // Cmd/Ctrl+S saves the active note. The ref always points at the latest save
@@ -520,30 +532,59 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   );
 
   /**
-   * Accepts the AI's staged proposal: the whole note is replaced, and that's it — the buffer goes
-   * dirty like any hand edit, so saving stays the user's call and ⌘Z still walks it back. This is
-   * the only path by which an AI update reaches the note; the server never writes one.
+   * Accepts the AI's staged proposal — the whole note when the run was note-scoped, otherwise just
+   * the span it targeted. Either way the buffer goes dirty like any hand edit, so saving stays the
+   * user's call and ⌘Z still walks it back. This is the only path by which an AI update reaches the
+   * note; the server never writes one.
    */
   const applyProposal = () => {
     if (ai.proposal === null) return;
     const proposal = ai.proposal;
-    ai.clearProposal();
+    const target = ai.target;
     const textarea = textareaRef.current;
     // Preview-only renders no editor, so there is no textarea to write through — same fallback as
-    // applyChatReply, and switching to split makes the result visible either way.
+    // applyChatReply, and switching to split makes the result visible either way. A targeted edit
+    // has no caret to land on here, so it splices by text.
     if (!textarea) {
       if (viewMode === "preview") setViewMode("split");
-      setContent(proposal);
+      if (target) {
+        const at = content.indexOf(target.text);
+        if (at === -1) {
+          toast.error("The text this edit targeted has changed — discard it and run the update again");
+          return;
+        }
+        setContent(content.slice(0, at) + proposal + content.slice(at + target.text.length));
+      } else {
+        setContent(proposal);
+      }
+      ai.clearProposal();
       return;
     }
+    // The buffer stays editable while the model streams, so the frozen offsets are only a first
+    // guess — fall back to finding the target text, and refuse rather than overwrite the wrong span.
+    let from = 0;
+    let to = textarea.value.length;
+    if (target) {
+      const at =
+        textarea.value.slice(target.start, target.end) === target.text
+          ? target.start
+          : textarea.value.indexOf(target.text);
+      if (at === -1) {
+        toast.error("The text this edit targeted has changed — discard it and run the update again");
+        return;
+      }
+      from = at;
+      to = at + target.text.length;
+    }
+    ai.clearProposal();
     // Routed through applyTextState (execCommand) rather than setContent: assigning .value on a
     // controlled textarea wipes the browser's native undo stack, which would make Apply the one
     // edit in this editor that ⌘Z can't take back.
     applyTextState(
       replaceRange(
         { value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
-        0,
-        textarea.value.length,
+        from,
+        to,
         proposal,
       ),
     );
@@ -949,8 +990,12 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
               onRunAction={() => void runAiAction()}
               onApplyProposal={applyProposal}
               // The note actions edit the saved row, so they need one — unlike the chat half,
-              // which works on a draft straight from the buffer.
-              noteActionsEnabled={note !== null && !ai.busy}
+              // which works on a draft straight from the buffer. Deliberately *not* also gated on
+              // `ai.busy`: "an update can be started" and "an update is running" are different
+              // facts, and folding them together made the panel forget it was in Update mode for
+              // the whole run — the Stop button, the mode highlight and Enter all followed the
+              // chat half instead. The panel reads `ai.busy` itself for the running state.
+              noteActionsEnabled={note !== null}
             />
           }
         />

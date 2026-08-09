@@ -128,7 +128,7 @@ Voice is wired up via two pass-through audio endpoints ([AudioController.java](.
 - `POST /api/v1/audio/transcriptions` — multipart audio in → transcript text (Whisper/MLX).
 - `POST /api/v1/audio/speech` — text in → WAV audio bytes (TTS/MLX).
 
-The voice pipeline is **orchestrated on the frontend** ([VoiceBar.tsx](../frontend/src/modules/chat/components/VoiceBar.tsx), [ChatMessages.tsx](../frontend/src/modules/chat/components/ChatMessages.tsx)):
+The voice pipeline is **orchestrated on the frontend** ([VoiceBar.tsx](../frontend/src/modules/chat/components/VoiceBar.tsx), [ChatMessages.tsx](../frontend/src/modules/chat/components/ChatMessages/ChatMessages.tsx)):
 1. **Record** — `VoiceBar` captures one complete utterance via the `MediaRecorder` API (push-to-talk: record while active, tap stop to send) and shows a mic-reactive waveform.
 2. **Input (branches on `inputModalities`)** — `handleUtterance` looks up the selected model's modalities:
    - **Text/Ollama models** — the blob is transcribed at `/api/v1/audio/transcriptions` and the transcript is sent as text through the normal SSE chat channel (§2.2).
@@ -136,6 +136,8 @@ The voice pipeline is **orchestrated on the frontend** ([VoiceBar.tsx](../fronte
 3. **Synthesize** — when the text reply arrives, it is sent to `/api/v1/audio/speech` and the returned WAV is played via `AudioContext`, visualized as a colorful waveform. The spoken user turn is replayable in the transcript via an inline `<audio>` player (`MessageAttachments`).
 
 The reply is always text → TTS, because **no model in this stack emits audio**. The `inputModalities` distinction only matters on the input side.
+
+**Dictation is the STT half on its own** ([useDictation.ts](../frontend/src/modules/chat/hooks/useDictation.ts), the mic button in [InputBar.tsx](../frontend/src/modules/chat/components/ChatMessages/InputBar.tsx)). It records one clip with `MediaRecorder` (reusing `pickMimeType()`), posts it to the same `/api/v1/audio/transcriptions`, and **inserts the transcript at the caret in the composer** — nothing is sent and nothing is spoken. A **cancel** beside the mic drops the clip without transcribing it (the mic itself commits to the round trip, so without one there is no way out of a recording started by accident), and a `startingRef` guard keeps a second click during the `getUserMedia` await from opening a second recorder and leaking the first one's tracks. It is a separate control from the waveform button beside it precisely because voice chat is a *mode*: it commits the utterance the moment recording stops, whereas dictation exists so the words can be read and edited first. It also ignores `inputModalities` entirely — the point is to get text, so an audio-capable model is transcribed like any other.
 
 ### 2.6 Direct Audio Input (implemented)
 

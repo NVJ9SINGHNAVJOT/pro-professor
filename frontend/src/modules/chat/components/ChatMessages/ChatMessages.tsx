@@ -12,6 +12,7 @@ import VoiceBar, { type VoiceMode } from "@/modules/chat/components/VoiceBar";
 import ChatTopBar from "@/modules/chat/components/ChatMessages/ChatTopBar";
 import MessageList from "@/modules/chat/components/ChatMessages/MessageList";
 import InputBar from "@/modules/chat/components/ChatMessages/InputBar";
+import { useDictation } from "@/modules/chat/hooks/useDictation";
 import { blobToWav } from "@/modules/chat/wav";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import type { ModelProvider } from "@/services/operations/models/models.route";
@@ -609,6 +610,27 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
   // `text` param (matching the guard the inline `() => handleSend()` handler used to give it).
   const handleSendClick = useCallback(() => handleSend(), [handleSend]);
 
+  /**
+   * Dictation lands in the composer at the caret and stops there — it is transcription, not a turn.
+   * Reviewing the text is the point of having it here rather than in voice mode, which sends what
+   * it heard immediately.
+   */
+  const handleTranscript = useCallback((text: string) => {
+    const textarea = textareaRef.current;
+    setInput((current) => {
+      const at = textarea ? textarea.selectionStart : current.length;
+      const before = current.slice(0, at);
+      const after = current.slice(textarea ? textarea.selectionEnd : current.length);
+      // Keep it one sentence's worth of spacing from whatever it lands next to.
+      const lead = before && !/\s$/.test(before) ? " " : "";
+      const trail = after && !/^\s/.test(after) ? " " : "";
+      return `${before}${lead}${text}${trail}${after}`;
+    });
+    textarea?.focus();
+  }, []);
+
+  const dictation = useDictation(handleTranscript);
+
   const showEmptyState = isDraft && messages.length === 0;
 
   // Paperclip is image-only: enable it only for image-capable models, and cap at MAX_IMAGES.
@@ -683,6 +705,9 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
               onSend={handleSendClick}
               onStop={handleStop}
               onEnterVoice={enterVoiceMode}
+              dictation={dictation.state}
+              onToggleDictation={dictation.toggle}
+              onCancelDictation={dictation.cancel}
             />
           ) : (
             <VoiceBar

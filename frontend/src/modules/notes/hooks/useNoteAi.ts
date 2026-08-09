@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/components/common/toast";
 import { notesStream } from "@/services/operations/notes/notes.stream";
+import type { NoteEditTarget } from "@/modules/notes/types";
 import type { SelectedModel } from "@/modules/chat/types";
 
 /**
@@ -16,6 +17,8 @@ export const useNoteAi = (noteId: number | undefined) => {
   const [busy, setBusy] = useState(false);
   /** The staged note, streaming in; null whenever there is nothing to review. */
   const [proposal, setProposal] = useState<string | null>(null);
+  /** The span the staged proposal replaces, or null when it replaces the whole note. */
+  const [target, setTarget] = useState<NoteEditTarget | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Switching notes drops both the stream and anything staged — a proposal written for one note
@@ -25,6 +28,7 @@ export const useNoteAi = (noteId: number | undefined) => {
       abortRef.current?.abort();
       setBusy(false);
       setProposal(null);
+      setTarget(null);
     };
   }, [noteId]);
 
@@ -38,9 +42,12 @@ export const useNoteAi = (noteId: number | undefined) => {
   /**
    * @param instruction what the AI should change. Passed in rather than held here: the AI tab's one
    *        composer is the single source of that text, and it doubles as the chat input.
+   * @param editTarget the editor span to rewrite, or null for the whole note. Frozen here for the
+   *        life of the run: the caret keeps moving while the model streams, so the range the
+   *        proposal belongs to has to be the one that was live when it was asked for.
    * @returns whether generation actually started — the caller clears its composer on true.
    */
-  const runAction = (instruction: string): boolean => {
+  const runAction = (instruction: string, editTarget: NoteEditTarget | null = null): boolean => {
     if (busy || !noteId) return false;
     if (!instruction.trim()) {
       toast.error("Describe what the AI should change");
@@ -55,10 +62,11 @@ export const useNoteAi = (noteId: number | undefined) => {
     setBusy(true);
     // Clear on start, not on done: the previous proposal is stale the moment a new run begins.
     setProposal("");
+    setTarget(editTarget);
     let full = "";
     abortRef.current = notesStream.run(
       noteId,
-      { instruction: instruction.trim(), provider, model },
+      { instruction: instruction.trim(), provider, model, selection: editTarget?.text },
       {
         onStart: () => {},
         onChunk: ({ delta }) => {
@@ -71,6 +79,7 @@ export const useNoteAi = (noteId: number | undefined) => {
           // The server rejected this text (empty, or the system prompt echoed back), so it is not
           // something to offer for review.
           setProposal(null);
+          setTarget(null);
           toast.error(message);
         },
       },
@@ -87,7 +96,10 @@ export const useNoteAi = (noteId: number | undefined) => {
     setBusy(false);
   }, []);
 
-  const clearProposal = () => setProposal(null);
+  const clearProposal = () => {
+    setProposal(null);
+    setTarget(null);
+  };
 
   return {
     selected,
@@ -95,6 +107,7 @@ export const useNoteAi = (noteId: number | undefined) => {
     activeSelection,
     busy,
     proposal,
+    target,
     runAction,
     clearProposal,
     stop,

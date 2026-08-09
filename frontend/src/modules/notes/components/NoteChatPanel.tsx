@@ -23,7 +23,7 @@ import {
 import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
 import type { NoteApplyMode, NoteChatContextMode, NoteChatMessage } from "@/modules/notes/types";
-import { PROPOSAL_DEFAULT_HEIGHT, PROPOSAL_MIN_HEIGHT, PROPOSAL_RESERVED_HEIGHT } from "@/modules/notes/constants";
+import { MIN_THREAD_HEIGHT, PROPOSAL_DEFAULT_HEIGHT, PROPOSAL_MIN_HEIGHT } from "@/modules/notes/constants";
 import type { ProviderModel } from "@/services/operations/models/models.route";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +76,8 @@ const NoteChatPanel = ({
   noteActionsEnabled,
 }: NoteChatPanelProps) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const proposalRef = useRef<HTMLDivElement | null>(null);
+  /** The proposal + composer + mode tabs block — its height is what the drag ceiling is measured from. */
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   const [proposalHeight, setProposalHeight] = useState(PROPOSAL_DEFAULT_HEIGHT);
   const [mode, setMode] = useState<ComposerMode>("ask");
 
@@ -86,23 +87,42 @@ const NoteChatPanel = ({
    */
   const updating = mode === "update" && noteActionsEnabled;
   const busy = updating ? ai.busy : chat.busy;
-  const submit = () => (updating ? onRunAction() : chat.send());
+  const submit = () => {
+    // Enter is inert while this half is generating — the send button is a Stop button by then, and
+    // without the guard the key still fired a fresh turn behind it.
+    if (busy) return;
+    if (updating) onRunAction();
+    else chat.send();
+  };
 
   /**
-   * Drags the proposal block's top edge. Measured from its own bottom (which doesn't move) so the
-   * block grows upward under the cursor, and clamped against the tab's height rather than the
-   * viewport's — it may eat the thread above it, never its own composer below.
+   * Drags the proposal block's top edge, so the block grows upward under the cursor.
+   *
+   * Tracked as a **delta** from where the grab started. The obvious form — height = (block bottom −
+   * cursor) — is off by the block's own chrome (handle, header, Apply/Discard footer), because the
+   * height being set is the scroll body's alone: the first mousemove jumped the top edge ~70px
+   * before it started following the cursor.
+   *
+   * The ceiling is **measured**, not budgeted: the bottom container minus the body is exactly what
+   * the composer and mode tabs occupy, whatever they currently are, so growing either of them can't
+   * put them back under the rail's clip.
    */
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    const bottom = proposalRef.current?.getBoundingClientRect().bottom;
-    const available = panelRef.current?.getBoundingClientRect().height;
-    if (bottom === undefined || available === undefined) return;
-    const max = Math.max(PROPOSAL_MIN_HEIGHT, available - PROPOSAL_RESERVED_HEIGHT);
+    const panel = panelRef.current?.getBoundingClientRect().height;
+    const bottomBlock = bottomRef.current?.getBoundingClientRect().height;
+    if (panel === undefined || bottomBlock === undefined) return;
+    const startY = e.clientY;
+    const startHeight = proposalHeight;
+    const max = Math.max(PROPOSAL_MIN_HEIGHT, panel - (bottomBlock - startHeight) - MIN_THREAD_HEIGHT);
+    // Without this the gesture selects the text it drags over, which flickers the whole thread.
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
     const onMouseMove = (event: MouseEvent) => {
-      setProposalHeight(Math.min(max, Math.max(PROPOSAL_MIN_HEIGHT, bottom - event.clientY)));
+      setProposalHeight(Math.min(max, Math.max(PROPOSAL_MIN_HEIGHT, startHeight + (startY - event.clientY))));
     };
     const onMouseUp = () => {
+      document.body.style.userSelect = previousUserSelect;
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
@@ -110,58 +130,72 @@ const NoteChatPanel = ({
     window.addEventListener("mouseup", onMouseUp);
   };
 
+  // The same ceiling, re-applied when the panel shrinks under a proposal that was already tall —
+  // dragging the rail narrower or resizing the window re-creates the clipping with no drag at all.
+  useEffect(() => {
+    const panel = panelRef.current;
+    const bottom = bottomRef.current;
+    if (!panel || !bottom) return;
+    const observer = new ResizeObserver(() => {
+      setProposalHeight((current) => {
+        const max = Math.max(
+          PROPOSAL_MIN_HEIGHT,
+          panel.getBoundingClientRect().height - (bottom.getBoundingClientRect().height - current) - MIN_THREAD_HEIGHT,
+        );
+        return Math.min(current, max);
+      });
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
-      {/* The model this tab runs on — chat turns and the note actions below both use it. Lives
-          here rather than in the toolbar: this tab is the only thing that reads it. Unlabelled: the
-          provider badge and name say what it is, and the row is narrow enough to need the width. */}
-      <div className="flex shrink-0 items-center border-b border-neutral-800 px-2 py-2">
-        <ModelSelector
-          value={ai.activeSelection}
-          onChange={ai.setSelected}
-          disabled={ai.busy}
-          align="start"
-          fullWidth
-          filter={isNotEmbeddingModel}
-        />
-      </div>
-
-      {/* What the next *Ask* turn will carry — shown, not guessed at. Labelled explicitly because
-          Update mode ignores it: that always runs server-side over the whole saved note. */}
+      {/* How much of the note the next Enter works on — for *both* halves of the tab. Ask carries
+          it as context; Update rewrites exactly that much of the note and leaves the rest alone.
+          "None" is the one asymmetry: an edit with no note to edit is meaningless, so Update reads
+          it as "Auto" and the button says so instead of pretending otherwise. */}
       <div className="flex shrink-0 flex-col gap-y-1.5 border-b border-neutral-800 px-3 py-2">
-        <span className="caption-small-medium text-neutral-500">Chat context</span>
+        <span className="caption-small-medium text-neutral-500">Context</span>
         <div className="flex items-center rounded-lg bg-neutral-900 p-0.5">
-          {CONTEXT_MODES.map(({ mode, label }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => chat.setContextMode(mode)}
-              className={cn(
-                "flex-1 cursor-pointer rounded-md px-2 py-1 caption-small-medium text-neutral-400 transition-colors hover:text-white",
-                chat.contextMode === mode && "bg-neutral-700 text-white",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          {CONTEXT_MODES.map(({ mode, label }) => {
+            const inert = mode === "none" && updating;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => chat.setContextMode(mode)}
+                disabled={inert}
+                title={inert ? "Update needs the note — pick Auto or Whole note" : undefined}
+                className={cn(
+                  "flex-1 cursor-pointer rounded-md px-2 py-1 caption-small-medium text-neutral-400 transition-colors hover:text-white",
+                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
+                  chat.contextMode === mode && !inert && "bg-neutral-700 text-white",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
-        <span className="truncate caption-small-regular text-neutral-500">{chat.contextLabel}</span>
+        {/* Keyed on the active mode, so this is always what Enter will really do — the old panel
+            showed a selection count next to an Update that then rewrote the whole note anyway. */}
+        <span className="truncate caption-small-regular text-neutral-500">
+          {updating ? `Update will rewrite: ${chat.updateScopeLabel}` : chat.contextLabel}
+        </span>
       </div>
 
       <div className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto p-3">
         <ChatThread messages={chat.messages} wiki={wiki} onApply={onApply} />
       </div>
 
-      <div className="shrink-0 border-t border-neutral-800 p-2">
+      <div ref={bottomRef} className="shrink-0 border-t border-neutral-800 p-2">
         {/* The staged update. It sits above the composer, between the thread and the button that
             produced it, so the review step is unmissable — the note itself is untouched until
             Apply. Capped and scrollable: a proposal is a whole note and would otherwise eat the
             rail. */}
         {ai.proposal !== null && (
-          <div
-            ref={proposalRef}
-            className="mb-2 flex flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900"
-          >
+          <div className="mb-2 flex flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900">
             {/* Drag the top edge to grow the review area — a whole note rarely fits in the default
                 height, and the thread above it is the cheapest space to borrow. */}
             <div
@@ -176,7 +210,13 @@ const NoteChatPanel = ({
             <div className="flex shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2.5 pb-1.5">
               <WandSparklesIcon className={cn("size-3.5 shrink-0 text-neutral-400", ai.busy && "animate-pulse")} />
               <span className="caption-small-medium text-neutral-300">
-                {ai.busy ? "Writing proposed note…" : "Proposed note"}
+                {ai.target
+                  ? ai.busy
+                    ? "Writing proposed replacement…"
+                    : "Proposed replacement"
+                  : ai.busy
+                    ? "Writing proposed note…"
+                    : "Proposed note"}
               </span>
             </div>
             <div style={{ height: proposalHeight }} className="chat-scroll overflow-y-auto px-2.5 py-2">
@@ -193,7 +233,11 @@ const NoteChatPanel = ({
             <div className="flex shrink-0 items-center gap-x-1 border-t border-neutral-800 p-1.5">
               <ProposalAction
                 label="Apply to note"
-                hint="Replace the note with this — you still have to save"
+                hint={
+                  ai.target
+                    ? "Replace the selected text with this — you still have to save"
+                    : "Replace the note with this — you still have to save"
+                }
                 icon={CheckIcon}
                 onClick={onApplyProposal}
                 disabled={ai.busy || ai.proposal === ""}
@@ -220,9 +264,11 @@ const NoteChatPanel = ({
                 submit();
               }
             }}
-            rows={2}
+            rows={4}
             placeholder={updating ? "Describe the edit to make…" : "Ask about this note…"}
-            className="chat-scroll min-w-0 flex-1 resize-none bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
+            // Capped so a long instruction scrolls inside the box rather than growing it into the
+            // thread; the drag ceiling measures this row, so the cap is what keeps that honest too.
+            className="chat-scroll max-h-40 min-w-0 flex-1 resize-none bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
           />
           {busy ? (
             <button
@@ -250,43 +296,56 @@ const NoteChatPanel = ({
 
         {/* One box, one send key — this picks where Enter sends it. A mode switch rather than a
             second button: the two are mutually exclusive, and the old pair let you press the wrong
-            one without noticing which of them had consumed your text. */}
-        <div
-          role="radiogroup"
-          aria-label="What Enter does"
-          className="mt-1.5 flex items-center rounded-lg bg-neutral-900 p-0.5"
-        >
-          {COMPOSER_MODES.map(({ mode: value, label, hint }) => {
-            // Update needs a saved note; offering it on a draft would arm a dead send button.
-            const locked = value === "update" && !noteActionsEnabled;
-            // Keyed on `updating`, not `mode`, so the highlight always shows what Enter will really
-            // do — opening a draft while "Update" is picked falls back to Ask, and this says so.
-            const active = (value === "update") === updating;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setMode(value)}
-                disabled={busy || locked}
-                title={locked ? "Save the note first — AI edits run on the saved copy" : hint}
-                className={cn(
-                  "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1 caption-small-medium",
-                  "text-neutral-400 transition-colors hover:text-white",
-                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
-                  active && "bg-neutral-700 text-white",
-                )}
-              >
-                {value === "update" ? (
-                  <WandSparklesIcon className="size-3.5 shrink-0" />
-                ) : (
-                  <MessageSquareIcon className="size-3.5 shrink-0" />
-                )}
-                {label}
-              </button>
-            );
-          })}
+            one without noticing which of them had consumed your text. The model this tab runs on
+            rides along at the right: it governs both halves, and as a chip it costs the rail a
+            corner instead of the full row a name needs. */}
+        <div className="mt-1.5 flex items-center gap-x-1.5">
+          <div
+            role="radiogroup"
+            aria-label="What Enter does"
+            className="flex min-w-0 flex-1 items-center rounded-lg bg-neutral-900 p-0.5"
+          >
+            {COMPOSER_MODES.map(({ mode: value, label, hint }) => {
+              // Update needs a saved note; offering it on a draft would arm a dead send button.
+              const locked = value === "update" && !noteActionsEnabled;
+              // Keyed on `updating`, not `mode`, so the highlight always shows what Enter will
+              // really do — opening a draft while "Update" is picked falls back to Ask, and this
+              // says so.
+              const active = (value === "update") === updating;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setMode(value)}
+                  disabled={busy || locked}
+                  title={locked ? "Save the note first — AI edits run on the saved copy" : hint}
+                  className={cn(
+                    "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1 caption-small-medium",
+                    "text-neutral-400 transition-colors hover:text-white",
+                    "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
+                    active && "bg-neutral-700 text-white",
+                  )}
+                >
+                  {value === "update" ? (
+                    <WandSparklesIcon className="size-3.5 shrink-0" />
+                  ) : (
+                    <MessageSquareIcon className="size-3.5 shrink-0" />
+                  )}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <ModelSelector
+            value={ai.activeSelection}
+            onChange={ai.setSelected}
+            disabled={ai.busy}
+            align="end"
+            iconOnly
+            filter={isNotEmbeddingModel}
+          />
         </div>
       </div>
     </div>

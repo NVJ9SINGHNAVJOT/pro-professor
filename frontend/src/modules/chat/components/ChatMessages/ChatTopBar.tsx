@@ -55,7 +55,7 @@ interface ChatTopBarProps {
   onThinkingChange: (value: boolean) => void;
 }
 
-/** Sidebar toggle + model picker + context meter + inference settings — the chat screen's header. */
+/** Sidebar toggle + context meter + model picker + inference settings — the chat screen's header. */
 const ChatTopBar = memo(function ChatTopBar({
   sidebarOpen,
   onToggleSidebar,
@@ -85,9 +85,11 @@ const ChatTopBar = memo(function ChatTopBar({
       >
         {sidebarOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
       </button>
-      <ModelSelector value={selected} onChange={onSelectedChange} disabled={!isDraft} />
       <div className="ml-auto flex items-center gap-3">
         <ContextMeter used={usedTokens} max={maxContextTokens} />
+        {/* Right-aligned beside the gear: the two controls that configure the turn sit together,
+            and `align="end"` keeps the dropdown inside the viewport now that it opens at the edge. */}
+        <ModelSelector value={selected} onChange={onSelectedChange} disabled={!isDraft} align="end" />
         <ChatSettings
           params={params}
           onParamsChange={onParamsChange}

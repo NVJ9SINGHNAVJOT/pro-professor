@@ -324,26 +324,32 @@ runs on the shared `chatStreamExecutor`; frames are `note.start` / `note.chunk` 
 > why this path writes no `note_revisions` snapshot — the only thing that still does is a restore.
 > The table now only grows through §6a's history, and an AI edit is undone with ⌘Z or by not saving.
 
-1. System prompt: `FULL_NOTE_SYSTEM_PROMPT`, which also describes the Markdown dialect, mermaid
-   label **syntax**, and the mermaid edge-**numbering** convention. Those last two are separate
-   constants on purpose: `MERMAID_NUMBERING` is house style that
+1. System prompt, picked by scope (see §6b): `FULL_NOTE_SYSTEM_PROMPT` or `SELECTION_SYSTEM_PROMPT`.
+   Both end with the same three constants — the Markdown dialect, mermaid label **syntax**, and the
+   mermaid edge-**numbering** convention. Those last two are separate constants on purpose:
+   `MERMAID_NUMBERING` is house style that
    [SKILL.md](../skills/pro-professor-notes/SKILL.md) owns and must be kept in step with, while
    `MERMAID_SYNTAX` is mermaid's own grammar — an unquoted `(` in a label is read as the start of a
    round node even inside an edge label, so the diagram fails to parse outright. Local models emit
    that regularly; the rule is what keeps them from it. The task prompt follows.
-2. **The task prompt branches on whether the note is empty.** A non-empty note gets
-   `"Task: apply this instruction to the note… Current note:\n" + content`; an empty one gets
-   `"Task: the note is currently empty — write it from scratch."` instead. Ending a prompt with
+2. **The task prompt branches three ways.** With a `selection`, the whole note is sent with that
+   span wrapped in `<<<EDIT_THIS>>>` markers and the task is
+   `"rewrite ONLY the marked span… reply with its replacement text alone"`. Without one, a non-empty
+   note gets `"Task: apply this instruction to the note… Current note:\n" + content` and an empty one
+   gets `"Task: the note is currently empty — write it from scratch."` instead. Ending a prompt with
    `Current note:` and nothing after it leaves a small local model no content to anchor on, and it
    hands back the last text it *did* see — its own system prompt, straight into the editor.
 3. Stream through a local model — `ollama`/`ai-service` → the existing `ChatCompletionClient`
    (OpenAI-compatible), guarded by `ModelActivationService.acquireForChat`/`releaseAfterChat`
    like a chat turn. Inference params come from the Notes settings row (§2 of
    [project-flow.md](project-flow.md) §2.8's `app_settings`).
-4. Validate, then emit `note.done`: `stripWrappingFence` (models fence the whole note despite
-   instructions) → empty check → **prompt-echo guard**, which fails with `502` when the reply opens
-   with the system prompt's own first 120 characters. Either failure throws before `note.done`, so
-   the client drops what it staged.
+4. Validate, then emit `note.done`: unwrap → empty check → **prompt-echo guard**, which fails with
+   `502` when the reply opens with the system prompt's own first 120 characters. Either failure
+   throws before `note.done`, so the client drops what it staged. Unwrapping is scope-dependent:
+   a whole-note reply goes through `stripWrappingFence` (models fence the whole note despite
+   instructions), a scoped one **must not** — the span being replaced is very often a ```` ```mermaid ````
+   fence, and stripping it would hand back a bare diagram body that no longer renders. A scoped
+   reply instead has any echoed `<<<EDIT_THIS>>>` markers removed.
 
 The AI tab's model picker lists the locally activated models and **starts empty** — no model is
 preselected, because which model rewrites a note is worth an explicit choice and a pre-filled picker
@@ -356,18 +362,41 @@ editable while the model runs**, since nothing is writing to it.
 a dirty buffer would rewrite a version of the note the user isn't looking at. NotesScreen saves
 before dispatching and aborts if that fails.
 
+## 6b. Scoped updates — editing a selection instead of the note
+
+An update **rewrites only the editor selection** when there is one and the Context control (§6a) is
+not on "Whole note". The model still reads the entire note, so it can match the surrounding style
+and reuse what is defined elsewhere in it; it just may not answer with any of it.
+
+- **The selection travels as text, not offsets.** The update saves the buffer first, and that save
+  re-derives frontmatter (§3), which can shift every offset in the note. `NotesAiService.markSelection`
+  locates the text with `indexOf` and wraps it in the markers.
+- **A miss is a hard `400`**, never a silent fall back to a whole-note rewrite: the client splices
+  the reply into an exact range, so quietly widening the scope under it would overwrite the wrong
+  part of the note.
+- **The range is frozen at dispatch** (`useNoteAi`'s `target`), because the caret keeps moving while
+  the model streams. Apply re-resolves it — offsets first, then `indexOf` on the captured text — and
+  **refuses** rather than guessing if the buffer no longer contains it.
+- Apply splices through `replaceRange`/`applyTextState` exactly like the whole-note path (§4's
+  execCommand rule), so a scoped edit is still one ⌘Z.
+
+Everything outside the marked span is untouchable **by construction** — that constraint is what
+makes Apply a safe splice rather than a whole-buffer replace that has to be trusted to have come
+back otherwise unchanged. The cost is that the model has no channel for "the diagram further down
+has the same problem": to widen the edit, clear the selection (or pick "Whole note") and run again.
+
 ## 6a. The AI tab (`NoteChatPanel`)
 
 The **one** AI surface in the workspace: the chat thread, the §6 note update, and a single
 composer, as the right rail's AI tab. The chat half reuses `POST /api/v1/chats/send` through the
 shared `chats.stream.ts` client (global `src/services`, so no cross-module import). The **model
-picker** heads the tab (shared `ModelSelector` in its `fullWidth` mode, embeddings filtered out,
-locked while generating) — one control for both the chat turns and the note actions, and the only
-one, so the row carries no "Model" label. `fullWidth` means the trigger **fills the rail and clips
-the name with an ellipsis** instead of sizing to it: same `ModelOptionLabel` row as chat's trigger
-(provider badge, name, modality badges), but built directly rather than through `SelectValue`,
-which is the only way to give the name `min-w-0 truncate` while the badges keep their size. The
-whole name is in a tooltip.
+picker** sits at the **right of the mode tabs**, at the very bottom of the tab (shared
+`ModelSelector` in its `iconOnly` mode, embeddings filtered out, locked while generating) — one
+control for both the chat turns and the note actions, and the only one, so it carries no "Model"
+label. `iconOnly` collapses the trigger to a round provider-coloured chip with the model name in a
+tooltip: in a 320px rail a name costs a whole row, and that row was better spent on the composer.
+(`fullWidth`, the mode chat's rail-width trigger uses, is still there — it fills its container and
+clips the name with an ellipsis instead of sizing to it.)
 
 **One input, one send key, a mode switch.** The composer is the single text box and **Enter** is
 the only way to submit it; an **Ask / Update** radio pair directly beneath decides where it goes —
@@ -376,24 +405,47 @@ two are mutually exclusive: with both on screen you could press the wrong one an
 had consumed your text. The highlight is keyed on the *effective* mode, so opening an unsaved draft
 (where Update is locked — it runs on the saved copy) visibly falls back to Ask instead of leaving a
 selected mode whose send button is dead. `useNoteAi` holds no `instruction` state —
-`runAction(instruction)` takes it as an argument and returns whether generation started, so the
-caller only clears the composer on a real dispatch.
+`runAction(instruction, target)` takes it as an argument and returns whether generation started, so
+the caller only clears the composer on a real dispatch.
+
+**`noteActionsEnabled` means "an update can be started", not "one is running".** The two were once
+one prop, and folding them together made the panel forget it was in Update mode for the whole run:
+the effective mode fell back to Ask, so the highlight moved, the composer showed its send arrow
+instead of **Stop**, and Enter would have fired a chat turn mid-stream — leaving NotesBar's toolbar
+Stop as the only way to cancel. The panel reads `ai.busy` itself for the running state; the toolbar
+Stop stays, because the rail can be closed mid-generation and would otherwise strand it.
 
 **Updates are staged, never applied.** The proposal streams into a scrollable block above the
 composer, rendered through the same `Markdown`/`MarkdownBody`/`wiki` handlers as a chat reply so
-`[[links]]` and mermaid look exactly as they will in the note. Its **top edge drags** to grow the
-review area (a whole note rarely fits the default 256px), measured from the block's own bottom so it
-grows upward under the cursor and clamped against the *tab's* height, not the viewport's — it may
-eat the thread above it, never its own composer below. **Apply** replaces the whole buffer
-via `applyTextState`/`replaceRange` — *not* `setContent`, which would wipe the browser's native undo
-stack and make Apply the one edit ⌘Z can't take back (§4) — leaving the note dirty and unsaved, so
-saving stays the user's call. **Discard** drops it and the note is untouched. Stopping mid-stream
+`[[links]]` and mermaid look exactly as they will in the note. **Apply** writes it through
+`applyTextState`/`replaceRange` — *not* `setContent`, which would wipe the browser's native undo
+stack and make Apply the one edit ⌘Z can't take back (§4) — over the whole buffer, or over just the
+targeted span for a scoped update (§6b), leaving the note dirty and unsaved so saving stays the
+user's call. **Discard** drops it and the note is untouched. Stopping mid-stream
 *keeps* what arrived: a cancelled run usually means "that's enough", and Discard is one click away.
 `note.error` clears it, since that text is what the server just rejected.
 
-The scope selector is labelled **"Chat context"** deliberately: it governs the chat turn only. The
-update always runs server-side over the whole *saved* note, so an unlabelled control sitting next to
-it would misread.
+Its **top edge drags** to grow the review area (a whole note rarely fits the default 256px). Two
+things about that gesture are load-bearing, both of which it got wrong once:
+
+- **Track a delta, not an absolute.** The height being set is the scroll body's alone, so deriving
+  it from the *block's* bottom edge is off by the block's chrome (drag handle, header, Apply/Discard
+  footer) — the top edge jumped ~70px on mousedown before it began following the cursor. Capture
+  `startY`/`startHeight` and add the difference.
+- **Measure the ceiling, don't budget it.** It was a single constant covering the composer, the mode
+  tabs, the context block and the proposal's own chrome, which went stale the moment any of them
+  grew — and the drag then pushed the composer and mode tabs past the bottom of the rail, where
+  `RightRail`'s `overflow-hidden` clipped them off screen. Now only the *thread's* minimum is a
+  constant (`MIN_THREAD_HEIGHT`); everything else is read off the bottom container at drag time, and
+  a `ResizeObserver` re-applies the same ceiling when the rail is dragged narrower or the window
+  resizes.
+
+The scope selector is labelled **"Context"** and governs **both** halves: Ask carries that much of
+the note as context, Update rewrites that much of it (§6b). One asymmetry — "None" is meaningless
+for an edit, so it is disabled while Update is the active mode and read as "Auto" if it was already
+set. The line beneath is keyed on the *active* mode, so it always states what Enter will really do
+("Update will rewrite: Selection · 774 chars"); the old panel showed a selection count next to an
+Update that then rewrote the whole note anyway, which is the confusion that prompted §6b.
 
 - The note travels as **`noteContext`**, a per-turn field injected as a system message right before
   the current question and **never persisted**. Not `systemPrompt`: that is only honored when
@@ -401,7 +453,8 @@ it would misread.
   about stale text.
 - Scope is **Selection · Whole note · None**, defaulting to the selection when there is one, capped
   at `NOTE_CONTEXT_MAX_CHARS`. Trimming is the client's job — it is the side that knows about
-  selections — and the panel shows what it will send.
+  selections — and the panel shows what it will send. The cap is the **chat turn's alone**: an
+  update sends no note text at all, only which span to edit, and the server already has the rest.
 - New conversations started this way get `conversations.mode = 'note'`, which
   `ConversationRepository.findAll` and its `search` filter out, so they stay out of both the chat
   history and the ⌘K palette. The panel says so with an explicit **`noteChat: true`** on the send

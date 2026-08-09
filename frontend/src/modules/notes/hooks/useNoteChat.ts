@@ -58,6 +58,13 @@ export const useNoteChat = ({ noteId, content, selection, selectedText }: UseNot
     return { text, label: `${useSelection ? "Selection" : "Whole note"} · ${text.length} chars${truncated}` };
   };
 
+  /**
+   * What an *Update* rewrites. Derived from the same `contextMode` as the chat turn, so one control
+   * governs both halves of the tab — with the single difference that "None" has no meaning for an
+   * edit (there would be nothing to rewrite), so Update reads it the way it reads "Auto".
+   */
+  const updateUsesSelection = contextMode !== "whole-note" && selectedText !== "";
+
   const send = () => {
     const question = input.trim();
     if (busy || !question) return;
@@ -133,6 +140,10 @@ export const useNoteChat = ({ noteId, content, selection, selectedText }: UseNot
     contextMode,
     setContextMode,
     contextLabel: buildContext().label,
+    updateUsesSelection,
+    updateScopeLabel: updateUsesSelection
+      ? `Selection · ${selectedText.length} chars`
+      : `Whole note · ${content.length} chars`,
     send,
     stop,
   };

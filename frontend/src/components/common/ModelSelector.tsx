@@ -1,4 +1,5 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ComponentProps } from "react";
+import { CpuIcon } from "lucide-react";
 import Tooltip from "@/components/common/Tooltip";
 import { ModelOptionLabel } from "@/components/common/ModelOptionLabel";
 import {
@@ -33,9 +34,35 @@ interface ModelSelectorProps {
    * rather than overflowing — for narrow places (the notes AI tab). The full name is in a tooltip.
    */
   fullWidth?: boolean;
+  /**
+   * Collapses the trigger to a round provider-coloured chip, name in the tooltip only — for places
+   * with no room for a name at all (the notes AI composer's control row). Wins over `fullWidth`.
+   */
+  iconOnly?: boolean;
 }
 
 const encode = (provider: string, name: string) => `${provider}${MODEL_SEPARATOR}${name}`;
+
+/**
+ * The round chip `iconOnly` renders: provider colours when a model is picked, dashed ring when not.
+ * Spreads the rest of its props (`ref` included) so Radix can use it as an `asChild` tooltip trigger.
+ */
+const ModelChip = ({
+  providerClassName,
+  className,
+  ...props
+}: ComponentProps<"span"> & { providerClassName?: string }) => (
+  <span
+    className={cn(
+      "flex size-7 items-center justify-center rounded-full",
+      providerClassName ?? "border border-dashed border-neutral-600 text-neutral-500",
+      className,
+    )}
+    {...props}
+  >
+    <CpuIcon className="size-3.5" />
+  </span>
+);
 
 const ModelSelector = memo(function ModelSelector({
   value,
@@ -44,6 +71,7 @@ const ModelSelector = memo(function ModelSelector({
   align = "start",
   filter,
   fullWidth,
+  iconOnly,
 }: ModelSelectorProps) {
   const { models, loaded } = useAppSelector((state) => state.models);
 
@@ -99,6 +127,16 @@ const ModelSelector = memo(function ModelSelector({
     const isAvailable = Boolean(matchedModel);
     const modalities = matchedModel?.inputModalities ?? [];
 
+    if (iconOnly) {
+      return (
+        <ModelChip
+          aria-label={isAvailable ? fullLabel : "Model not available"}
+          providerClassName={isAvailable ? providerMeta?.className : "bg-neutral-800 text-neutral-500"}
+          className="cursor-not-allowed opacity-60"
+        />
+      );
+    }
+
     if (fullWidth) {
       return (
         <Tooltip content={isAvailable ? fullLabel : "Model not available"} side="top">
@@ -144,6 +182,9 @@ const ModelSelector = memo(function ModelSelector({
 
   // No models loaded yet or none available
   if (!disabled && loaded && models.length === 0) {
+    if (iconOnly) {
+      return <ModelChip aria-label="No models available" className="cursor-not-allowed opacity-60" />;
+    }
     return (
       <div
         className={cn(
@@ -166,13 +207,18 @@ const ModelSelector = memo(function ModelSelector({
   const trigger = (
     <SelectTrigger
       size="sm"
-      aria-label={fullWidth ? fullLabel || "Select a model" : undefined}
+      aria-label={fullWidth || iconOnly ? fullLabel || "Select a model" : undefined}
       className={cn(
         "gap-1.5 border-transparent bg-transparent text-neutral-200 shadow-none transition-colors para-small-medium hover:border-neutral-700 hover:bg-neutral-800 data-placeholder:text-neutral-400 [&_svg:not([class*='text-'])]:text-neutral-400",
-        fullWidth && "w-full",
+        fullWidth && !iconOnly && "w-full",
+        // Round chip: no room for a chevron, and `[&>svg]:hidden` hits only the trigger's own
+        // ChevronDown — the chip's icon is nested inside a span, so it survives.
+        iconOnly && "size-7 justify-center rounded-full p-0 hover:opacity-80 [&>svg]:hidden",
       )}
     >
-      {fullWidth ? (
+      {iconOnly ? (
+        <ModelChip providerClassName={value ? providerMeta?.className : undefined} />
+      ) : fullWidth ? (
         // The same row chat's trigger shows, built here rather than through SelectValue: only this
         // copy can hand the name the leftover width (`min-w-0 truncate`) while the badges hold
         // their size, which is what keeps it inside a narrow pane. Full name in the tooltip.
@@ -196,7 +242,10 @@ const ModelSelector = memo(function ModelSelector({
 
   return (
     <Select value={current} onValueChange={handleChange} disabled={disabled}>
-      {fullWidth && value ? (
+      {/* No tooltip on the chip: it sits at the bottom of a narrow rail, where a hover popover
+          lands on top of the composer it is meant to label. The name is on the aria-label and in
+          the dropdown, which is one click away. */}
+      {fullWidth && !iconOnly && value ? (
         <Tooltip content={fullLabel} side="top">
           {trigger}
         </Tooltip>

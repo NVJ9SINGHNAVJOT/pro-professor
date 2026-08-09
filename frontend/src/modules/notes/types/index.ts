@@ -22,6 +22,17 @@ export interface NoteChatMessage {
 /** Where a chat reply goes when applied to the note. */
 export type NoteApplyMode = "cursor" | "selection" | "append";
 
+/**
+ * The span an AI update rewrites, frozen when the run is dispatched. `text` is what makes it
+ * survivable: the buffer can be edited while the model streams, so the offsets are a starting guess
+ * and the text is how the range is re-found before the proposal is spliced in.
+ */
+export interface NoteEditTarget {
+  start: number;
+  end: number;
+  text: string;
+}
+
 /* ── Graph view ─────────────────────────────────────────────────────────────────────────────── */
 
 /**

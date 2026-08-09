@@ -77,10 +77,13 @@ export const RAIL_MAX_WIDTH = 720;
 export const PROPOSAL_DEFAULT_HEIGHT = 256;
 export const PROPOSAL_MIN_HEIGHT = 96;
 /**
- * Room the proposal block leaves for the rest of the tab when dragged to its tallest (px) — the
- * composer plus a sliver of thread. Without it the drag could swallow its own send button.
+ * Thread left visible when the proposal block is dragged to its tallest (px). Everything *else* the
+ * tab needs — the context block, the proposal's own chrome, the composer, the mode tabs — is
+ * measured at drag time rather than budgeted here: a constant covering all of it silently went
+ * stale every time one of those grew, and the drag then pushed the composer off the bottom of the
+ * rail, where `RightRail`'s `overflow-hidden` clipped it.
  */
-export const PROPOSAL_RESERVED_HEIGHT = 168;
+export const MIN_THREAD_HEIGHT = 48;
 
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;

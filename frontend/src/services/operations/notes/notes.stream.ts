@@ -10,6 +10,13 @@ export interface NoteAiPayload {
   provider: string;
   /** Provider model id — required. */
   model?: string;
+  /**
+   * The exact text to rewrite, when the edit is scoped to an editor selection. The server locates it
+   * in the saved note, marks it for the model, and asks for *only* its replacement back. Omitted for
+   * a whole-note rewrite. Sent as text rather than offsets: the note is saved right before this
+   * runs, and that save re-derives frontmatter, which can shift every offset in the buffer.
+   */
+  selection?: string;
 }
 
 export interface NoteAiStreamCallbacks {

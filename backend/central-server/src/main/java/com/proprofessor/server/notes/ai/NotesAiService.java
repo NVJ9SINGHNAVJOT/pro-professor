@@ -71,6 +71,28 @@ public class NotesAiService {
             Preserve the YAML frontmatter block (--- ... ---) when present, updating it only when the task asks. \
             """ + MARKDOWN_DIALECT + " " + MERMAID_SYNTAX + " " + MERMAID_NUMBERING;
 
+    /** Markers around the span a scoped edit may rewrite. Chosen to never occur in real Markdown. */
+    private static final String SELECTION_OPEN = "<<<EDIT_THIS>>>";
+    private static final String SELECTION_CLOSE = "<<<END_EDIT_THIS>>>";
+
+    /**
+     * The scoped counterpart of {@link #FULL_NOTE_SYSTEM_PROMPT}: the model still reads the whole
+     * note, so it can match the surrounding style and reuse what is defined elsewhere in it, but it
+     * may only answer with the marked span's replacement. Everything outside the markers is
+     * therefore untouchable by construction — which is what lets the client splice the reply into an
+     * exact range instead of replacing the buffer and hoping the rest came back unchanged.
+     */
+    private static final String SELECTION_SYSTEM_PROMPT = """
+            You are a note-editing assistant inside a Markdown note app. \
+            You will be given a Markdown note with one span marked by %s and %s, and a task. \
+            Respond with ONLY the replacement text for that marked span — not the whole note, not the \
+            markers, and no explanation before or after it. The rest of the note is context: read it, \
+            but do not rewrite it and do not repeat it back. Keep the replacement's leading and \
+            trailing whitespace consistent with the span you are replacing, and do not wrap it in a \
+            code fence unless the span itself was fenced. \
+            """.formatted(SELECTION_OPEN, SELECTION_CLOSE)
+            + MARKDOWN_DIALECT + " " + MERMAID_SYNTAX + " " + MERMAID_NUMBERING;
+
     private static final Pattern WRAPPING_FENCE =
             Pattern.compile("\\A```[a-zA-Z]*\\s*\\n(.*)\\n```\\s*\\z", Pattern.DOTALL);
 
@@ -114,12 +136,17 @@ public class NotesAiService {
      */
     public void streamNoteAction(long noteId, NoteAiRequest request, NoteAiStreamListener listener) {
         NoteRow note = requireNote(noteId);
-        String userPrompt = buildPrompt(request, note.content());
+        String selection = blankToNull(request.selection());
+        String userPrompt = buildPrompt(request, note.content(), selection);
+        String systemPrompt = selection == null ? FULL_NOTE_SYSTEM_PROMPT : SELECTION_SYSTEM_PROMPT;
 
         listener.onStart(noteId);
-        String reply = streamFromLocalModel(request, userPrompt, listener);
+        String reply = streamFromLocalModel(request, systemPrompt, userPrompt, listener);
 
-        rejectPromptEcho(requireNonEmpty(stripWrappingFence(reply).trim()));
+        // A scoped reply is *not* unwrapped: the span being replaced is very often a ```mermaid
+        // fence, and stripping it would hand back a bare diagram body that no longer renders.
+        String proposed = selection == null ? stripWrappingFence(reply) : stripSelectionMarkers(reply);
+        rejectPromptEcho(requireNonEmpty(proposed.trim()), systemPrompt);
         listener.onComplete(noteId);
     }
 
@@ -139,14 +166,14 @@ public class NotesAiService {
         return notesService.updateNote(noteId, new NoteUpdateRequest(null, revision.content()));
     }
 
-    private String streamFromLocalModel(NoteAiRequest request, String userPrompt,
+    private String streamFromLocalModel(NoteAiRequest request, String systemPrompt, String userPrompt,
                                         NoteAiStreamListener listener) {
         ModelProvider provider = resolveLocalProvider(request.provider());
         if (request.model() == null || request.model().isBlank()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "A model is required for the local provider.");
         }
         List<ChatMessage> messages = List.of(
-                new ChatMessage("system", FULL_NOTE_SYSTEM_PROMPT),
+                new ChatMessage("system", systemPrompt),
                 new ChatMessage("user", userPrompt));
         InferenceOptions options = settingsService.notesInferenceOptions();
 
@@ -181,13 +208,21 @@ public class NotesAiService {
      * The task message. An empty note gets its own phrasing: ending the prompt with
      * "Current note:" and nothing after it leaves the model no content to anchor on, and a small
      * local model then hands back the last text it did see — its own system prompt.
+     *
+     * <p>With a selection, the note is sent whole with that span wrapped in markers, so the model
+     * has the surrounding context but a single, unambiguous place to edit.
      */
-    private static String buildPrompt(NoteAiRequest request, String content) {
+    private static String buildPrompt(NoteAiRequest request, String content, String selection) {
         if (request.instruction() == null || request.instruction().isBlank()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "An instruction is required for an AI update.");
         }
         String instruction = request.instruction().trim();
         String body = content == null ? "" : content;
+        if (selection != null) {
+            return "Task: rewrite ONLY the marked span according to the instruction, and reply with "
+                    + "its replacement text alone.\nInstruction: " + instruction
+                    + "\n\nNote:\n" + markSelection(body, selection);
+        }
         return body.isBlank()
                 ? "Task: the note is currently empty — write it from scratch.\nInstruction: " + instruction
                 : "Task: apply this instruction to the note.\nInstruction: " + instruction
@@ -195,16 +230,42 @@ public class NotesAiService {
     }
 
     /**
+     * Wraps the selected span in the edit markers. The client sends the selected <em>text</em>
+     * rather than offsets because it saves the note immediately before this runs, and that save
+     * re-derives frontmatter — which can shift every offset in the buffer. A miss is a hard 400
+     * rather than a silent whole-note rewrite: the client splices the reply into an exact range, so
+     * quietly changing the scope under it would overwrite the wrong part of the note.
+     */
+    private static String markSelection(String body, String selection) {
+        int at = body.indexOf(selection);
+        if (at < 0) {
+            throw new AppException(HttpStatus.BAD_REQUEST,
+                    "The selected text is no longer in the saved note — reselect it and try again.");
+        }
+        return body.substring(0, at) + SELECTION_OPEN + selection + SELECTION_CLOSE
+                + body.substring(at + selection.length());
+    }
+
+    /** Models echo the markers back now and then; they are scaffolding, never part of the note. */
+    private static String stripSelectionMarkers(String reply) {
+        return reply.replace(SELECTION_OPEN, "").replace(SELECTION_CLOSE, "");
+    }
+
+    /**
      * Rejects a reply that is the system prompt handed back rather than a note. Cheap insurance:
      * the proposal is only staged, but showing the user their own instructions as a "note" reads
      * as the feature being broken, which is exactly what it is when this fires.
      */
-    private static void rejectPromptEcho(String proposed) {
-        String promptOpening = normalizeWhitespace(FULL_NOTE_SYSTEM_PROMPT).substring(0, ECHO_PREFIX_CHARS);
+    private static void rejectPromptEcho(String proposed, String systemPrompt) {
+        String promptOpening = normalizeWhitespace(systemPrompt).substring(0, ECHO_PREFIX_CHARS);
         if (normalizeWhitespace(proposed).startsWith(promptOpening)) {
             throw new AppException(HttpStatus.BAD_GATEWAY, "The model echoed its instructions instead of "
                     + "writing the note — try again or pick a different model.");
         }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static String normalizeWhitespace(String text) {
@@ -214,7 +275,7 @@ public class NotesAiService {
     private static String requireNonEmpty(String value) {
         if (value.isEmpty()) {
             throw new AppException(HttpStatus.BAD_GATEWAY,
-                    "The model returned an empty note — nothing to apply.");
+                    "The model returned nothing — there is nothing to apply.");
         }
         return value;
     }

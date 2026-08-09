@@ -1,6 +1,7 @@
 import { memo, type RefObject } from "react";
-import { ArrowUpIcon, FileIcon, PaperclipIcon, SquareIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, FileIcon, LoaderCircleIcon, MicIcon, PaperclipIcon, SquareIcon, XIcon } from "lucide-react";
 import type { MediaAttachment } from "@/services/operations/media/media.api";
+import type { DictationState } from "@/modules/chat/hooks/useDictation";
 import { cn } from "@/lib/utils";
 
 /** Voice-mode glyph: a symmetric audio waveform, shown on the button that enters voice chat. */
@@ -39,9 +40,14 @@ interface InputBarProps {
   onSend: () => void;
   onStop: () => void;
   onEnterVoice: () => void;
+  /** Speech-to-text into this box — separate from voice mode, which sends and speaks the reply. */
+  dictation: DictationState;
+  onToggleDictation: () => void;
+  /** Drops the clip without transcribing it. */
+  onCancelDictation: () => void;
 }
 
-/** The composer: attachment previews, textarea, and the attach/send/stop/voice-entry controls. */
+/** The composer: attachment previews, textarea, and the attach/dictate/send/stop/voice controls. */
 const InputBar = memo(function InputBar({
   input,
   onInputChange,
@@ -59,6 +65,9 @@ const InputBar = memo(function InputBar({
   onSend,
   onStop,
   onEnterVoice,
+  dictation,
+  onToggleDictation,
+  onCancelDictation,
 }: InputBarProps) {
   return (
     <div className="rounded-3xl bg-chat-input px-3 py-2 shadow-lg">
@@ -126,6 +135,46 @@ const InputBar = memo(function InputBar({
             disabled ? "cursor-not-allowed placeholder:text-neutral-600" : "placeholder:text-neutral-500",
           )}
         />
+        {/* The way out of a recording you didn't mean to start — the mic itself commits to the
+            transcription round trip, so without this there is none. Same role as voice mode's
+            cancel, and only on screen while there is something to cancel. */}
+        {!streaming && dictation === "recording" && (
+          <button
+            type="button"
+            onClick={onCancelDictation}
+            aria-label="Cancel recording"
+            title="Cancel recording"
+            className="cursor-pointer rounded-full p-2.5 text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-white"
+          >
+            <XIcon className="size-4.5" />
+          </button>
+        )}
+        {/* Dictate into the box, next to — not instead of — the voice-chat button: this one only
+            transcribes, and hands the words back for review rather than sending them. Hidden while
+            streaming, where the row belongs to Stop. */}
+        {!streaming && (
+          <button
+            type="button"
+            onClick={onToggleDictation}
+            disabled={disabled || dictation === "transcribing"}
+            aria-label={dictation === "recording" ? "Stop recording and transcribe" : "Dictate a message"}
+            title={dictation === "recording" ? "Stop recording and transcribe" : "Dictate a message"}
+            className={cn(
+              "rounded-full p-2.5 transition-colors",
+              disabled || dictation === "transcribing"
+                ? "cursor-not-allowed text-neutral-600"
+                : dictation === "recording"
+                  ? "cursor-pointer animate-pulse bg-red-500 text-white hover:bg-red-400"
+                  : "cursor-pointer text-neutral-300 hover:bg-neutral-700 hover:text-white",
+            )}
+          >
+            {dictation === "transcribing" ? (
+              <LoaderCircleIcon className="size-4.5 animate-spin" />
+            ) : (
+              <MicIcon className="size-4.5" />
+            )}
+          </button>
+        )}
         {streaming ? (
           <button
             type="button"
