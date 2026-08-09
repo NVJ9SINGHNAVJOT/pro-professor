@@ -21,7 +21,8 @@ The notes tables live in the consolidated `V1__init_schema.sql`:
 
 | Table | Shape |
 | --- | --- |
-| `notes` | id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb, generated `content_tsv` tsvector column + GIN index for full-text search |
+| `note_folders` | id BIGSERIAL, name, nullable `parent_id` self-FK (`ON DELETE CASCADE`, NULL = root) + index — the explorer tree, the same shape as `diagram_folders` |
+| `notes` | id BIGSERIAL, **title UNIQUE**, content, frontmatter jsonb, nullable `folder_id` FK (`ON DELETE CASCADE`, NULL = root) + index, generated `content_tsv` tsvector column + GIN index for full-text search |
 | `tags` / `note_tags` | `tags` (unique name) + `note_tags` link table |
 | `note_links` | source_note_id, target_ref, link_type `link\|embed` — also read outside notes, by the media delete guard (see [project-flow.md](project-flow.md) §2.4) |
 | `note_revisions` | note_id, content snapshot, created_at — written before a restore. **Not** by the AI update, which no longer writes the note at all (§6) |
@@ -30,6 +31,13 @@ Conventions that matter:
 
 - **Titles are the note's identity.** Wiki-links resolve by title (case-insensitive), so titles are
   unique; a colliding save gets a numeric suffix ("Untitled" → "Untitled 2").
+- **Folders never scope titles.** `notes_title_unique` stays global precisely because
+  `note_links.target_ref` resolves by title alone — per-folder titles would break every wiki-link.
+  Moving a note between folders therefore changes nothing about how it is linked.
+- **Folders are addressed by id, never by name**, so sibling names may repeat. Deleting one
+  cascades to its subfolders and their notes with **no reference guard** — unlike diagram folders.
+  A note that linked to a deleted note simply has an unresolved link, which is already what
+  `DELETE /notes/{id}` has always produced.
 - `target_ref` stores the referenced **title as written** — links may point at notes that don't
   exist yet (Obsidian's "unresolved link"); resolution happens at read time.
 - Each table must be listed in the jOOQ `<includes>` regex in
@@ -61,7 +69,21 @@ save for the same reason `PUT /diagrams/{id}/folder` is: renaming from the toolb
 persist an unsaved buffer), `GET ?tag=` filter, `GET /search?q=`
 (`websearch_to_tsquery` + `ts_rank` over the note-content tsvector), `GET /{id}/backlinks` (join on
 `lower(target_ref) = lower(title)`), `GET /links` (edge list feeding the graph view),
-`GET /{id}/revisions`, `POST /{id}/revisions/{revId}/restore`.
+`GET /{id}/revisions`, `POST /{id}/revisions/{revId}/restore`, and **`PUT /{id}/folder`** (move —
+null `folderId` is the root level; split from the save for the same reason the rename is).
+
+`GET /api/v1/notes` returns `NoteExplorerResponse` — **`{ folders, notes }`** in one response,
+because the tree can't draw a level without both halves and one request keeps them consistent.
+Search and backlinks keep the plain `NoteListResponse` (`{ notes }`): neither has folders to draw.
+
+**Note folders** are their own vertical beside the notes one —
+[NoteFolderController](../backend/central-server/src/main/java/com/proprofessor/server/notes/NoteFolderController.java)
+→ [NoteFolderService](../backend/central-server/src/main/java/com/proprofessor/server/notes/NoteFolderService.java)
+→ [NoteFolderRepository](../backend/central-server/src/main/java/com/proprofessor/server/notes/repository/NoteFolderRepository.java),
+mounted at **`/api/v1/note-folders`** (top-level, not `/notes/folders`, which would sit under the
+`/notes/{id}` path variable): `POST /`, `PUT /{id}` (rename), `PUT /{id}/parent` (move, with a
+cycle guard — a folder may not be re-parented into its own subtree), `DELETE /{id}`. There is no
+list endpoint; folders ride along with `GET /api/v1/notes`.
 
 One media addition: the note detail payload (`GET /api/v1/notes/{id}`) carries an `embedUrls` map —
 each `![[image.png]]` embed target resolved to the newest matching upload's **direct storage-server
@@ -77,9 +99,9 @@ Follows the chat module's patterns: `pages/notes/index.tsx` → route in `main.t
 [NotesScreen](../frontend/src/modules/notes/screens/NotesScreen.tsx) is the three-pane workspace;
 each pane scrolls independently:
 
-- **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): two collapsible
-  `SidebarSection`s — a **Tags** browser tree (tag → its notes) above a **Notes** list — the same
-  shape as the diagram sidebar's Diagrams/Folders split, with rows sharing one
+- **Left** — [NoteList](../frontend/src/modules/notes/components/NoteList.tsx): three collapsible
+  `SidebarSection`s — a **Tags** browser tree (tag → its notes), the root-level **Notes**, then
+  **Folders** — the same shape as the diagram sidebar's Diagrams/Folders split, with rows sharing one
   `[disclosure][icon][label]` grid (`SIDEBAR_ICON_SLOT` / `sidebarIndent` in
   [sidebar.ts](../frontend/src/components/common/sidebar.ts)) so both explorers align.
   **There is no search box here** — ⌘K searches notes and chats together (see

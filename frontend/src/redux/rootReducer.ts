@@ -1,6 +1,8 @@
 import { combineReducers } from "@reduxjs/toolkit";
 import modelsReducer from "@/redux/slices/modelsSlice";
 import notesListReducer from "@/redux/slices/notesListSlice";
+import noteFolderListReducer from "@/redux/slices/noteFolderListSlice";
+import notesSidebarReducer from "@/redux/slices/notesSidebarSlice";
 import chatListReducer from "@/redux/slices/chatListSlice";
 import diagramListReducer from "@/redux/slices/diagramListSlice";
 import diagramFolderListReducer from "@/redux/slices/diagramFolderListSlice";
@@ -14,6 +16,10 @@ const rootReducer = combineReducers({
   notesList: notesListReducer,
   chatList: chatListReducer,
   diagramList: diagramListReducer,
+  // The note explorer's folders, seeded by the same loader as notesList.
+  noteFolderList: noteFolderListReducer,
+  // Which folders/tags/sections that explorer has open — same remount reason as the diagram one.
+  notesSidebar: notesSidebarReducer,
   // The diagram sidebar's folders, seeded by the same loader as diagramList.
   diagramFolderList: diagramFolderListReducer,
   // Which folders/sections that sidebar has open — here rather than in the screen because the

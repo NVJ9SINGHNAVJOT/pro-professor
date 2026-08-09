@@ -82,12 +82,16 @@ layering (Excalidraw is the model + renderer).
 | Layer | Files | Role |
 | --- | --- | --- |
 | `types/` | `index.ts` | the `DiagramScene` document type |
-| `constants/` | `index.ts` | `EMPTY_DRAG_IMAGE` — the 1×1 GIF that suppresses the native drag ghost in the sidebar tree |
 | `persistence/` | `sceneIO.ts` | pure helpers (`makeEmptyScene`, professional-style constants `PRO_ROUGHNESS` / `PRO_FONT_FAMILY`) — no Excalidraw import, so the list screen stays light |
-| `utils/` | `folderTree.ts` | pure tree helpers (`childFolders`, `diagramsIn`, `descendantIds`, `isDescendant`) — the drag guards are testable without a DOM |
 | `components/` | `DiagramEditor/DiagramEditor.tsx` | mounts `<Excalidraw>`; loads via `restore`, debounce-autosaves via `serializeAsJSON` + `PUT`; header matches the notes header (`h-11.5`) and shares its `EditableTitle` |
 | `components/` | `DiagramTree.tsx` | one level of the sidebar tree, recursing into expanded folders |
 | `screens/` | `DiagramsScreen.tsx` (routes `/diagrams`, `/diagrams/new`, `/diagrams/:diagramId`) | folder tree + `<DiagramEditor>`, and every mutation handler |
+
+Two pieces the notes tree needs as well are global rather than module-scoped, since modules may not
+import from one another: `src/utils/folderTree.ts` (pure tree helpers — `childFolders`, `itemsIn`,
+`descendantIds`, `ancestorIds`, `isDescendant`, `rowKey` — so the drag guards stay testable without
+a DOM) and `src/utils/dragPreview.ts` (`EMPTY_DRAG_IMAGE`, the 1×1 GIF that suppresses the native
+drag ghost).
 
 Save/load: `DiagramEditor` loads a scene with `restore(content)`, seeds the professional tool
 defaults, and mounts `<Excalidraw>`. `onChange` is debounced (~800ms) and skipped when the scene
@@ -120,7 +124,13 @@ moved into a folder by dragging, which keeps the draft path free of any folder p
 at render time, sorting folders A→Z and diagrams by last-updated at every level. The root is split
 into two collapsible `SidebarSection`s — **Diagrams** (the loose ones, `folderId === null`) above
 **Folders** (the tree) — via `DiagramTree`'s `only` prop; the two partition the list, so a diagram
-shows in exactly one. Nested levels render both kinds together. Folders live in
+shows in exactly one. Nested levels render both kinds together. Each row carries a right-click
+menu (`SidebarRowMenu`): a diagram's offers Rename / Delete, a folder's **New diagram / New folder /
+Rename / Delete** — so a folder is where you create things inside it, rather than everything landing
+at the root. A folder created from a menu opens straight into its rename field, the way an explorer
+does; renaming happens in place through the shared
+[InlineRename](../frontend/src/components/common/InlineRename.tsx). "New diagram" inside a folder
+files the draft on its first autosave (`PUT /{id}/folder`), since a draft has no row before that. Folders live in
 their own `diagramFolderList` slice beside `diagramList` — a second `createListSlice` rather than
 one slice holding both, so the diagram rows keep the upsert-to-front behavior the autosave relies
 on. `diagramsListLoader` seeds both from the single list response.
@@ -130,10 +140,17 @@ on. `diagramsListLoader` seeds both from the single list response.
 keeps full width and fades, so the tree doesn't reflow on the way out), and `MainNavbar` goes with
 it. The toggle is
 [SidebarToggle](../frontend/src/components/common/SidebarToggle.tsx), passed into `DiagramEditor`
-as its `leading` slot so it sits at the head of the editor's toolbar (and into a matching band on
-the empty state). It deliberately does **not** live inside the sidebar, which would take the button
+as its `leading` slot so it sits at the head of the editor's toolbar, beside a **Browse** button
+back to the folder view (and into a matching band on the explorer). It deliberately does **not** live inside the sidebar, which would take the button
 with it. Open/closed is local `DiagramsScreen` state — unlike which *folders* are expanded, which
 is in Redux because it survives the `/diagrams` → `/diagrams/:id` remount and matters more.
+
+**With no diagram open**, `/diagrams` renders
+[ExplorerGrid](../frontend/src/components/common/ExplorerGrid.tsx) in the center pane instead of an
+empty placeholder — a Drive-style card view of one folder at a time, shared with the notes module.
+Double-click opens (a folder descends, a diagram opens in the editor), right-click a card acts on
+it, right-click the background creates, and cards drag onto folder cards to move. The folder being
+browsed is a `?folder=` search param, so the view survives a reload and can be linked to.
 
 **Drag and drop** is HTML5-native. The dragged row is held in a `useRef`, not in `dataTransfer`,
 whose payload is unreadable during `dragover` — which is exactly when a folder drop has to be judged

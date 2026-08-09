@@ -37,13 +37,15 @@ public class NotesService {
     private static final int MAX_TITLE_LENGTH = 255;
 
     private final NotesRepository notesRepository;
+    private final NoteFolderService noteFolderService;
     private final NoteMapper noteMapper;
     private final ObjectMapper objectMapper;
     private final MediaService mediaService;
 
-    public NotesService(NotesRepository notesRepository, NoteMapper noteMapper, ObjectMapper objectMapper,
-                        MediaService mediaService) {
+    public NotesService(NotesRepository notesRepository, NoteFolderService noteFolderService,
+                        NoteMapper noteMapper, ObjectMapper objectMapper, MediaService mediaService) {
         this.notesRepository = notesRepository;
+        this.noteFolderService = noteFolderService;
         this.noteMapper = noteMapper;
         this.objectMapper = objectMapper;
         this.mediaService = mediaService;
@@ -111,7 +113,8 @@ public class NotesService {
         String content = request.content() == null ? "" : request.content();
         Frontmatter frontmatter = Frontmatter.parse(content);
         String title = uniqueTitle(resolveTitle(frontmatter, request.title(), null), null);
-        NoteRow note = notesRepository.insert(title, content, toJson(frontmatter.map()));
+        noteFolderService.requireFolderExists(request.folderId());
+        NoteRow note = notesRepository.insert(title, content, toJson(frontmatter.map()), request.folderId());
         indexRefs(note.id(), frontmatter);
         return getNote(note.id());
     }
@@ -144,6 +147,21 @@ public class NotesService {
             throw new AppException(HttpStatus.BAD_REQUEST, "Note title must not be blank.");
         }
         notesRepository.updateTitle(id, uniqueTitle(truncate(title.trim()), id));
+        return getNote(id);
+    }
+
+    /**
+     * Moves a note between folders — deliberately not part of {@link #updateNote}, which is the
+     * editor's save path. Null {@code folderId} moves it to the root level.
+     *
+     * <p>A note's title is its identity for {@code [[wiki links]]} and stays globally unique, so a
+     * move never changes how anything links to it.
+     */
+    @Transactional
+    public NoteDetail moveNote(long id, Long folderId) {
+        requireNote(id);
+        noteFolderService.requireFolderExists(folderId);
+        notesRepository.updateFolder(id, folderId);
         return getNote(id);
     }
 

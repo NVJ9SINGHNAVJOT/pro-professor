@@ -7,12 +7,14 @@ import java.time.Instant;
  * fetched separately by the repository.
  *
  * @param frontmatterJson the raw jsonb text of the parsed YAML frontmatter ({@code {}} when none)
+ * @param folderId        enclosing folder, or null at the root level
  */
 public record NoteRow(
         long id,
         String title,
         String content,
         String frontmatterJson,
+        Long folderId,
         Instant createdAt,
         Instant updatedAt
 ) {

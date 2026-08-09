@@ -9,7 +9,8 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import Markdown, { MarkdownBody } from "@/components/common/Markdown";
-import AudioPlayer from "@/modules/chat/components/AudioPlayer";
+import AudioPlayer from "@/components/common/AudioPlayer";
+import { mediaKind } from "@/utils/media";
 import type { MediaAttachment } from "@/services/operations/media/media.api";
 import type { ChatMetricsData, UiMessage } from "@/modules/chat/types";
 import { hideUnclosedMath, parseSettingsChanges } from "@/modules/chat/utils";
@@ -162,11 +163,11 @@ const MessageAttachments = memo(function MessageAttachments({ attachments }: { a
   return (
     <div className="mb-1.5 flex flex-wrap justify-end gap-2">
       {attachments.map((a) =>
-        a.mimeType.startsWith("image/") ? (
+        mediaKind(a.mimeType) === "image" ? (
           <a key={a.id} href={a.url} target="_blank" rel="noreferrer">
             <img src={a.url} alt={a.originalFilename} className="max-h-48 max-w-64 rounded-2xl object-cover" />
           </a>
-        ) : a.mimeType.startsWith("audio/") ? (
+        ) : mediaKind(a.mimeType) === "audio" ? (
           <AudioPlayer key={a.id} src={a.url} />
         ) : (
           <a

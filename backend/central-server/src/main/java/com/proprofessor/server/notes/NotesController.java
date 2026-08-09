@@ -3,8 +3,10 @@ package com.proprofessor.server.notes;
 import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.notes.dto.NoteCreateRequest;
 import com.proprofessor.server.notes.dto.NoteDetail;
+import com.proprofessor.server.notes.dto.NoteExplorerResponse;
 import com.proprofessor.server.notes.dto.NoteLinksResponse;
 import com.proprofessor.server.notes.dto.NoteListResponse;
+import com.proprofessor.server.notes.dto.NoteMoveRequest;
 import com.proprofessor.server.notes.dto.NoteRenameRequest;
 import com.proprofessor.server.notes.dto.NoteUpdateRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,14 +28,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotesController {
 
     private final NotesService notesService;
+    private final NoteFolderService noteFolderService;
 
-    public NotesController(NotesService notesService) {
+    public NotesController(NotesService notesService, NoteFolderService noteFolderService) {
         this.notesService = notesService;
+        this.noteFolderService = noteFolderService;
     }
 
+    /**
+     * The explorer's listing: every folder and every note in one response, because the tree needs
+     * both to draw a single level. {@code ?tag=} filters the notes and leaves the folders alone —
+     * the tag browser is a flat view that doesn't use them.
+     */
     @GetMapping
-    public ApiResponse<NoteListResponse> list(@RequestParam(required = false) String tag) {
-        return ApiResponse.ok(new NoteListResponse(notesService.listNotes(tag)));
+    public ApiResponse<NoteExplorerResponse> list(@RequestParam(required = false) String tag) {
+        return ApiResponse.ok(
+                new NoteExplorerResponse(noteFolderService.listFolders(), notesService.listNotes(tag)));
     }
 
     /** Keyword search over title + content (Postgres FTS), best match first. */
@@ -73,6 +83,12 @@ public class NotesController {
     @PutMapping("/{id}/title")
     public ApiResponse<NoteDetail> rename(@PathVariable Long id, @RequestBody NoteRenameRequest request) {
         return ApiResponse.ok("Note renamed.", notesService.renameNote(id, request.title()));
+    }
+
+    /** Moves a note between folders — null {@code folderId} is the root level. */
+    @PutMapping("/{id}/folder")
+    public ApiResponse<NoteDetail> move(@PathVariable Long id, @RequestBody NoteMoveRequest request) {
+        return ApiResponse.ok("Note moved.", notesService.moveNote(id, request.folderId()));
     }
 
     @DeleteMapping("/{id}")

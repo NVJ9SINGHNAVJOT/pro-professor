@@ -1,5 +1,16 @@
 import type { RefObject } from "react";
-import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, PencilLine, Trash2, Workflow } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  PencilLineIcon,
+  SquarePenIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { NavLink } from "react-router";
 import InlineRename from "@/components/common/InlineRename";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
 import {
@@ -10,12 +21,13 @@ import {
   sidebarRow,
 } from "@/components/common/sidebar";
 import { EMPTY_DRAG_IMAGE } from "@/utils/dragPreview";
+import { ROUTES } from "@/constants/routes";
 import { childFolders, itemsIn, rowKey } from "@/utils/folderTree";
-import type { DiagramFolderSummary, DiagramSummary } from "@/services/operations/diagrams/diagrams.route";
+import type { NoteFolderSummary, NoteSummary } from "@/services/operations/notes/notes.route";
 import { cn } from "@/lib/utils";
 
-/** What a drag is carrying. Held in a ref, not `dataTransfer` — see `DiagramsScreen`. */
-export type DragItem = { kind: "folder"; id: number } | { kind: "diagram"; id: number };
+/** What a drag is carrying. Held in a ref, not `dataTransfer` — see `NotesScreen`. */
+export type DragItem = { kind: "folder"; id: number } | { kind: "note"; id: number };
 
 /** Alias kept so the many call sites below stay short; the rule lives in `sidebarRow`. */
 const indentOf = sidebarIndent;
@@ -27,14 +39,14 @@ const IconSlot = () => <span className={SIDEBAR_ICON_SLOT} />;
  *
  * The announcement is deferred by a frame on purpose. Chrome **cancels a drag outright** if the DOM
  * mutates inside the `dragstart` handler, and announcing synchronously does exactly that — React
- * flushes discrete events immediately, dimming this row and revealing the drop strip while the
- * browser is still deciding whether a drag has begun. The ref is still set synchronously, because
- * `dragover` needs it on the very next event.
+ * flushes discrete events immediately, dimming this row while the browser is still deciding whether
+ * a drag has begun. The ref is still set synchronously, because `dragover` needs it on the very
+ * next event.
  */
 const beginDrag = (
   e: React.DragEvent,
   item: DragItem,
-  { dragRef, onDragMove, onDragging }: Pick<DiagramTreeProps, "dragRef" | "onDragMove" | "onDragging">,
+  { dragRef, onDragMove, onDragging }: Pick<NoteTreeProps, "dragRef" | "onDragMove" | "onDragging">,
 ) => {
   e.dataTransfer.effectAllowed = "move";
   if (EMPTY_DRAG_IMAGE !== null) e.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
@@ -46,37 +58,31 @@ const beginDrag = (
   });
 };
 
-interface DiagramTreeProps {
-  folders: DiagramFolderSummary[];
-  diagrams: DiagramSummary[];
+interface NoteTreeProps {
+  folders: NoteFolderSummary[];
+  notes: NoteSummary[];
   /** Which level this renders — null is the root. */
   parentId: number | null;
   depth: number;
   /**
    * Restricts a level to one kind of row. The root is split across two sidebar sections
-   * ("Diagrams", then "Folders"); nested levels render both.
+   * ("Notes", then "Folders"); nested levels render both.
    */
-  only?: "folders" | "diagrams";
+  only?: "folders" | "notes";
   openId: number | null;
   expanded: Set<number>;
   onToggle: (id: number) => void;
-  onOpenDiagram: (id: number) => void;
-  onDeleteDiagram: (id: number) => void;
+  onDeleteNote: (id: number) => void;
   onDeleteFolder: (id: number) => void;
-  /**
-   * The one row in rename mode (see `rowKey`), owned by `DiagramsScreen` rather than by the row.
-   *
-   * Lifted because renaming is started from outside the row as often as from it: creating a folder
-   * opens it straight into rename, the way an explorer does.
-   */
+  /** The one row in rename mode (see `rowKey`), owned by `NotesScreen` rather than by the row. */
   renaming: string | null;
   onStartRename: (key: string) => void;
   onCancelRename: () => void;
   onRenameFolder: (id: number, name: string) => void;
-  onRenameDiagram: (id: number, title: string) => void;
+  onRenameNote: (id: number, title: string) => void;
   /** Create inside a folder from its own menu — null creates at the root. */
   onNewFolderIn: (parentId: number | null) => void;
-  onNewDiagramIn: (folderId: number | null) => void;
+  onNewNoteIn: (folderId: number | null) => void;
   dragRef: RefObject<DragItem | null>;
   /** The row being dragged, dimmed while a custom preview follows the cursor. */
   dragging: DragItem | null;
@@ -96,68 +102,88 @@ interface DiagramTreeProps {
 }
 
 /**
- * One level of the sidebar tree, recursing into expanded folders. Folders sort A→Z and diagrams by
- * last-updated, at every level.
+ * One level of the note explorer's tree, recursing into expanded folders. Folders sort A→Z and
+ * notes by last-updated, at every level — the same rule the diagram tree follows.
  */
-const DiagramTree = (props: DiagramTreeProps) => {
-  const { folders, diagrams, parentId, depth, only, openId, onOpenDiagram, onDeleteDiagram } = props;
-  const { renaming, onStartRename, onCancelRename, onRenameDiagram } = props;
+const NoteTree = (props: NoteTreeProps) => {
+  const { folders, notes, parentId, depth, only, openId, onDeleteNote } = props;
+  const { renaming, onStartRename, onCancelRename, onRenameNote } = props;
   const { dragRef, dragging, onDragging, onDragMove } = props;
 
   return (
     <div className={SIDEBAR_LIST}>
-      {only !== "diagrams" &&
+      {only !== "notes" &&
         childFolders(folders, parentId).map((folder) => <FolderRow key={folder.id} folder={folder} {...props} />)}
 
       {only !== "folders" &&
-        itemsIn(diagrams, parentId).map((diagram) => {
-          const key = rowKey("diagram", diagram.id);
+        itemsIn(notes, parentId).map((note) => {
+          const key = rowKey("note", note.id);
           const isRenaming = renaming === key;
           return (
             <SidebarRowMenu
-              key={diagram.id}
-              label={diagram.title}
+              key={note.id}
+              label={note.title}
               disabled={isRenaming}
               actions={[
-                { label: "Rename", icon: PencilLine, onSelect: () => onStartRename(key) },
-                { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteDiagram(diagram.id) },
+                { label: "Rename", icon: PencilLineIcon, onSelect: () => onStartRename(key) },
+                { label: "Delete", icon: Trash2Icon, destructive: true, onSelect: () => onDeleteNote(note.id) },
               ]}
             >
               <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
                 {isRenaming ? (
-                  // A plain div while renaming: an <input> nested in the button below would be
-                  // invalid markup, and Space would activate the button instead of typing.
-                  <div className={sidebarRow(openId === diagram.id)}>
+                  // A plain row while renaming — inside the NavLink below, every click on the field
+                  // would open the note being renamed.
+                  <div className={sidebarRow(openId === note.id, "items-start")}>
                     <IconSlot />
-                    <Workflow className="size-4 shrink-0 text-neutral-500" />
+                    <FileTextIcon className={cn(SIDEBAR_ICON_SLOT, "text-neutral-500")} />
                     <InlineRename
-                      value={diagram.title}
-                      ariaLabel="Diagram title"
-                      onCommit={(next) => onRenameDiagram(diagram.id, next)}
+                      value={note.title}
+                      ariaLabel="Note title"
+                      onCommit={(next) => onRenameNote(note.id, next)}
                       onCancel={onCancelRename}
                     />
                   </div>
                 ) : (
-                  <button
-                    type="button"
+                  <NavLink
+                    to={ROUTES.NOTES_DETAIL(note.id)}
                     draggable
-                    onDragStart={(e) => beginDrag(e, { kind: "diagram", id: diagram.id }, props)}
+                    onDragStart={(e) => beginDrag(e, { kind: "note", id: note.id }, props)}
                     onDrag={(e) => onDragMove(e.clientX, e.clientY)}
                     onDragEnd={() => {
                       dragRef.current = null;
                       onDragging(null);
                     }}
-                    onClick={() => openId !== diagram.id && onOpenDiagram(diagram.id)}
-                    className={sidebarRow(
-                      openId === diagram.id,
-                      dragging?.kind === "diagram" && dragging.id === diagram.id && "opacity-40",
-                    )}
+                    // Re-navigating to the note we're already on reads as a revalidation and
+                    // refetches the explorer, so swallow that click.
+                    onClick={(e) => openId === note.id && e.preventDefault()}
+                    // Tag chips stack under the title, so the label column is a column — but the two
+                    // icon columns stay on the row's baseline, which keeps notes aligned with folders.
+                    className={({ isActive }) =>
+                      sidebarRow(isActive, [
+                        "items-start",
+                        dragging?.kind === "note" && dragging.id === note.id && "opacity-40",
+                      ])
+                    }
                   >
                     {/* Same two columns a folder row uses, so titles line up at every depth. */}
                     <IconSlot />
-                    <Workflow className="size-4 shrink-0 text-neutral-500" />
-                    <span className="truncate">{diagram.title}</span>
-                  </button>
+                    <FileTextIcon className={cn(SIDEBAR_ICON_SLOT, "text-neutral-500")} />
+                    <span className="flex min-w-0 flex-1 flex-col items-start gap-y-1">
+                      <span className="w-full truncate">{note.title}</span>
+                      {note.tags.length > 0 && (
+                        <span className="flex flex-wrap gap-1">
+                          {note.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full bg-neutral-800 px-1.5 py-0.5 caption-small-regular text-neutral-400 group-hover:bg-neutral-700"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  </NavLink>
                 )}
               </div>
             </SidebarRowMenu>
@@ -167,26 +193,25 @@ const DiagramTree = (props: DiagramTreeProps) => {
   );
 };
 
-interface FolderRowProps extends DiagramTreeProps {
-  folder: DiagramFolderSummary;
+interface FolderRowProps extends NoteTreeProps {
+  folder: NoteFolderSummary;
 }
 
 const FolderRow = ({ folder, ...props }: FolderRowProps) => {
   const { depth, expanded, onToggle, onRenameFolder, onDeleteFolder, onDropInto, canDropInto } = props;
-  const { renaming, onStartRename, onCancelRename, onNewFolderIn, onNewDiagramIn } = props;
+  const { renaming, onStartRename, onCancelRename, onNewFolderIn, onNewNoteIn } = props;
   const { dragRef, dragging, onDragging, onDragMove, dropTarget, onDropTarget } = props;
   const key = rowKey("folder", folder.id);
   const isRenaming = renaming === key;
   const isExpanded = expanded.has(folder.id);
   const dragOver = dropTarget === folder.id;
-  const isEmpty =
-    childFolders(props.folders, folder.id).length === 0 && itemsIn(props.diagrams, folder.id).length === 0;
+  const isEmpty = childFolders(props.folders, folder.id).length === 0 && itemsIn(props.notes, folder.id).length === 0;
 
   return (
     // The drop target is the folder's whole block — its row *and*, when open, everything nested
     // under it. Aiming at the one-row header was needlessly precise: dropping onto a folder's
     // visible contents plainly means "put it in this folder". Nested folders stop propagation, so
-    // the innermost block under the cursor still wins, and diagram rows carry no handlers at all,
+    // the innermost block under the cursor still wins, and note rows carry no drop handlers at all,
     // so they bubble up to whichever folder encloses them.
     <div
       // No `dragleave` handler: `dragover` fires continuously on whatever is innermost under the
@@ -213,24 +238,24 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
         label={folder.name}
         disabled={isRenaming}
         actions={[
-          { label: "New diagram", icon: Workflow, onSelect: () => onNewDiagramIn(folder.id) },
-          { label: "New folder", icon: FolderPlus, onSelect: () => onNewFolderIn(folder.id) },
-          { label: "Rename", icon: PencilLine, onSelect: () => onStartRename(key) },
-          { label: "Delete", icon: Trash2, destructive: true, onSelect: () => onDeleteFolder(folder.id) },
+          { label: "New note", icon: SquarePenIcon, onSelect: () => onNewNoteIn(folder.id) },
+          { label: "New folder", icon: FolderPlusIcon, onSelect: () => onNewFolderIn(folder.id) },
+          { label: "Rename", icon: PencilLineIcon, onSelect: () => onStartRename(key) },
+          { label: "Delete", icon: Trash2Icon, destructive: true, onSelect: () => onDeleteFolder(folder.id) },
         ]}
       >
         <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
           {isRenaming ? (
             <div className={sidebarRow()}>
               {isExpanded ? (
-                <ChevronDown className="size-4 shrink-0 text-neutral-500" />
+                <ChevronDownIcon className="size-4 shrink-0 text-neutral-500" />
               ) : (
-                <ChevronRight className="size-4 shrink-0 text-neutral-500" />
+                <ChevronRightIcon className="size-4 shrink-0 text-neutral-500" />
               )}
               {isExpanded ? (
-                <FolderOpen className="size-4 shrink-0 text-neutral-400" />
+                <FolderOpenIcon className="size-4 shrink-0 text-neutral-400" />
               ) : (
-                <Folder className="size-4 shrink-0 text-neutral-400" />
+                <FolderIcon className="size-4 shrink-0 text-neutral-400" />
               )}
               <InlineRename
                 value={folder.name}
@@ -256,14 +281,14 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
               className={sidebarRow(false, dragging?.kind === "folder" && dragging.id === folder.id && "opacity-40")}
             >
               {isExpanded ? (
-                <ChevronDown className="size-4 shrink-0 text-neutral-500" />
+                <ChevronDownIcon className="size-4 shrink-0 text-neutral-500" />
               ) : (
-                <ChevronRight className="size-4 shrink-0 text-neutral-500" />
+                <ChevronRightIcon className="size-4 shrink-0 text-neutral-500" />
               )}
               {isExpanded ? (
-                <FolderOpen className="size-4 shrink-0 text-neutral-400" />
+                <FolderOpenIcon className="size-4 shrink-0 text-neutral-400" />
               ) : (
-                <Folder className="size-4 shrink-0 text-neutral-400" />
+                <FolderIcon className="size-4 shrink-0 text-neutral-400" />
               )}
               <span className="truncate">{folder.name}</span>
             </div>
@@ -271,7 +296,7 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
         </div>
       </SidebarRowMenu>
 
-      {/* `DiagramTree` brings its own list spacing; this only separates it from the folder row. */}
+      {/* `NoteTree` brings its own list spacing; this only separates it from the folder row. */}
       {isExpanded && (
         <div className="mt-1">
           {isEmpty ? (
@@ -286,7 +311,7 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
               Empty
             </div>
           ) : (
-            <DiagramTree {...props} parentId={folder.id} depth={depth + 1} only={undefined} />
+            <NoteTree {...props} parentId={folder.id} depth={depth + 1} only={undefined} />
           )}
         </div>
       )}
@@ -294,4 +319,4 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
   );
 };
 
-export default DiagramTree;
+export default NoteTree;

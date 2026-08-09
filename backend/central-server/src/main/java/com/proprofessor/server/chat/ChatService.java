@@ -55,6 +55,12 @@ public class ChatService {
             "The model failed to respond. Please try again or pick another model.";
     private static final String DEFAULT_MODE = "simple";
     private static final int TITLE_MAX_LENGTH = 60;
+    /**
+     * The cap on a hand-typed rename — the {@code conversations.title} column width, rather than
+     * the 60 chars a derived title is cut to. A title the user chose is not a snippet of something
+     * longer, so the only limit that has to hold is the column's.
+     */
+    private static final int TITLE_COLUMN_LENGTH = 255;
 
     /** Frames the note for the model, so it doesn't read as part of the user's question. */
     private static final String NOTE_CONTEXT_PREAMBLE =
@@ -266,6 +272,24 @@ public class ChatService {
         Map<Long, List<MediaRow>> attachments = mediaRepository.findByMessageIds(
                 messages.stream().map(MessageRow::id).toList());
         return chatMapper.toDetail(conversation, messages, attachments);
+    }
+
+    /**
+     * Renames a conversation from the sidebar — the one title a user sets by hand, as opposed to
+     * the ones {@link #deriveTitle} takes from a first message or a first spoken turn.
+     */
+    public ConversationSummary renameConversation(Long id, String title) {
+        ConversationRow conversation = loadConversation(id);
+        if (title == null || title.isBlank()) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Title is required");
+        }
+        String trimmed = title.trim();
+        // A longer title is a paste, not a mistake worth refusing — cut it rather than 400.
+        String resolved = trimmed.length() > TITLE_COLUMN_LENGTH
+                ? trimmed.substring(0, TITLE_COLUMN_LENGTH)
+                : trimmed;
+        conversationRepository.updateTitle(conversation.id(), resolved);
+        return chatMapper.toSummary(loadConversation(id));
     }
 
     public void deleteConversation(Long id) {

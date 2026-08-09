@@ -1,6 +1,7 @@
-import { useMemo } from "react";
-import { SquarePenIcon, Trash2Icon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { PencilLineIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router";
+import InlineRename from "@/components/common/InlineRename";
 import MainNavbar from "@/components/common/MainNavbar";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
 import {
@@ -14,9 +15,10 @@ import {
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch } from "@/redux/store";
-import { removeConversation } from "@/redux/slices/chatListSlice";
+import { removeConversation, upsertConversation } from "@/redux/slices/chatListSlice";
 import { chatsRoute, type ConversationSummary } from "@/services/operations/chats/chats.route";
 import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { rowKey } from "@/utils/folderTree";
 import { cn } from "@/lib/utils";
 import { GROUPS } from "@/modules/chat/constants";
 import type { Group } from "@/modules/chat/types";
@@ -34,6 +36,9 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
   const dispatch = useAppDispatch();
   const chatId = useParams().chatId;
   const { execute: deleteConversation } = useApi(chatsRoute.deleteConversation);
+  const { execute: renameConversation } = useApi(chatsRoute.renameConversation);
+  /** The row showing a rename field (see `rowKey`) — a chat appears once, but the idiom is shared. */
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   // Bucket by recency. Searching is not here — ⌘K searches chats *and* notes, over full message
   // text rather than the titles this list happens to have loaded.
@@ -48,6 +53,16 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
       chats: buckets.get(group)!,
     }));
   }, [conversations]);
+
+  const handleRename = async (id: number, title: string) => {
+    setRenaming(null);
+    const res = await renameConversation(id, title);
+    if (res.error) {
+      toast.error("Failed to rename chat");
+      return;
+    }
+    dispatch(upsertConversation(res.response.data));
+  };
 
   const handleDelete = async (id: number) => {
     const res = await deleteConversation(id);
@@ -100,32 +115,51 @@ const SideBar = ({ conversations, isOpen, onToggle }: SideBarProps) => {
               <div key={group.label} className="mb-4">
                 <div className="px-2 pb-1 caption-small-medium text-neutral-500">{group.label}</div>
                 <div className={SIDEBAR_LIST}>
-                  {group.chats.map((chat) => (
-                    <SidebarRowMenu
-                      key={chat.id}
-                      label={chat.title}
-                      actions={[
-                        {
-                          label: "Delete",
-                          icon: Trash2Icon,
-                          destructive: true,
-                          onSelect: () => handleDelete(chat.id),
-                        },
-                      ]}
-                    >
-                      <div className={SIDEBAR_ROW_WRAPPER}>
-                        <NavLink
-                          to={ROUTES.CHAT_DETAIL(chat.id)}
-                          // Re-navigating to the chat we're already on reads as a revalidation and
-                          // refetches the list, so swallow that click.
-                          onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
-                          className={({ isActive }) => sidebarRow(isActive)}
-                        >
-                          <span className="truncate">{chat.title}</span>
-                        </NavLink>
-                      </div>
-                    </SidebarRowMenu>
-                  ))}
+                  {group.chats.map((chat) => {
+                    const key = rowKey("chat", chat.id);
+                    const isRenaming = renaming === key;
+                    return (
+                      <SidebarRowMenu
+                        key={chat.id}
+                        label={chat.title}
+                        disabled={isRenaming}
+                        actions={[
+                          { label: "Rename", icon: PencilLineIcon, onSelect: () => setRenaming(key) },
+                          {
+                            label: "Delete",
+                            icon: Trash2Icon,
+                            destructive: true,
+                            onSelect: () => handleDelete(chat.id),
+                          },
+                        ]}
+                      >
+                        <div className={SIDEBAR_ROW_WRAPPER}>
+                          {isRenaming ? (
+                            // A plain row while renaming — inside the NavLink below, every click on
+                            // the field would open the chat being renamed.
+                            <div className={sidebarRow(chatId === String(chat.id))}>
+                              <InlineRename
+                                value={chat.title}
+                                ariaLabel="Chat title"
+                                onCommit={(next) => void handleRename(chat.id, next)}
+                                onCancel={() => setRenaming(null)}
+                              />
+                            </div>
+                          ) : (
+                            <NavLink
+                              to={ROUTES.CHAT_DETAIL(chat.id)}
+                              // Re-navigating to the chat we're already on reads as a revalidation and
+                              // refetches the list, so swallow that click.
+                              onClick={(e) => chatId === String(chat.id) && e.preventDefault()}
+                              className={({ isActive }) => sidebarRow(isActive)}
+                            >
+                              <span className="truncate">{chat.title}</span>
+                            </NavLink>
+                          )}
+                        </div>
+                      </SidebarRowMenu>
+                    );
+                  })}
                 </div>
               </div>
             ))}

@@ -13,12 +13,28 @@ const notesEndPoints = {
   REVISIONS: (id: number) => `${BASE_URL_SERVER}/notes/${id}/revisions`,
   RESTORE: (id: number, revisionId: number) => `${BASE_URL_SERVER}/notes/${id}/revisions/${revisionId}/restore`,
   BACKLINKS: (id: number) => `${BASE_URL_SERVER}/notes/${id}/backlinks`,
+  MOVE: (id: number) => `${BASE_URL_SERVER}/notes/${id}/folder`,
+  // Its own top-level path rather than `/notes/folders`, which would sit under `/notes/{id}`.
+  CREATE_FOLDER: `${BASE_URL_SERVER}/note-folders`,
+  RENAME_FOLDER: (id: number) => `${BASE_URL_SERVER}/note-folders/${id}`,
+  MOVE_FOLDER: (id: number) => `${BASE_URL_SERVER}/note-folders/${id}/parent`,
+  DELETE_FOLDER: (id: number) => `${BASE_URL_SERVER}/note-folders/${id}`,
 };
+
+/** One folder in the note explorer's tree. Sent flat — the client assembles the levels. */
+export interface NoteFolderSummary {
+  id: number;
+  name: string;
+  /** null at the root level. */
+  parentId: number | null;
+}
 
 export interface NoteSummary {
   id: number;
   title: string;
   tags: string[];
+  /** null at the root level. */
+  folderId: number | null;
   updatedAt: string;
 }
 
@@ -30,6 +46,8 @@ export interface NoteDetail {
   tags: string[];
   /** Image `![[file.png]]` embed filename → its direct storage-server URL (empty when the note has none). */
   embedUrls: Record<string, string>;
+  /** null at the root level. */
+  folderId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +55,8 @@ export interface NoteDetail {
 export interface NoteSavePayload {
   title?: string;
   content: string;
+  /** Only on create, and only when the note was started from a folder's own menu. */
+  folderId?: number | null;
 }
 
 export interface NoteRevision {
@@ -60,9 +80,24 @@ export type GetNoteLinksResponse = {
   data: { links: NoteLink[] };
 };
 
+/** Search hits and backlinks — a plain list, with no folders to draw. */
 export type GetNotesResponse = {
   message: string;
   data: { notes: NoteSummary[] };
+};
+
+/**
+ * The explorer's listing. Folders ride along with the notes because the tree needs both to draw a
+ * single level, and one request keeps them consistent.
+ */
+export type GetNoteExplorerResponse = {
+  message: string;
+  data: { folders: NoteFolderSummary[]; notes: NoteSummary[] };
+};
+
+export type NoteFolderResponse = {
+  message: string;
+  data: NoteFolderSummary;
 };
 
 export type GetNoteResponse = {
@@ -71,7 +106,7 @@ export type GetNoteResponse = {
 };
 
 export const notesRoute = {
-  getNotes: createRoute<[], GetNotesResponse>(() => ({
+  getNotes: createRoute<[], GetNoteExplorerResponse>(() => ({
     method: "GET",
     url: notesEndPoints.GET_ALL,
   })),
@@ -98,6 +133,13 @@ export const notesRoute = {
     method: "PUT",
     url: notesEndPoints.RENAME(id),
     data: { title },
+  })),
+
+  /** Moves a note between folders — null is the root level. Never touches the buffer. */
+  moveNote: createRoute<[id: number, folderId: number | null], GetNoteResponse>((id, folderId) => ({
+    method: "PUT",
+    url: notesEndPoints.MOVE(id),
+    data: { folderId },
   })),
 
   deleteNote: createRoute<[id: number], { message: string }>((id) => ({
@@ -129,5 +171,29 @@ export const notesRoute = {
   restoreRevision: createRoute<[id: number, revisionId: number], GetNoteResponse>((id, revisionId) => ({
     method: "POST",
     url: notesEndPoints.RESTORE(id, revisionId),
+  })),
+
+  createNoteFolder: createRoute<[name: string, parentId: number | null], NoteFolderResponse>((name, parentId) => ({
+    method: "POST",
+    url: notesEndPoints.CREATE_FOLDER,
+    data: { name, parentId },
+  })),
+
+  renameNoteFolder: createRoute<[id: number, name: string], NoteFolderResponse>((id, name) => ({
+    method: "PUT",
+    url: notesEndPoints.RENAME_FOLDER(id),
+    data: { name },
+  })),
+
+  moveNoteFolder: createRoute<[id: number, parentId: number | null], NoteFolderResponse>((id, parentId) => ({
+    method: "PUT",
+    url: notesEndPoints.MOVE_FOLDER(id),
+    data: { parentId },
+  })),
+
+  /** Cascades: subfolders and every note inside them go with it. */
+  deleteNoteFolder: createRoute<[id: number], { message: string }>((id) => ({
+    method: "DELETE",
+    url: notesEndPoints.DELETE_FOLDER(id),
   })),
 };

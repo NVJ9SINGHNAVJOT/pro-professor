@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { DownloadIcon, FileIcon, FileTextIcon, LockIcon, MusicIcon, Trash2Icon } from "lucide-react";
 import Button from "@/components/common/Button";
+import MediaViewer from "@/components/common/MediaViewer";
 import { toast } from "@/components/common/toast";
 import Tooltip from "@/components/common/Tooltip";
 import { SelectInput } from "@/components/inputs/SelectInput";
@@ -16,11 +17,16 @@ import {
   type MediaUsage,
 } from "@/services/operations/media/media.route";
 import { formatBytes } from "@/modules/settings/utils";
+import { mediaKind } from "@/utils/media";
+import { readJson, writeJson } from "@/utils/localStore";
 import {
   CATEGORY_FILTERS,
   SORT_OPTIONS,
   STORAGE_PAGE_SIZE,
+  STORAGE_VIEW_SIZES,
+  STORAGE_VIEW_SIZE_KEY,
   asCategoryFilter,
+  asViewSize,
 } from "@/modules/settings/constants";
 
 /** Category icon for files with no visual preview. */
@@ -78,6 +84,17 @@ const StoragePanel = ({
   // the card whose trash button was clicked once — a second click confirms
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // The file open in the viewer, or null. Images, video and audio only — see `mediaKind`.
+  const [previewing, setPreviewing] = useState<MediaFile | null>(null);
+
+  // Card size is a pure view preference, so it is local + localStorage rather than a search param
+  // like the filters (those re-run the loader; this changes nothing about what was fetched).
+  const [viewSize, setViewSize] = useState(() => asViewSize(readJson(STORAGE_VIEW_SIZE_KEY)));
+  const sizing = STORAGE_VIEW_SIZES.find((option) => option.size === viewSize) ?? STORAGE_VIEW_SIZES[1];
+  const chooseViewSize = (size: (typeof STORAGE_VIEW_SIZES)[number]["size"]) => {
+    setViewSize(size);
+    writeJson(STORAGE_VIEW_SIZE_KEY, size);
+  };
 
   const loadMore = async () => {
     const offset = files.length;
@@ -131,6 +148,8 @@ const StoragePanel = ({
 
   return (
     <>
+      <MediaViewer file={previewing} onClose={() => setPreviewing(null)} />
+
       <div className="sticky top-0 z-10 -mx-6 -mt-6 bg-grey px-6 pb-6 pt-6">
         <header className="mb-6">
           <h1 className="heading-semibold text-white">Storage</h1>
@@ -159,21 +178,42 @@ const StoragePanel = ({
             ))}
           </div>
 
-          <SelectInput
-            options={SORT_OPTIONS}
-            value={sort}
-            onChange={(value) => {
-              setConfirmingId(null);
-              const isDefault = value === SORT_OPTIONS[0].value;
-              const [sortBy, order] = value.split(":");
-              setParam({
-                sortBy: isDefault ? null : sortBy,
-                order: isDefault ? null : order,
-              });
-            }}
-            className="w-44"
-            buttonClassName="h-9 rounded-lg"
-          />
+          <div className="flex items-center gap-x-2">
+            {/* Same segmented control as the notes toolbar's source/split/preview switch. */}
+            <div className="flex items-center rounded-lg bg-neutral-900 p-0.5">
+              {STORAGE_VIEW_SIZES.map(({ size, label, icon: Icon }) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => chooseViewSize(size)}
+                  aria-label={`${label} cards`}
+                  title={`${label} cards`}
+                  className={cn(
+                    "cursor-pointer rounded-md px-2 py-1.5 text-neutral-400 transition-colors hover:text-white",
+                    viewSize === size && "bg-neutral-700 text-white",
+                  )}
+                >
+                  <Icon className="size-4" />
+                </button>
+              ))}
+            </div>
+
+            <SelectInput
+              options={SORT_OPTIONS}
+              value={sort}
+              onChange={(value) => {
+                setConfirmingId(null);
+                const isDefault = value === SORT_OPTIONS[0].value;
+                const [sortBy, order] = value.split(":");
+                setParam({
+                  sortBy: isDefault ? null : sortBy,
+                  order: isDefault ? null : order,
+                });
+              }}
+              className="w-44"
+              buttonClassName="h-9 rounded-lg"
+            />
+          </div>
         </div>
       </div>
 
@@ -185,23 +225,49 @@ const StoragePanel = ({
             Showing {files.length} of {pagination?.total ?? files.length}
           </p>
 
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+          <div
+            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${sizing.minWidth}, 1fr))` }}
+            className="grid gap-4"
+          >
             {files.map((file) => {
               const Icon = iconFor(file.category);
               const confirming = confirmingId === file.storageId;
               const inUse = file.usage.notes > 0 || file.usage.chatMessages > 0;
+              // Documents and archives have nothing to show full-size; their thumbnail stays inert
+              // and Download remains the only way to open them.
+              const previewable = mediaKind(file.mimeType) !== "other";
               return (
                 <div
                   key={file.storageId}
                   className="flex flex-col overflow-hidden rounded-xl border border-neutral-800 bg-grey-50"
                 >
-                  <div className="flex h-32 items-center justify-center overflow-hidden bg-black">
-                    {file.mimeType.startsWith("image/") ? (
+                  <div
+                    {...(previewable
+                      ? {
+                          role: "button",
+                          tabIndex: 0,
+                          "aria-label": `Open ${file.originalFilename}`,
+                          onClick: () => setPreviewing(file),
+                          onKeyDown: (e: React.KeyboardEvent) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setPreviewing(file);
+                            }
+                          },
+                        }
+                      : {})}
+                    className={cn(
+                      "flex items-center justify-center overflow-hidden bg-black",
+                      sizing.thumbHeight,
+                      previewable && "cursor-pointer",
+                    )}
+                  >
+                    {mediaKind(file.mimeType) === "image" ? (
                       <img src={file.url} alt={file.originalFilename} className="size-full object-cover" />
-                    ) : file.mimeType.startsWith("video/") ? (
+                    ) : mediaKind(file.mimeType) === "video" ? (
                       <video src={file.url} muted preload="metadata" className="size-full object-cover" />
                     ) : (
-                      <Icon className="size-10 text-neutral-600" />
+                      <Icon className={cn(sizing.glyph, "text-neutral-600")} />
                     )}
                   </div>
 

@@ -12,13 +12,6 @@ export const groupOf = (dateStr: string): Group => {
 };
 
 /** Format seconds as `m:ss`, e.g. 125 → "2:05". */
-export const formatTime = (seconds: number): string => {
-  if (!Number.isFinite(seconds)) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
-
 /** Compact token count, e.g. 1234 → "1.2k", 12345 → "12k". */
 export const formatTokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
 

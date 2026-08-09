@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { NEW_ITEM_ID } from "@/constants/routes";
 import store from "@/redux/store";
 import { setNotes } from "@/redux/slices/notesListSlice";
+import { setNoteFolders } from "@/redux/slices/noteFolderListSlice";
 import { load } from "@/services/client/loadRoute";
 import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
 
@@ -22,8 +23,10 @@ export type NoteDetailLoaderData = {
  * and useWikiHandlers, so all of them see the patch immediately.
  */
 export async function notesListLoader({ request }: LoaderFunctionArgs) {
-  const notes = await load(request.signal, notesRoute.getNotes);
-  store.dispatch(setNotes(notes.data.notes));
+  const explorer = await load(request.signal, notesRoute.getNotes);
+  // One response, two slices — the tree can't draw a level without both halves.
+  store.dispatch(setNoteFolders(explorer.data.folders));
+  store.dispatch(setNotes(explorer.data.notes));
   return null;
 }
 

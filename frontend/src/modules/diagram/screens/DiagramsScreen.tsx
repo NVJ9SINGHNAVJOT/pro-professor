@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
-import { FileText, Folder, FolderPlus, SquarePenIcon } from "lucide-react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { FileText, Folder, FolderOpen, FolderPlus, SquarePenIcon, Workflow } from "lucide-react";
 import MainNavbar from "@/components/common/MainNavbar";
 import { sidebarNavRow, sidebarShell, sidebarShellInner } from "@/components/common/sidebar";
 import { toast } from "@/components/common/toast";
-import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { DRAFT_FOLDER_PARAM, NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeDiagram, upsertDiagram } from "@/redux/slices/diagramListSlice";
@@ -17,10 +17,11 @@ import {
   toggleFolderExpanded,
   toggleFoldersSection,
 } from "@/redux/slices/diagramSidebarSlice";
+import ExplorerGrid from "@/components/common/ExplorerGrid";
 import SidebarSection from "@/components/common/SidebarSection";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import DiagramTree, { type DragItem } from "@/modules/diagram/components/DiagramTree";
-import { ancestorIds, childFolders, descendantIds, diagramsIn, isDescendant } from "@/modules/diagram/utils/folderTree";
+import { ancestorIds, childFolders, descendantIds, isDescendant, itemsIn, rowKey } from "@/utils/folderTree";
 import {
   diagramsRoute,
   type DiagramDetail,
@@ -53,6 +54,7 @@ interface DiagramsScreenProps {
 /** Diagram tree + Excalidraw editor. New diagrams start from an empty scene, at the root level. */
 const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   // `/diagrams/new` — an empty canvas with no row behind it. Like a new chat, it costs no
   // request: the diagram is created by its first autosave, which turns this into `/diagrams/:id`
@@ -61,6 +63,7 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   const isDraft = diagramId === NEW_ITEM_ID;
 
   const { execute: deleteDiagram } = useApi(diagramsRoute.deleteDiagram);
+  const { execute: renameDiagramTitle } = useApi(diagramsRoute.renameDiagram);
   const { execute: moveDiagram } = useApi(diagramsRoute.moveDiagram);
   const { execute: createFolder } = useApi(diagramsRoute.createDiagramFolder);
   const { execute: renameFolder } = useApi(diagramsRoute.renameDiagramFolder);
@@ -80,6 +83,24 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   // Local, like the chat and notes screens: `/diagrams` and `/diagrams/:id` are separate route
   // entries, so opening the first diagram remounts this and resets to open — the wanted default.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Which folder the center-pane explorer is browsing. In the URL rather than in state so the view
+  // survives a reload and can be linked to; absent = the root.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The folder a draft was started in, carried across this screen's remount — see DRAFT_FOLDER_PARAM.
+  const inParam = Number(searchParams.get(DRAFT_FOLDER_PARAM));
+  const draftFolderId = isDraft && Number.isFinite(inParam) && inParam > 0 ? inParam : null;
+
+  const browseParam = Number(searchParams.get("folder"));
+  const browsingFolderId = Number.isFinite(browseParam) && browseParam > 0 ? browseParam : null;
+  const browseFolder = (id: number | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (id === null) next.delete("folder");
+    else next.set("folder", String(id));
+    setSearchParams(next, { replace: true });
+  };
+  // The row in rename mode (see `rowKey`). Owned here rather than by the row because renaming is
+  // started from outside it too: a folder created from a menu opens straight into rename.
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const [rootDragOver, setRootDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
@@ -120,22 +141,41 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
    * New diagram = an empty draft canvas. A no-op when one is already open: re-navigating to the
    * URL we're on reads as a revalidation and would refetch the list on every click.
    */
-  const create = () => {
-    if (isDraft) return;
+  const create = (folderId: number | null = null) => {
+    const target = ROUTES.DIAGRAMS_NEW_IN(folderId);
+    // Re-navigating to the URL we're on reads as a revalidation and would refetch the list on every
+    // click — but a draft aimed at a *different* folder is a different URL, and must still move.
+    if (`${location.pathname}${location.search}` === target) return;
     // Forget the diagram the last draft became and bump the key, or the canvas would be reused
     // as-is and the new draft would open on the previous drawing.
     setDraftId(null);
     setDraftGen((n) => n + 1);
-    navigate(ROUTES.DIAGRAMS_NEW);
+    if (folderId !== null) dispatch(expandFolder(folderId));
+    navigate(target);
   };
 
   /** The draft's first autosave created it — give it a real URL (`onSaved` already listed it). */
   const handleCreated = (id: number) => {
     setDraftId(id);
+    // The folder the draft was started in, read off the URL *before* navigating away from it —
+    // see DRAFT_FOLDER_PARAM for why this can't be component state.
+    const folderId = draftFolderId;
     // Same route, so the canvas isn't remounted; the marker also keeps the loader from refetching
     // the scene the autosave just wrote.
     markDraftCreated("diagramId", id);
     navigate(ROUTES.DIAGRAMS_DETAIL(id), { replace: true });
+
+    if (folderId === null) return;
+    // File it where it was asked for. Optimistic like every other move, so the row doesn't jump
+    // from the root into the folder a round-trip later.
+    dispatch(upsertDiagram({ id, folderId }));
+    dispatch(expandFolder(folderId));
+    void moveDiagram(id, folderId).then((res) => {
+      if (res.error) {
+        dispatch(upsertDiagram({ id, folderId: null }));
+        toast.error("Failed to move diagram into the folder");
+      }
+    });
   };
 
   /**
@@ -167,23 +207,53 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
 
   const toggleFolder = (id: number) => dispatch(toggleFolderExpanded(id));
 
-  const addFolder = async () => {
-    // Always at the root — nest it by dragging. The sidebar has no notion of a "current" folder.
-    const res = await createFolder("New folder", null);
+  /**
+   * Creates a folder — at the root from the toolbar, inside one from its own menu.
+   *
+   * Returns the new id rather than opening the rename field itself: the sidebar tree and the
+   * explorer grid keep separate rename state, and only the caller knows which one is being looked
+   * at. Writing this screen's state unconditionally put the *sidebar* row into rename mode when
+   * the folder had been created from the explorer, and moved focus there.
+   */
+  const addFolder = async (parentId: number | null = null): Promise<number | null> => {
+    const res = await createFolder("New folder", parentId);
     if (res.error) {
       toast.error("Failed to create folder");
-      return;
+      return null;
     }
-    dispatch(upsertDiagramFolder(res.response.data));
+    const folder = res.response.data;
+    dispatch(upsertDiagramFolder(folder));
+    // Or the new folder would be created inside one that is shut, and vanish.
+    if (parentId !== null) dispatch(expandFolder(parentId));
+    return folder.id;
+  };
+
+  /** The sidebar's own create: every folder is born "New folder", so open its row into rename. */
+  const addFolderInTree = async (parentId: number | null = null) => {
+    const id = await addFolder(parentId);
+    if (id !== null) setRenaming(rowKey("folder", id));
   };
 
   const rename = async (id: number, name: string) => {
+    setRenaming(null);
     const res = await renameFolder(id, name);
     if (res.error) {
       toast.error("Failed to rename folder");
       return;
     }
     dispatch(upsertDiagramFolder(res.response.data));
+  };
+
+  const renameDiagram = async (id: number, title: string) => {
+    setRenaming(null);
+    const res = await renameDiagramTitle(id, title);
+    if (res.error) {
+      toast.error(res.error.message);
+      return;
+    }
+    // The server's copy, which may carry a "… 2" suffix from a title clash. The open editor reads
+    // its title back off this row, so it follows a rename made from the tree.
+    dispatch(upsertDiagram(summaryOf(res.response.data)));
   };
 
   /**
@@ -212,20 +282,18 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     return item.kind === "diagram" || !isDescendant(folders, folderId, item.id);
   };
 
-  const dropInto = async (folderId: number | null) => {
-    const item = dragRef.current;
-    dragRef.current = null;
-    setDragging(null);
-    setDropTarget(null);
-    setRootDragOver(false);
-    if (item === null) return;
-
+  /**
+   * Moves a row into `folderId` (null = the root level). Shared by the sidebar tree's drag and the
+   * explorer grid's.
+   *
+   * Applied locally first and rolled back if the server refuses: awaiting the round-trip before
+   * redrawing left the row sitting under the cursor after the drop — the drag felt like it stuck
+   * on release.
+   */
+  const moveRow = async (item: DragItem, folderId: number | null) => {
     // Open the target, or the row just dropped would vanish into a collapsed folder.
     if (folderId !== null) dispatch(expandFolder(folderId));
 
-    // Moves apply locally first and roll back if the server refuses. Awaiting the round-trip
-    // before redrawing left the row sitting under the cursor after the drop — the drag felt like
-    // it stuck on release.
     if (item.kind === "diagram") {
       const moved = diagrams.find((d) => d.id === item.id);
       if (moved === undefined || moved.folderId === folderId) return;
@@ -248,8 +316,17 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     }
   };
 
+  const dropInto = (folderId: number | null) => {
+    const item = dragRef.current;
+    dragRef.current = null;
+    setDragging(null);
+    setDropTarget(null);
+    setRootDragOver(false);
+    if (item !== null) void moveRow(item, folderId);
+  };
+
   // The root level, split across the two sections below.
-  const rootDiagrams = diagramsIn(diagrams, null);
+  const rootDiagrams = itemsIn(diagrams, null);
   const rootFolders = childFolders(folders, null);
 
   // Both sections render the same tree, filtered to one kind of row.
@@ -263,8 +340,14 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     onToggle: toggleFolder,
     onOpenDiagram: (id: number) => navigate(ROUTES.DIAGRAMS_DETAIL(id)),
     onDeleteDiagram: remove,
-    onRenameFolder: rename,
     onDeleteFolder: removeFolder,
+    renaming,
+    onStartRename: setRenaming,
+    onCancelRename: () => setRenaming(null),
+    onRenameFolder: rename,
+    onRenameDiagram: renameDiagram,
+    onNewFolderIn: (parentId: number | null) => void addFolderInTree(parentId),
+    onNewDiagramIn: create,
     dragRef,
     dragging,
     onDragging: (item: DragItem | null) => {
@@ -314,6 +397,22 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     <SidebarToggle isOpen={sidebarOpen} onToggle={() => setSidebarOpen((open) => !open)} label="diagram sidebar" />
   );
 
+  /** The editor's toolbar head: the toggle, plus the way back to the folder browser. */
+  const editorLeading = (
+    <>
+      {sidebarToggle}
+      <button
+        type="button"
+        onClick={() => navigate(ROUTES.DIAGRAMS)}
+        aria-label="Browse folders"
+        title="Browse folders"
+        className="shrink-0 cursor-pointer rounded-lg p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+      >
+        <FolderOpen className="size-4.5" />
+      </button>
+    </>
+  );
+
   return (
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* The drag preview. The native ghost is suppressed because browsers rasterize it at 1x —
@@ -360,13 +459,13 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
         <div className={sidebarShellInner(sidebarOpen)}>
           <MainNavbar />
           <div className="flex h-11.5 shrink-0 items-center gap-x-1 px-2">
-            <button type="button" onClick={create} className={sidebarNavRow(false, "flex-1 text-white")}>
+            <button type="button" onClick={() => create()} className={sidebarNavRow(false, "flex-1 text-white")}>
               <SquarePenIcon className="size-4.5" />
               New diagram
             </button>
             <button
               type="button"
-              onClick={addFolder}
+              onClick={() => void addFolderInTree()}
               aria-label="New folder"
               title="New folder"
               className="shrink-0 cursor-pointer rounded-lg p-2 text-neutral-500 hover:bg-neutral-800 hover:text-white"
@@ -436,19 +535,39 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
               diagram={diagram}
               onCreated={handleCreated}
               onSaved={(saved) => dispatch(upsertDiagram(summaryOf(saved)))}
-              leading={sidebarToggle}
+              // So a rename from the tree reaches the toolbar of the diagram it renamed.
+              listTitle={diagrams.find((d) => d.id === openId)?.title}
+              leading={editorLeading}
             />
           </Suspense>
         ) : (
-          <>
-            {/* Matches the editor's toolbar height so the toggle sits in the same place either way. */}
-            <div className="flex h-11.5 shrink-0 items-center border-b border-neutral-800 px-2 pt-2 pb-2">
-              {sidebarToggle}
-            </div>
-            <div className="flex flex-1 items-center justify-center caption-small-regular text-neutral-500">
-              Select or create a diagram
-            </div>
-          </>
+          // With nothing open the pane browses instead of sitting empty — the same folders as the
+          // sidebar, as cards, the way a file manager shows them.
+          <ExplorerGrid
+            folders={folders}
+            items={diagrams}
+            folderId={browsingFolderId}
+            onOpenFolder={browseFolder}
+            onOpenItem={(id) => navigate(ROUTES.DIAGRAMS_DETAIL(id))}
+            itemIcon={Workflow}
+            itemNoun="diagram"
+            rootLabel="Diagrams"
+            onNewFolder={addFolder}
+            onNewItem={create}
+            onRenameFolder={(id, name) => void rename(id, name)}
+            onRenameItem={(id, title) => void renameDiagram(id, title)}
+            onDeleteFolder={(id) => void removeFolder(id)}
+            onDeleteItem={(id) => void remove(id)}
+            onMove={(item, targetId) =>
+              void moveRow(item.kind === "item" ? { kind: "diagram", id: item.id } : item, targetId)
+            }
+            header={
+              // Matches the editor's toolbar height so the toggle sits in the same place either way.
+              <div className="flex h-11.5 shrink-0 items-center border-b border-neutral-800 px-2 pt-2 pb-2">
+                {sidebarToggle}
+              </div>
+            }
+          />
         )}
       </main>
     </div>

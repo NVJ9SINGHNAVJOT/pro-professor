@@ -20,6 +20,7 @@ const note = (id: number, title: string, tags: string[] = []): NoteSummary => ({
   id,
   title,
   tags,
+  folderId: null,
   updatedAt: "2026-08-02T00:00:00Z",
 });
 

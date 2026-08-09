@@ -1,8 +1,13 @@
 import { useRef, useState } from "react";
 import { PauseIcon, PlayIcon } from "lucide-react";
-import { formatTime } from "@/modules/chat/utils";
+import { formatTime } from "@/utils/stringFormat";
 
-/** Themed audio player — replaces the browser's default <audio controls> chrome. */
+/**
+ * Themed audio player — replaces the browser's default `<audio controls>` chrome.
+ *
+ * Global rather than chat-scoped: chat attachments and the storage browser's media viewer both
+ * play audio, and modules may not import from one another.
+ */
 const AudioPlayer = ({ src }: { src: string }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);

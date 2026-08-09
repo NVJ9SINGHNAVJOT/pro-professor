@@ -118,7 +118,7 @@ A WebSocket lives at `/ws` ([AppWebSocketHandler.java](../backend/central-server
 2. **MediaService** forwards the bytes to the **Storage Server**, then persists only a reference row (storage UUID + metadata) in Postgres and returns the media id + a **direct Storage Server URL** ([`MediaService.toResponse`](../backend/central-server/src/main/java/com/proprofessor/server/media/MediaService.java)). The same `toResponse` also serializes attachments on chat-history load ([`ChatMapper`](../backend/central-server/src/main/java/com/proprofessor/server/chat/mapper/ChatMapper.java)), so every attachment the frontend sees already carries its download URL.
 3. The returned media id is passed as `attachmentIds` in a subsequent chat send; `ChatService` links it to the user message.
 4. Downloads are **not proxied**: the browser streams bytes straight from the Storage Server using the `url` from step 2 (range requests supported). Note `![[image.png]]` embeds resolve by *filename*, which storage can't look up — so Central Server resolves them **when it serves the note** and returns an `embedUrls` map (filename → direct storage URL) on the note payload; the frontend renders `<img>` straight from storage. Either way, file bytes never pass through the JVM.
-5. **Browsing and deleting** happens in the frontend at **Settings → Storage** ([StoragePanel.tsx](../frontend/src/modules/settings/components/StoragePanel.tsx)) — the Storage Server has no UI of its own. `GET /api/v1/media` proxies the Storage Server's own paginated listing (the **filesystem** is the source of truth, so files with no Postgres row appear too), and `DELETE /api/v1/media/{storageId}` removes the file plus its reference row. Both go through Central Server because the Storage Server sends no CORS headers; only file bytes are fetched cross-origin. Keyed by **storage UUID**, not the `media` row id, since a listed file may have no row.
+5. **Browsing and deleting** happens in the frontend at **Settings → Storage** ([StoragePanel.tsx](../frontend/src/modules/settings/components/StoragePanel.tsx)) — the Storage Server has no UI of its own. Cards render at a small/medium/large size the user picks, persisted to `localStorage`; clicking an image, video or audio thumbnail opens it full-screen in [MediaViewer.tsx](../frontend/src/components/common/MediaViewer.tsx) (documents and archives have no viewer and keep Download as their only action). `GET /api/v1/media` proxies the Storage Server's own paginated listing (the **filesystem** is the source of truth, so files with no Postgres row appear too), and `DELETE /api/v1/media/{storageId}` removes the file plus its reference row. Both go through Central Server because the Storage Server sends no CORS headers; only file bytes are fetched cross-origin. Keyed by **storage UUID**, not the `media` row id, since a listed file may have no row.
 6. A delete is **refused with 409 while anything references the file** — a chat attachment (`message_attachments` has no cascade, so dropping the media would leave a dead link in history) or a note `![[file.png]]` embed, read from `note_links` (every note save rebuilds it via `NotesService.indexRefs`, AI edits and revision restores included). Note usage is credited only to the upload an embed actually resolves to — the **newest** with that filename, matching `MediaService.urlByFilename` — so re-uploading a filename leaves the superseded copy deletable. The same counts ride along on each `GET /api/v1/media` item as `usage: { chatMessages, notes }`, which the browser renders as an "In use" badge and a locked delete button, so a refusal is visible before you click.
 7. Still uncovered: images embedded **by URL** (`![alt](http://…/api/media/{uuid}/file)`) are plain Markdown and leave no `note_links` row, so the guard can't see them.
 
@@ -160,7 +160,7 @@ Each conversation persists its current inference settings on the `conversations`
 ### 2.8 Database schema & migrations
 
 Postgres schema is a **single consolidated Flyway migration** (`V1__init_schema.sql`) + **jOOQ**
-codegen — no incremental migrations ride alongside it. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
+codegen — no incremental migrations ride alongside it. Because the dev DB is disposable (see [database-rules.md](../backend/central-server/docs/database-rules.md)), schema changes edit `V1` directly and recreate the DB rather than stacking incremental migrations. Workflow after a schema edit: clean/drop the DB → `task migrate` → `task codegen` → recompile. Tables: `models`, `conversations`, `messages`, `media`, `message_attachments`, the notes tables (`note_folders`, `notes`, `tags`, `note_tags`, `note_links`, `note_revisions` — see [notes-flow.md](notes-flow.md)), the diagram tables (`diagram_folders`, `diagrams` — see [diagram-flow.md](diagram-flow.md)), and `app_settings` — all in `V1`.
 
 ### 2.8a Global search (⌘K)
 
@@ -185,9 +185,9 @@ than ⌘Space, which macOS reserves for Spotlight; the notes command palette kep
 
 An Obsidian-like Markdown notes workspace at `/notes` (backend vertical
 `com.proprofessor.server.notes`, frontend `modules/notes`): wiki-links/backlinks/embeds, tags,
-Postgres full-text search, inline Mermaid diagrams, a graph view (an interactive force-directed
-canvas, or a generated Mermaid hierarchy), and one AI note update (local models) that **only
-proposes**: it streams the rewritten note back for review and never writes it, so applying is an
+nested folders (`note_folders`) with drag-and-drop, Postgres full-text search, inline Mermaid
+diagrams, a graph view (an interactive force-directed canvas, or a generated Mermaid hierarchy),
+and one AI note update (local models) that **only proposes**: it streams the rewritten note back for review and never writes it, so applying is an
 ordinary undoable editor edit the user still has to save. A note-scoped chat panel reuses the chat
 SSE endpoint with a per-turn `noteContext`, marks itself with `noteChat` so its threads stay out of
 the chat history, and applies replies to the note only on request. Full architecture and flow: [notes-flow.md](notes-flow.md).
@@ -198,8 +198,9 @@ A manual diagram editor at `/diagrams` (backend vertical `com.proprofessor.serve
 frontend `modules/diagram`): the user draws in an **Excalidraw** canvas and the scene JSON
 (`{ type, elements, appState, files }`) is stored inline in Postgres like a note, with debounced
 autosave and professional (non-hand-drawn) styling defaults. The sidebar organizes diagrams into
-nested folders (`diagram_folders`) with drag-and-drop; deleting a folder or a diagram is refused
-while any note still links to a diagram involved. Notes reference a standalone diagram with a
+nested folders (`diagram_folders`) with drag-and-drop, and a folder's own right-click menu creates
+diagrams and subfolders inside it; deleting a folder or a diagram is refused while any note still
+links to a diagram involved. Notes reference a standalone diagram with a
 `[[Title.diagram]]` link that opens the diagram page; inline note diagrams use Mermaid.
 There is no AI in diagrams. Full architecture and flow: [diagram-flow.md](diagram-flow.md).
 

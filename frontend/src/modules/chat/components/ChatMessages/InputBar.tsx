@@ -3,6 +3,7 @@ import { ArrowUpIcon, FileIcon, LoaderCircleIcon, MicIcon, PaperclipIcon, Square
 import type { MediaAttachment } from "@/services/operations/media/media.api";
 import type { DictationState } from "@/modules/chat/hooks/useDictation";
 import { cn } from "@/lib/utils";
+import { mediaKind } from "@/utils/media";
 
 /** Voice-mode glyph: a symmetric audio waveform, shown on the button that enters voice chat. */
 const WaveformIcon = ({ className }: { className?: string }) => (
@@ -78,7 +79,7 @@ const InputBar = memo(function InputBar({
               key={a.id}
               className="group relative flex items-center gap-2 rounded-xl bg-neutral-700 py-1.5 pl-2 pr-1.5 caption-small-regular text-neutral-200"
             >
-              {a.mimeType.startsWith("image/") ? (
+              {mediaKind(a.mimeType) === "image" ? (
                 <img src={a.url} alt={a.originalFilename} className="size-9 rounded-lg object-cover" />
               ) : (
                 <FileIcon className="size-4 shrink-0" />

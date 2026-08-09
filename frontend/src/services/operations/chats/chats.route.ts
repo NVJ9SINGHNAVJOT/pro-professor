@@ -6,6 +6,7 @@ const chatsEndPoints = {
   GET_ALL: `${BASE_URL_SERVER}/chats`,
   SEARCH: `${BASE_URL_SERVER}/chats/search`,
   GET_ONE: (id: number) => `${BASE_URL_SERVER}/chats/${id}`,
+  RENAME: (id: number) => `${BASE_URL_SERVER}/chats/${id}/title`,
   DELETE_ONE: (id: number) => `${BASE_URL_SERVER}/chats/${id}`,
 };
 
@@ -67,6 +68,11 @@ export type GetConversationResponse = {
   data: ConversationDetail;
 };
 
+export type RenameConversationResponse = {
+  message: string;
+  data: ConversationSummary;
+};
+
 export const chatsRoute = {
   getConversations: createRoute<[], GetConversationsResponse>(() => ({
     method: "GET",
@@ -81,6 +87,13 @@ export const chatsRoute = {
   getConversation: createRoute<[id: number], GetConversationResponse>((id) => ({
     method: "GET",
     url: chatsEndPoints.GET_ONE(id),
+  })),
+
+  /** The one title a user sets by hand — every other one is derived from the conversation itself. */
+  renameConversation: createRoute<[id: number, title: string], RenameConversationResponse>((id, title) => ({
+    method: "PUT",
+    url: chatsEndPoints.RENAME(id),
+    data: { title },
   })),
 
   deleteConversation: createRoute<[id: number], { message: string }>((id) => ({

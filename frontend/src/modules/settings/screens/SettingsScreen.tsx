@@ -8,7 +8,7 @@ const SettingsScreen = () => {
       <SettingsSideBar />
       <section className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         {/* One container for every section, so the content column never shifts between them */}
-        <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-6">
+        <div className="mx-auto w-full max-w-7xl px-6 pb-16 pt-6">
           <Outlet />
         </div>
       </section>

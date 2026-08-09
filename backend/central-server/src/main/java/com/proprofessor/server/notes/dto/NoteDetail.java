@@ -14,6 +14,7 @@ import java.util.Map;
  * @param tags        the note's tags (frontmatter + inline), sorted
  * @param embedUrls   image {@code ![[file.png]]} embeds → their direct storage-server URL, so the
  *                    browser loads embedded images straight from storage (empty when the note has none)
+ * @param folderId    enclosing folder, or null at the root level
  * @param createdAt   creation time
  * @param updatedAt   last edit
  */
@@ -24,6 +25,7 @@ public record NoteDetail(
         Map<String, Object> frontmatter,
         List<String> tags,
         Map<String, String> embedUrls,
+        Long folderId,
         Instant createdAt,
         Instant updatedAt
 ) {

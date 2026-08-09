@@ -11,6 +11,7 @@ import org.jooq.Record;
 import org.jooq.impl.DSL;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,11 +116,12 @@ public class NotesRepository {
                 .fetchOptional(this::toRow);
     }
 
-    public NoteRow insert(String title, String content, String frontmatterJson) {
+    public NoteRow insert(String title, String content, String frontmatterJson, Long folderId) {
         Long id = dsl.insertInto(NOTES)
                 .set(NOTES.TITLE, title)
                 .set(NOTES.CONTENT, content)
                 .set(NOTES.FRONTMATTER, JSONB.valueOf(frontmatterJson))
+                .set(NOTES.FOLDER_ID, folderId)
                 .returning(NOTES.ID)
                 .fetchOne(NOTES.ID);
         return findById(id).orElseThrow();
@@ -132,6 +134,25 @@ public class NotesRepository {
                 .set(NOTES.FRONTMATTER, JSONB.valueOf(frontmatterJson))
                 .where(NOTES.ID.eq(id))
                 .execute();
+    }
+
+    /** Moves a note between folders — null is the root level. */
+    public void updateFolder(long id, Long folderId) {
+        dsl.update(NOTES)
+                .set(NOTES.FOLDER_ID, folderId)
+                .where(NOTES.ID.eq(id))
+                .execute();
+    }
+
+    /** Every note sitting directly in any of these folders — the notes a folder delete takes. */
+    public List<NoteRow> findByFolderIds(Collection<Long> folderIds) {
+        if (folderIds.isEmpty()) {
+            return List.of();
+        }
+        return dsl.select()
+                .from(NOTES)
+                .where(NOTES.FOLDER_ID.in(folderIds))
+                .fetch(this::toRow);
     }
 
     /** Rename only — the content and its derived columns stay as they are. */
@@ -228,6 +249,7 @@ public class NotesRepository {
                 r.get(NOTES.TITLE),
                 r.get(NOTES.CONTENT),
                 frontmatter == null ? "{}" : frontmatter.data(),
+                r.get(NOTES.FOLDER_ID),
                 r.get(NOTES.CREATED_AT).toInstant(),
                 r.get(NOTES.UPDATED_AT).toInstant()
         );

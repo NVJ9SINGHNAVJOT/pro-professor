@@ -24,6 +24,12 @@ interface DiagramEditorProps {
    * only patches local state, it doesn't refetch anything.
    */
   onSaved?: (diagram: DiagramDetail) => void;
+  /**
+   * The title on this diagram's list row. The row can be renamed from the tree while the editor is
+   * open, and this component is deliberately *not* remounted for that — without this the toolbar
+   * would keep showing the old name until the next navigation.
+   */
+  listTitle?: string;
   /** Rendered at the head of the toolbar — the screen puts its sidebar toggle here. */
   leading?: ReactNode;
 }
@@ -35,7 +41,7 @@ type SaveState = "idle" | "saving" | "saved";
  * the diagram row. Excalidraw owns the scene state and undo history; we debounce-save on
  * change. Diagrams are drawn by the user — there is no AI generation/editing.
  */
-const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorProps) => {
+const DiagramEditor = ({ diagram, onCreated, onSaved, listTitle, leading }: DiagramEditorProps) => {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [title, setTitle] = useState(diagram?.title ?? "");
@@ -68,6 +74,26 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, leading }: DiagramEditorPr
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, []);
+
+  /**
+   * Adopts a rename made from the tree, which patches this diagram's list row without remounting
+   * the editor. Adjusted during render rather than in an effect — React's documented way to react
+   * to a changed prop, and it lands before the stale title is ever painted.
+   *
+   * A title this component committed itself arrives back here too, but sets the same values it
+   * already holds, so React bails out of the extra render.
+   */
+  const [seenListTitle, setSeenListTitle] = useState(listTitle);
+  if (listTitle !== seenListTitle) {
+    setSeenListTitle(listTitle);
+    // The *first* title a draft's row reports is the one its creating save chose, and that save
+    // already decided whether to adopt it (the user may have typed on since). Only later changes
+    // are renames from elsewhere.
+    if (seenListTitle !== undefined && listTitle !== undefined) {
+      setTitle(listTitle);
+      setSavedTitle(listTitle);
+    }
+  }
 
   const titleRef = useRef(title);
   useEffect(() => {

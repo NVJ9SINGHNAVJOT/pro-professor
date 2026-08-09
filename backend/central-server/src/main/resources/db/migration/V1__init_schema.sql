@@ -115,18 +115,37 @@ CREATE TABLE message_attachments
     PRIMARY KEY (message_id, media_id)
 );
 
+-- ── note_folders ──────────────────────────────────────────────────────────────
+-- Nested folders for the note explorer, the same shape as diagram_folders.
+-- Addressed by id, never by name, so sibling names may repeat.
+-- NULL parent_id = root level. No updated_at: nothing reads it, folders sort by name.
+-- Declared above `notes` for the foreign key.
+CREATE TABLE note_folders
+(
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(255) NOT NULL,
+    parent_id  BIGINT       REFERENCES note_folders (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX note_folders_parent_id_idx ON note_folders (parent_id);
+
 -- ── notes ─────────────────────────────────────────────────────────────────────
 -- Markdown notes (Obsidian-like). The full source lives in `content`; the YAML
 -- frontmatter block (if any) is also parsed server-side into `frontmatter` jsonb
 -- so tags/aliases can be queried without re-parsing Markdown. content_tsv is a
 -- generated tsvector over title + content, GIN-indexed for keyword search
 -- (websearch_to_tsquery + ts_rank in NotesRepository.search).
+-- NULL folder_id = root level; deleting a folder deletes the notes inside it.
+-- Titles stay globally unique even so — `[[wiki links]]` resolve by title alone
+-- (note_links.target_ref), so scoping them per folder would break every link.
 CREATE TABLE notes
 (
     id          BIGSERIAL PRIMARY KEY,
     title       VARCHAR(255) NOT NULL,
     content     TEXT         NOT NULL,
     frontmatter JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    folder_id   BIGINT       REFERENCES note_folders (id) ON DELETE CASCADE,
     content_tsv tsvector GENERATED ALWAYS AS (
         to_tsvector('english', title || ' ' || content)
         ) STORED,
@@ -140,6 +159,8 @@ CREATE TRIGGER trg_notes_updated_at
     FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
 
 CREATE INDEX notes_content_tsv_idx ON notes USING GIN (content_tsv);
+
+CREATE INDEX notes_folder_id_idx ON notes (folder_id);
 
 -- ── tags ──────────────────────────────────────────────────────────────────────
 -- Normalized tag names (lowercase, no leading '#'), shared across notes.

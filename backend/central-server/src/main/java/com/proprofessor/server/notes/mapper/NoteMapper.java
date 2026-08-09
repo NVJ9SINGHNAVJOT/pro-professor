@@ -3,8 +3,10 @@ package com.proprofessor.server.notes.mapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.proprofessor.server.common.db.NoteFolderRow;
 import com.proprofessor.server.common.db.NoteRow;
 import com.proprofessor.server.notes.dto.NoteDetail;
+import com.proprofessor.server.notes.dto.NoteFolderSummary;
 import com.proprofessor.server.notes.dto.NoteSummary;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +23,11 @@ public class NoteMapper {
     }
 
     public NoteSummary toSummary(NoteRow note, List<String> tags) {
-        return new NoteSummary(note.id(), note.title(), tags, note.updatedAt());
+        return new NoteSummary(note.id(), note.title(), tags, note.folderId(), note.updatedAt());
+    }
+
+    public NoteFolderSummary toFolderSummary(NoteFolderRow folder) {
+        return new NoteFolderSummary(folder.id(), folder.name(), folder.parentId());
     }
 
     public NoteDetail toDetail(NoteRow note, List<String> tags, Map<String, String> embedUrls) {
@@ -32,6 +38,7 @@ public class NoteMapper {
                 parseFrontmatter(note.frontmatterJson()),
                 tags,
                 embedUrls,
+                note.folderId(),
                 note.createdAt(),
                 note.updatedAt()
         );

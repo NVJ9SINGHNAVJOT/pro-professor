@@ -1,5 +1,6 @@
 import { memo, type RefObject } from "react";
 import {
+  FolderOpenIcon,
   HistoryIcon,
   PanelRightCloseIcon,
   PanelRightOpenIcon,
@@ -39,6 +40,8 @@ interface NotesBarProps {
   setRightPanel: (panel: NoteRightPanel) => void;
   noteListOpen: boolean;
   onToggleNoteList: () => void;
+  /** Back to the folder browser in this pane — it is only shown while a note is open. */
+  onBrowse: () => void;
   setGraphOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   onSave: () => void;
 }
@@ -62,12 +65,22 @@ const NotesBar = memo(function NotesBar({
   setRightPanel,
   noteListOpen,
   onToggleNoteList,
+  onBrowse,
   setGraphOpen,
   onSave,
 }: NotesBarProps) {
   return (
     <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
       <SidebarToggle isOpen={noteListOpen} onToggle={onToggleNoteList} label="note explorer" />
+      <button
+        type="button"
+        onClick={onBrowse}
+        aria-label="Browse folders"
+        title="Browse folders"
+        className="shrink-0 cursor-pointer rounded-lg p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+      >
+        <FolderOpenIcon className="size-4.5" />
+      </button>
       <EditableTitle
         value={title}
         savedValue={savedTitle}

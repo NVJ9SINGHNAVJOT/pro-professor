@@ -6,3 +6,11 @@ export function trimWhitespaceAndNewlines(value: string): string {
   // Step 3: Join the lines back together
   return lines.join("\n");
 }
+
+/** Seconds → `m:ss`, for media transport labels. Non-finite input (a stream still loading) is 0:00. */
+export const formatTime = (seconds: number): string => {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};

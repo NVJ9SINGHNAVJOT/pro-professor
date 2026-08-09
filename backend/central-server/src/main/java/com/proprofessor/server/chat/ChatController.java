@@ -1,11 +1,13 @@
 package com.proprofessor.server.chat;
 
 import com.proprofessor.server.chat.ChatService.ChatStreamListener;
+import com.proprofessor.server.chat.dto.ChatRenameRequest;
 import com.proprofessor.server.chat.dto.ChatSearchResponse;
 import com.proprofessor.server.chat.dto.ChatSendRequest;
 import com.proprofessor.server.chat.dto.ChatStreamEvent;
 import com.proprofessor.server.chat.dto.ConversationDetail;
 import com.proprofessor.server.chat.dto.ConversationListResponse;
+import com.proprofessor.server.chat.dto.ConversationSummary;
 import com.proprofessor.server.common.dto.ApiResponse;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ClientDisconnectedException;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -136,6 +139,13 @@ public class ChatController {
     @GetMapping("/{id}")
     public ApiResponse<ConversationDetail> get(@PathVariable Long id) {
         return ApiResponse.ok(chatService.getConversation(id));
+    }
+
+    /** Renames a conversation from the sidebar — every other title is derived, this one is chosen. */
+    @PutMapping("/{id}/title")
+    public ApiResponse<ConversationSummary> rename(@PathVariable Long id,
+                                                   @RequestBody ChatRenameRequest request) {
+        return ApiResponse.ok("Conversation renamed.", chatService.renameConversation(id, request.title()));
     }
 
     @DeleteMapping("/{id}")

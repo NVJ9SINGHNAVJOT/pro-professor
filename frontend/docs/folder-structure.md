@@ -168,6 +168,7 @@ rather than restyling by hand:
 | `<SidebarRowMenu>` | wraps a row; holds that row's actions, opened by right-click |
 | `<SidebarSection>` | a collapsible group of rows under a small header + count (the note explorer's "Tags", the diagram sidebar's "Diagrams" / "Folders") |
 | `<SidebarToggle>` | the collapse/expand control for a whole sidebar |
+| `<InlineRename>` | the in-place rename field a row swaps its label for — see below |
 
 **A sidebar's collapse toggle belongs in the main pane, never inside the sidebar.** A button that
 collapses along with its own panel leaves no way back. Chat, notes and diagrams all put one
@@ -282,15 +283,56 @@ in `index.css`; the app is dark-only and never toggles a theme, so the class is 
 behind a toggle (revision history, graph view), `![[…]]` transclusions, paginated lists, and SSE
 streams. The rule is **on arrival → loader; on demand → `useApi`**.
 
+## Renaming in place
+
+Rows rename through [components/common/InlineRename.tsx](../src/components/common/InlineRename.tsx)
+— sidebar rows, folder rows, explorer cards — with the same Enter-commits / Escape-reverts contract
+as `EditableTitle` one level up. Two things it exists to get right, both easy to lose by hand-rolling
+a field:
+
+- **It must not shift the row.** The label it replaces is a bare `<span>`, so any padding on the
+  input jumps the text sideways the moment rename mode opens. `-mx-1 px-1` cancels out — the text
+  stays put while the box still gets breathing room — and the focus outline is a `ring`
+  (a box-shadow), which takes no layout space either.
+- **It takes focus from an effect, not `autoFocus`.** The field is usually mounted by a
+  context-menu action, and taking focus from an effect keeps that deterministic. `SidebarRowMenu`
+  never takes focus itself, so nothing competes for it once the field is up.
+
+Which row is renaming is a **row key** (`rowKey(kind, id, scope?)` in
+[utils/folderTree.ts](../src/utils/folderTree.ts)), not an item id: the same note occupies a row
+under each of its tags *and* one in the folder tree, and only the row that was right-clicked should
+become a field.
+
+## Browsing folders
+
+Notes and diagrams share [components/common/ExplorerGrid.tsx](../src/components/common/ExplorerGrid.tsx)
+— the Drive-style card view their center pane shows when nothing is open. It is generic over
+anything shaped like `{id, name, parentId}` and `{id, title, folderId, updatedAt}`, holds no data of
+its own, and reports gestures back to the screen: double-click opens, right-click a card acts on it,
+right-click the background creates, cards drag onto folder cards to move. The folder being browsed
+is a `?folder=` search param so the view survives a reload and can be linked to.
+
+`onNewFolder` is the one handler that **reports a value back** (the new folder's id, or null on a
+refusal). Every folder is born "New folder", so the new card opens straight into its rename field —
+and rename state belongs to the surface the folder was created from, which the screen doesn't own.
+Creating one from a folder *card* also descends into that folder, since the new folder lands a level
+below what is on screen and its field would otherwise never render.
+
+Both sidebars' trees walk the same pure helpers in
+[utils/folderTree.ts](../src/utils/folderTree.ts) (`childFolders`, `itemsIn`, `descendantIds`,
+`ancestorIds`, `isDescendant`) — global rather than module-scoped precisely because modules may not
+import from one another.
+
 ## Persisted view state
 
 Almost nothing survives a reload, and that is the default to keep: page data comes back from the
-route loaders, and view state is cheap to re-derive. The **one** exception is
+route loaders, and view state is cheap to re-derive. There are two exceptions:
 [`notesGraphSlice`](../src/redux/slices/notesGraphSlice.ts) — the graph view's renderer, camera,
 dragged node positions and filters, which represent arranging work the user would otherwise have to
-redo on every visit.
+redo on every visit — and the storage browser's card size, a one-word preference with no reason to
+be re-picked every visit.
 
-It is the app's only use of `localStorage`, through
+They are the app's only use of `localStorage`, through
 [`utils/localStore.ts`](../src/utils/localStore.ts). Follow that shape rather than reaching for
 `localStorage` directly or adding a persistence library:
 
@@ -301,7 +343,8 @@ It is the app's only use of `localStorage`, through
   nothing, with no error). Version the key **and** the payload.
 - **Writes are throttled and flushed on `pagehide`/`visibilitychange`**, not `beforeunload` — Chrome
   fires that one unreliably. State that changes at gesture rate (a camera on every wheel tick) must
-  never hit storage synchronously per change.
+  never hit storage synchronously per change. A preference that changes at *click* rate uses
+  `writeJson` instead, where throttling would only add latency.
 - **The store wiring is a plain `store.subscribe`** in [`redux/store.ts`](../src/redux/store.ts) that
   reference-compares its slice and bails. An RTK reducer returns the identical object when nothing
   changed, so every unrelated dispatch in the app costs one property read and one `===`.

@@ -14,7 +14,6 @@ import {
   ListIcon,
   ListOrderedIcon,
   MessageSquareIcon,
-  NotebookPenIcon,
   NotebookTextIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -34,14 +33,22 @@ import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
 import { setGraphRenderer } from "@/redux/slices/notesGraphSlice";
-import { notesRoute, type NoteDetail, type NoteSummary } from "@/services/operations/notes/notes.route";
+import { expandFolder, revealFolders } from "@/redux/slices/notesSidebarSlice";
+import {
+  notesRoute,
+  type NoteDetail,
+  type NoteFolderSummary,
+  type NoteSummary,
+} from "@/services/operations/notes/notes.route";
 import { markDraftCreated } from "@/services/client/loadRoute";
+import ExplorerGrid from "@/components/common/ExplorerGrid";
 import NoteList from "@/modules/notes/components/NoteList";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import ContextPanel from "@/modules/notes/components/ContextPanel";
 import RightRail from "@/modules/notes/components/RightRail";
 import NoteChatPanel from "@/modules/notes/components/NoteChatPanel";
 import { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
+import { useNoteFolders } from "@/modules/notes/hooks/useNoteFolders";
 import SplitPane from "@/modules/notes/components/SplitPane";
 import GraphView from "@/modules/notes/components/GraphView";
 import NotesGraphHeader from "@/modules/notes/components/NotesGraphHeader";
@@ -74,11 +81,14 @@ import {
   SCROLL_SYNC_RELEASE_MS,
   type SlashCommand,
 } from "@/modules/notes/constants";
-import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { DRAFT_FOLDER_PARAM, NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { ancestorIds } from "@/utils/folderTree";
 
 interface NotesScreenProps {
   /** The explorer list, loaded by the parent `/notes` route. */
   notes: NoteSummary[];
+  /** The explorer's folders, from the same response. */
+  folders: NoteFolderSummary[];
   /** The note named in the URL, loaded by the route loader; null on `/notes` and `/notes/new`. */
   loadedNote: NoteDetail | null;
   /** Notes linking to the open one, loaded alongside it. */
@@ -93,11 +103,14 @@ const summaryOf = (detail: NoteDetail): NoteSummary => ({
   id: detail.id,
   title: detail.title,
   tags: detail.tags,
+  // Must be carried: `upsertItem` merges the payload over the row, so dropping this would move the
+  // note back to the root on every save.
+  folderId: detail.folderId,
   updatedAt: detail.updatedAt,
 });
 
 /** Obsidian-like three-pane workspace: explorer | editor⟷preview | outline/tags. */
-const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
+const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps) => {
   const noteId = useParams().noteId;
   const navigate = useNavigate();
   const location = useLocation();
@@ -107,7 +120,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // remounting the screen (same route, see NEW_ITEM_ID).
   const isDraft = noteId === NEW_ITEM_ID;
   // A draft opened from an unresolved `[[link]]` carries the title it should start with.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const draftTitle = isDraft ? searchParams.get("title") : null;
 
   const { execute: createNote, loading: creating } = useApi(notesRoute.createNote);
@@ -129,6 +142,33 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
   // wanted default there (nothing to preserve when no note is open yet) and it's what chat does.
   const [noteListOpen, setNoteListOpen] = useState(true);
   const toggleNoteList = useCallback(() => setNoteListOpen((open) => !open), []);
+  // Which folder the center-pane explorer is browsing. In the URL rather than in state so the view
+  // survives a reload and can be linked to; absent = the root.
+  // The folder a draft was started in, carried across this screen's remount — see DRAFT_FOLDER_PARAM.
+  const inParam = Number(searchParams.get(DRAFT_FOLDER_PARAM));
+  const draftFolderId = isDraft && Number.isFinite(inParam) && inParam > 0 ? inParam : null;
+
+  const browseParam = Number(searchParams.get("folder"));
+  const browsingFolderId = Number.isFinite(browseParam) && browseParam > 0 ? browseParam : null;
+  /** Leaves the open note for the folder browser — the pane's other mode. */
+  const handleBrowse = useCallback(() => navigate(ROUTES.NOTES), [navigate]);
+
+  const browseFolder = useCallback(
+    (id: number | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (id === null) next.delete("folder");
+      else next.set("folder", String(id));
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // The same mutations the explorer pane in the sidebar performs — one hook, two surfaces.
+  const { deleteNote, addFolder, renameFolder, deleteFolder, moveRow } = useNoteFolders(
+    notes,
+    folders,
+    note?.id ?? null,
+  );
   // The graph view is a mode, so it stays local and resets on the remount — but *which renderer* it
   // shows, and everything that renderer has been arranged into, is persisted. See notesGraphSlice.
   const [graphOpen, setGraphOpen] = useState(false);
@@ -225,9 +265,43 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
    * revalidation and would refetch the explorer on every click. (A *seeded* draft, opened from an
    * unresolved `[[link]]`, still clears back to an empty one.)
    */
-  const handleCreate = useCallback(() => {
-    if (!isDraft || draftTitle) navigate(ROUTES.NOTES_NEW);
-  }, [isDraft, draftTitle, navigate]);
+  /**
+   * Opens the blank draft, remembering which folder it should be filed in once it is saved.
+   *
+   * The folder rides in the URL (`?in=`), not in a ref: this screen **remounts** on the way to
+   * `/notes/new` — `/notes` and `/notes/:noteId` are separate route entries — so anything held in
+   * component state is gone before the first save can read it, and every note created from a
+   * folder's menu was silently filed at the root.
+   */
+  const startDraft = useCallback(
+    (folderId: number | null) => {
+      // Or the note would be created inside a folder that is shut, and appear to go nowhere.
+      if (folderId !== null) dispatch(expandFolder(folderId));
+      const target = ROUTES.NOTES_NEW_IN(folderId);
+      // Re-navigating to the URL we're on reads as a revalidation and refetches the explorer — but
+      // a *different* target folder (or a seeded draft) still has to move.
+      if (`${location.pathname}${location.search}` !== target) navigate(target);
+    },
+    [location.pathname, location.search, navigate, dispatch],
+  );
+
+  const handleCreate = useCallback(() => startDraft(null), [startDraft]);
+  const handleCreateIn = useCallback((folderId: number) => startDraft(folderId), [startDraft]);
+
+  /**
+   * Open the chain of folders leading to the note named in the URL, so arriving by reload or by a
+   * `[[wiki link]]` shows it in place instead of hiding it inside collapsed parents.
+   *
+   * Keyed on the note's id, not on `folders`: that array's identity changes on every save, and
+   * re-running would force folders back open each time the user collapsed one.
+   */
+  const revealedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (note === null || revealedFor.current === note.id) return;
+    revealedFor.current = note.id;
+    const chain = ancestorIds(folders, note.folderId);
+    if (chain.length > 0) dispatch(revealFolders(chain));
+  }, [note, folders, dispatch]);
 
   /** @returns whether the note is now persisted — false on a refused or failed save. */
   const handleSave = useCallback(async (): Promise<boolean> => {
@@ -236,7 +310,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       if (!isDraft) return false;
       // First save of a draft: the row is born here. A blank title lands as "Untitled"
       // server-side, and a frontmatter `title:` still wins — same as any other save.
-      const res = await createNote({ title, content });
+      const res = await createNote({ title, content, folderId: draftFolderId });
       if (res.error) {
         toast.error(res.error.message || "Failed to create note");
         return false;
@@ -272,6 +346,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     updateNote,
     seedFromDetail,
     applyDetail,
+    draftFolderId,
   ]);
 
   /**
@@ -301,6 +376,33 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     [note, savedTitle, renameNote, dispatch],
   );
   const handleRenameTitleVoid = useCallback((next: string) => void handleRenameTitle(next), [handleRenameTitle]);
+
+  /**
+   * Commits a rename from an explorer row — the same request, but for any note rather than the open
+   * one. When it *is* the open one, the editor's own title state has to follow it, or the toolbar
+   * would keep showing the old name until the next navigation.
+   */
+  const handleRenameRow = useCallback(
+    async (id: number, next: string) => {
+      const res = await renameNote(id, next);
+      if (res.error) {
+        toast.error(res.error.message || "Failed to rename note");
+        return;
+      }
+      const detail = res.response.data;
+      dispatch(upsertNote(summaryOf(detail)));
+      if (note?.id !== id) return;
+      setNote(detail);
+      // The server's copy, which may carry a "… 2" suffix from a title clash.
+      setTitle(detail.title);
+      setSavedTitle(detail.title);
+    },
+    [note, renameNote, dispatch],
+  );
+  const handleRenameRowVoid = useCallback(
+    (id: number, next: string) => void handleRenameRow(id, next),
+    [handleRenameRow],
+  );
 
   /**
    * Runs an AI action against the note — saving it first when the buffer is dirty.
@@ -900,6 +1002,7 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
             setRightPanel={setRightPanel}
             noteListOpen={noteListOpen}
             onToggleNoteList={toggleNoteList}
+            onBrowse={handleBrowse}
             setGraphOpen={setGraphOpen}
             onSave={handleSave}
           />
@@ -931,25 +1034,40 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
       );
     }
 
+    // With nothing open the pane browses instead of sitting empty — the same folders as the
+    // explorer beside it, as cards, the way a file manager shows them.
     return (
-      <>
-        {/* Same top band as the other two states, so the explorer toggle never disappears. */}
-        <div className="flex h-11.5 shrink-0 items-center border-b border-neutral-800 px-2 pt-2 pb-2">
-          <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-y-3 text-neutral-500">
-          <NotebookPenIcon className="size-10" />
-          <p className="para-small-medium">Select a note or create a new one</p>
-          <button
-            type="button"
-            onClick={() => setGraphOpen(true)}
-            className="flex cursor-pointer items-center gap-x-2 rounded-lg border border-neutral-800 px-3 py-1.5 para-small-medium text-neutral-300 hover:bg-neutral-800"
-          >
-            <WaypointsIcon className="size-4" />
-            Graph view
-          </button>
-        </div>
-      </>
+      <ExplorerGrid
+        folders={folders}
+        items={notes}
+        folderId={browsingFolderId}
+        onOpenFolder={browseFolder}
+        onOpenItem={(id) => navigate(ROUTES.NOTES_DETAIL(id))}
+        itemIcon={NotebookTextIcon}
+        itemNoun="note"
+        rootLabel="Notes"
+        onNewFolder={addFolder}
+        onNewItem={(folderId) => (folderId === null ? handleCreate() : handleCreateIn(folderId))}
+        onRenameFolder={(id, name) => void renameFolder(id, name)}
+        onRenameItem={handleRenameRowVoid}
+        onDeleteFolder={(id) => void deleteFolder(id)}
+        onDeleteItem={(id) => void deleteNote(id)}
+        onMove={(item, targetId) => void moveRow(item.kind === "item" ? { kind: "note", id: item.id } : item, targetId)}
+        header={
+          // Same top band as the other two states, so the explorer toggle never disappears.
+          <div className="flex h-11.5 shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2 pt-2 pb-2">
+            <SidebarToggle isOpen={noteListOpen} onToggle={toggleNoteList} label="note explorer" />
+            <button
+              type="button"
+              onClick={() => setGraphOpen(true)}
+              className="ml-auto flex cursor-pointer items-center gap-x-2 rounded-lg px-2 py-1 para-small-medium text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+            >
+              <WaypointsIcon className="size-4" />
+              Graph view
+            </button>
+          </div>
+        }
+      />
     );
   };
 
@@ -957,7 +1075,15 @@ const NotesScreen = ({ notes, loadedNote, backlinks }: NotesScreenProps) => {
     <div className="flex h-full min-w-minContent overflow-hidden bg-grey text-white">
       {/* eslint-disable-next-line react-hooks/refs -- the Format entries only touch textareaRef inside their run() callbacks (event time, not render) */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={buildPaletteCommands()} />
-      <NoteList notes={notes} onCreate={handleCreate} creating={creating} isOpen={noteListOpen} />
+      <NoteList
+        notes={notes}
+        folders={folders}
+        onCreate={handleCreate}
+        onCreateIn={handleCreateIn}
+        creating={creating}
+        onRename={handleRenameRowVoid}
+        isOpen={noteListOpen}
+      />
 
       {/* Center — toolbar + editor⟷preview (or the graph view) */}
       <section className="flex h-full min-w-0 flex-1 flex-col">{renderCenterSection()}</section>
