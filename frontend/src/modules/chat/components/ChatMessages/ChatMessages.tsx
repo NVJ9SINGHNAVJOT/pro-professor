@@ -21,6 +21,7 @@ import {
   type InferenceParams,
   type SelectedModel,
   type UiMessage,
+  type VoiceSettings,
 } from "@/modules/chat/types";
 import {
   AUTOSCROLL_THRESHOLD_PX,
@@ -45,6 +46,7 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { models, loaded: modelsLoaded } = useAppSelector((state) => state.models);
+  const voiceDefaults = useAppSelector((state) => state.audio.defaults);
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
@@ -53,6 +55,9 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
 
   // per-request inference settings (not persisted; reset on reload)
   const [params, setParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
+  // Voice settings: the app-wide defaults for a draft, the conversation's own once one is open.
+  // Unlike the inference params these are also applied client-side, on every audio call below.
+  const [voice, setVoice] = useState<VoiceSettings>(voiceDefaults);
   const [verbose, setVerbose] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   // context-window usage (tokens) after the latest turn; powers the context meter
@@ -132,6 +137,8 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
       setAttachments([]);
       setSystemPrompt("");
       setUsedTokens(null);
+      // A new chat starts from the app-wide voice defaults, not the last chat's overrides.
+      setVoice(voiceDefaults);
       convIdRef.current = null;
       loadedRef.current = null;
       isNewChatRef.current = true;
@@ -174,6 +181,13 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
     setVerbose(detail.verbose);
     setThinkingEnabled(detail.thinkingEnabled);
     setUsedTokens(detail.lastContextTokens);
+    setVoice({
+      sttModel: detail.sttModel,
+      preferModelAudio: detail.preferModelAudio,
+      ttsVoice: detail.ttsVoice,
+      ttsLangCode: detail.ttsLangCode,
+      ttsSpeed: detail.ttsSpeed,
+    });
     setSelected({
       provider: detail.provider as ModelProvider,
       model: detail.model,
@@ -226,9 +240,13 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
   };
 
   // Synthesize the assistant reply and play it back (used in voice mode).
-  const playReply = useCallback(async (text: string) => {
+  const playReply = useCallback(async (text: string, spokenAs: VoiceSettings) => {
     try {
-      const blob = await audioApi.synthesize(text);
+      const blob = await audioApi.synthesize(text, {
+        voice: spokenAs.ttsVoice,
+        langCode: spokenAs.ttsLangCode,
+        speed: spokenAs.ttsSpeed,
+      });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -356,7 +374,7 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
         paint();
         setStreaming(false);
         finalizeRef.current = null;
-        if (speak && opts?.speak && fullReply.trim()) void playReply(fullReply);
+        if (speak && opts?.speak && fullReply.trim()) void playReply(fullReply, voice);
         else if (opts?.speak) setVoiceMode("idle");
       };
 
@@ -400,6 +418,11 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
           repetitionPenalty: params.repetitionPenalty,
           verbose,
           thinkingEnabled,
+          sttModel: voice.sttModel,
+          preferModelAudio: voice.preferModelAudio,
+          ttsVoice: voice.ttsVoice,
+          ttsLangCode: voice.ttsLangCode,
+          ttsSpeed: voice.ttsSpeed,
         },
         {
           onStart: ({ conversationId, title }) => {
@@ -525,6 +548,7 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
       selected,
       systemPrompt,
       params,
+      voice,
       verbose,
       thinkingEnabled,
       dispatch,
@@ -549,9 +573,9 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
     setVoiceMode("idle");
   };
 
-  // Voice utterance. Audio-capable models receive the clip directly (uploaded as
-  // WAV, sent with empty text); text models are transcribed to text first. Either
-  // way the reply is spoken back.
+  // Voice utterance. An audio-capable model receives the clip directly (uploaded as WAV, sent with
+  // empty text) when this chat prefers that; otherwise the clip is transcribed with the chat's STT
+  // model first. Either way the reply is spoken back.
   const handleUtterance = async (blob: Blob) => {
     if (!selected) {
       toast.error("Select a model first");
@@ -561,14 +585,14 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
     try {
       setVoiceMode("thinking");
       const acceptsAudio = findModalities(selected.provider, selected.model).includes("audio");
-      if (acceptsAudio) {
+      if (acceptsAudio && voice.preferModelAudio) {
         const wav = await blobToWav(blob);
         const file = new File([wav], "utterance.wav", { type: "audio/wav" });
         const media = await mediaApi.upload(file);
         handleSend("", { speak: true, attachments: [media] });
         return;
       }
-      const text = await audioApi.transcribe(blob);
+      const text = await audioApi.transcribe(blob, { model: voice.sttModel });
       if (!text.trim()) {
         toast.error("Didn't catch that — please try again");
         setVoiceMode("idle");
@@ -629,7 +653,7 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
     textarea?.focus();
   }, []);
 
-  const dictation = useDictation(handleTranscript);
+  const dictation = useDictation(handleTranscript, voice.sttModel);
 
   const showEmptyState = isDraft && messages.length === 0;
 
@@ -646,6 +670,7 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
 
   const maxContextTokens = selected ? findMaxContextTokens(selected.provider, selected.model) : null;
   const supportsThinking = selected ? findSupportsThinking(selected.provider, selected.model) : false;
+  const acceptsAudio = Boolean(selected && findModalities(selected.provider, selected.model).includes("audio"));
 
   return (
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-grey text-white">
@@ -661,6 +686,9 @@ const ChatMessages = ({ conversation, sidebarOpen, onToggleSidebar }: ChatMessag
         inputDisabled={inputDisabled}
         params={params}
         onParamsChange={setParams}
+        voice={voice}
+        onVoiceChange={setVoice}
+        acceptsAudio={acceptsAudio}
         systemPrompt={systemPrompt}
         onSystemPromptChange={setSystemPrompt}
         verbose={verbose}

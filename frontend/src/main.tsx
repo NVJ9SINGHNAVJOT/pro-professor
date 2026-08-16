@@ -12,7 +12,7 @@ import HomePage from "@/pages/index";
 import ChatPage from "@/pages/chat/index";
 import NotesPage from "@/pages/notes/index";
 import DiagramsPage from "@/pages/diagrams/index";
-import SettingsLayout, { SettingsNotesPage, SettingsStoragePage } from "@/pages/settings/index";
+import SettingsLayout, { SettingsChatPage, SettingsNotesPage, SettingsStoragePage } from "@/pages/settings/index";
 import ErrorPage from "@/pages/error/index";
 import { rootLoader } from "@/pages/rootLoader";
 import { chatListLoader, chatDetailLoader } from "@/pages/chat/loader";
@@ -109,6 +109,12 @@ const router = createBrowserRouter([
         element: <SettingsLayout />,
         errorElement: <RouteError />,
         children: [
+          {
+            path: "chat",
+            element: <SettingsChatPage />,
+            loader: settingsLoader,
+            errorElement: <RouteError />,
+          },
           {
             path: "notes",
             element: <SettingsNotesPage />,

@@ -1,5 +1,8 @@
 package com.proprofessor.server.audio;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.proprofessor.server.audio.dto.AudioCapabilities;
 import com.proprofessor.server.audio.dto.SpeechRequest;
 import com.proprofessor.server.common.http.HttpClientFactory;
 import com.proprofessor.server.config.properties.AppProperties;
@@ -28,16 +31,28 @@ public class AudioClient {
         this.restClient = HttpClientFactory.forBaseUrl(appProperties.aiCore().baseUrl());
     }
 
+    /** The STT models, TTS voices and language codes the AI core currently offers. */
+    public AudioCapabilities capabilities() {
+        return restClient.get()
+                .uri("/v1/audio/models")
+                .retrieve()
+                .body(AudioCapabilities.class);
+    }
+
     /**
      * Forwards an audio clip to the AI core and returns its transcript.
      *
      * @param audio    the raw audio bytes
      * @param filename original filename — its extension hints the decoder, so it is preserved
+     * @param model    STT repo id to transcribe with, or {@code null}/blank for the AI core's default
      * @return the transcribed text
      */
-    public String transcribe(byte[] audio, String filename) {
+    public String transcribe(byte[] audio, String filename, String model) {
         MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
         form.add("file", new NamedByteArrayResource(audio, filename));
+        if (model != null && !model.isBlank()) {
+            form.add("model", model);
+        }
 
         AiTranscription result = restClient.post()
                 .uri("/v1/audio/transcriptions")
@@ -56,7 +71,8 @@ public class AudioClient {
         return restClient.post()
                 .uri("/v1/audio/speech")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(request)
+                .body(new AiSpeechRequest(
+                        request.input(), request.voice(), request.langCode(), request.speed()))
                 .retrieve()
                 .body(byte[].class);
     }
@@ -78,5 +94,19 @@ public class AudioClient {
 
     /** AI core transcription response shape: {@code {"text": ...}}. */
     private record AiTranscription(String text) {
+    }
+
+    /**
+     * AI core speech request shape. Separate from {@link SpeechRequest} for one field: the AI core
+     * takes {@code lang_code}, and this app's own endpoints stay camelCase. Null fields are dropped
+     * so the AI core falls back to its configured defaults.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record AiSpeechRequest(
+            String input,
+            String voice,
+            @JsonProperty("lang_code") String langCode,
+            Double speed
+    ) {
     }
 }

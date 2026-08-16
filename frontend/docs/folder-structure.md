@@ -44,7 +44,7 @@ src/
 ├── modules/             # [Feature Modules - see above]
 ├── pages/               # Top-level route components that render specific Module Screens and inject global context.
 │                        # Each area also holds its route `loader.ts` (see "Route data loading" below).
-├── redux/               # Global state management: `modelsSlice`, the three sidebar lists (createListSlice), and the two view-state slices (`diagramSidebar`, `notesGraph`) — all other page data lives in route loaders
+├── redux/               # Global state management: `modelsSlice`, `audioSlice` (voice capabilities + defaults), the three sidebar lists (createListSlice), and the two view-state slices (`diagramSidebar`, `notesGraph`) — all other page data lives in route loaders
 ├── services/            # API route definitions and network utility wrappers (e.g., fetch setup)
 ├── socket/              # Global WebSocket configuration and event definitions
 ├── styles/              # Global CSS files and Tailwind configurations (feature-scoped CSS lives beside its component, `@import`ed from index.css)

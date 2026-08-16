@@ -22,6 +22,7 @@ export const ROUTES = {
   DIAGRAMS_NEW: `/diagrams/${NEW_ITEM_ID}`,
   DIAGRAMS_DETAIL: (diagramId: number | string) => `/diagrams/${diagramId}`,
   SETTINGS: "/settings",
+  SETTINGS_CHAT: "/settings/chat",
   SETTINGS_NOTES: "/settings/notes",
   SETTINGS_STORAGE: "/settings/storage",
   ERROR: "/error",

@@ -1,4 +1,4 @@
-import { HardDriveIcon, NotebookPenIcon } from "lucide-react";
+import { HardDriveIcon, MessageSquareIcon, NotebookPenIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import MainNavbar from "@/components/common/MainNavbar";
 import { SIDEBAR_STACK, SIDEBAR_SURFACE, SIDEBAR_WIDTH, sidebarNavRow } from "@/components/common/sidebar";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const sections = [
   { label: "Storage", path: ROUTES.SETTINGS_STORAGE, icon: HardDriveIcon },
+  { label: "Chat", path: ROUTES.SETTINGS_CHAT, icon: MessageSquareIcon },
   { label: "Notes", path: ROUTES.SETTINGS_NOTES, icon: NotebookPenIcon },
 ] as const;
 

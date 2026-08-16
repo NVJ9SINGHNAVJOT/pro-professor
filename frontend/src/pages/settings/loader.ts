@@ -1,6 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { load } from "@/services/client/loadRoute";
+import store from "@/redux/store";
+import { setAudioCapabilities, setVoiceDefaults } from "@/redux/slices/audioSlice";
+import { load, loadOptional } from "@/services/client/loadRoute";
 import { settingsRoute, type AppSettings } from "@/services/operations/settings/settings.route";
+import { audioRoute, type GetAudioCapabilitiesResponse } from "@/services/operations/audio/audio.route";
 import {
   mediaRoute,
   type MediaFile,
@@ -9,14 +12,27 @@ import {
 } from "@/services/operations/media/media.route";
 import { STORAGE_PAGE_SIZE, asCategoryFilter } from "@/modules/settings/constants";
 
+const NO_AUDIO: GetAudioCapabilitiesResponse | null = null;
+
 export type SettingsLoaderData = {
   /** null for sections that don't read app settings (storage browses the media service itself). */
   settings: AppSettings | null;
 };
 
-/** loader for the notes settings section */
+/**
+ * loader for the notes and chat settings sections.
+ *
+ * It also refreshes the AI core's voice capabilities into `audioSlice` (optional — the settings
+ * page must still open when the AI core is down). Opening Settings is therefore how the STT/voice
+ * lists recover after an outage at boot, without a page reload.
+ */
 export async function settingsLoader({ request }: LoaderFunctionArgs): Promise<SettingsLoaderData> {
-  const response = await load(request.signal, settingsRoute.getSettings);
+  const [response, audio] = await Promise.all([
+    load(request.signal, settingsRoute.getSettings),
+    loadOptional(NO_AUDIO, request.signal, audioRoute.getAudioCapabilities),
+  ]);
+  store.dispatch(setAudioCapabilities(audio ? audio.data : null));
+  store.dispatch(setVoiceDefaults(response.data.chat));
   return { settings: response.data };
 }
 

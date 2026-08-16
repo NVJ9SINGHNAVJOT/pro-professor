@@ -32,6 +32,17 @@ export interface ChatSendPayload {
   verbose?: boolean;
   /** UI preference (show reasoning); persisted on the conversation, not forwarded to the provider. */
   thinkingEnabled?: boolean;
+  /**
+   * This chat's voice settings. Persisted on the conversation and restored when it reopens; the
+   * server itself reads only `sttModel`, for the fallback transcription of an audio turn. Omitted
+   * entirely by the note chat panel, which has no voice controls — the server then applies the
+   * stored defaults.
+   */
+  sttModel?: string;
+  preferModelAudio?: boolean;
+  ttsVoice?: string;
+  ttsLangCode?: string;
+  ttsSpeed?: number;
 }
 
 export interface ChatStreamCallbacks {

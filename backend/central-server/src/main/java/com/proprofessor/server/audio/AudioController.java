@@ -1,5 +1,6 @@
 package com.proprofessor.server.audio;
 
+import com.proprofessor.server.audio.dto.AudioCapabilities;
 import com.proprofessor.server.audio.dto.SpeechRequest;
 import com.proprofessor.server.audio.dto.TranscriptionResponse;
 import com.proprofessor.server.common.dto.ApiResponse;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,15 +34,22 @@ public class AudioController {
         this.audioClient = audioClient;
     }
 
+    /** The STT models, TTS voices and languages available for the voice settings to choose from. */
+    @GetMapping("/models")
+    public ApiResponse<AudioCapabilities> models() {
+        return ApiResponse.ok(audioClient.capabilities());
+    }
+
     /** Transcribes an uploaded audio clip to text. */
     @PostMapping(value = "/transcriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<TranscriptionResponse> transcribe(
-            @RequestParam(value = "file", required = false) MultipartFile file) {
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "model", required = false) String model) {
         if (file == null || file.isEmpty()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "Audio file is required.");
         }
         try {
-            String text = audioClient.transcribe(file.getBytes(), file.getOriginalFilename());
+            String text = audioClient.transcribe(file.getBytes(), file.getOriginalFilename(), model);
             return ApiResponse.ok(new TranscriptionResponse(text));
         } catch (IOException ex) {
             throw new AppException(HttpStatus.BAD_REQUEST, "Could not read the uploaded audio file.");

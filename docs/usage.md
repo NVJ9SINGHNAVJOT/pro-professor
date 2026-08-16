@@ -17,7 +17,7 @@ Click the logo (top-left of any sidebar) to open the nav drawer.
 | **Chat** (`/chat`) | You want a conversation. Nothing is written anywhere else; history is per-conversation. |
 | **Notes** (`/notes`) | You want to *keep* something — a document you'll come back to, link to, and search. |
 | **Diagrams** (`/diagrams`) | You want to draw. A freehand Excalidraw canvas, one scene per diagram. |
-| **Settings** (`/settings`) | Default inference params for the Notes AI, and the file store. |
+| **Settings** (`/settings`) | Voice defaults for chat, default inference params for the Notes AI, and the file store. |
 
 The rule of thumb: **chat is throwaway, notes are permanent.** If you'd be annoyed to lose it, it
 belongs in a note.
@@ -184,11 +184,17 @@ you can still abort with the rail closed.
 
 - The **model picker** in the header is locked once a conversation has started — a thread stays on
   the model it began with.
-- **Inference settings** (gear): max tokens, temperature, top-p, repetition penalty, a system prompt
-  (honored only on the first message of a conversation), and verbose/thinking toggles where the
-  model supports them.
+- **Chat settings** (gear) open in a dialog — close it with ✕, Escape, or a click outside. It holds
+  max tokens, temperature, top-p, repetition penalty, a system prompt (honored only on the first
+  message of a conversation), verbose/thinking toggles where the model supports them, and this
+  chat's **voice** settings.
 - The **context meter** shows how much of the model's window the conversation is using.
 - Voice: record → the model thinks → it speaks back; audio replies get a player.
+- **Voice settings** — which speech-to-text model transcribes you (used by the mic in the composer
+  and by voice mode alike), the voice, language and speed replies are spoken in, and whether a model
+  that accepts audio should hear the recording itself instead of being handed a transcript. A chat
+  starts from the defaults in Settings → Chat; changing them here applies to that chat only, and
+  sticks with it when you reopen it.
 - Only **one model is resident at a time** across the local backends. If something else is
   generating, you'll see a "busy" toast rather than a queued request — wait for it to finish.
 
@@ -196,6 +202,10 @@ you can still abort with the rail closed.
 
 ## Settings
 
+- **Chat** — the voice defaults every new conversation starts from: the speech-to-text model, the
+  voice, language and speed replies are spoken in, and whether an audio-capable model listens to the
+  recording directly. The lists come from the AI core, so they are empty while it is down. A
+  conversation can override any of them from its own settings dialog.
 - **Notes** — default inference parameters for the notes AI actions (rewrite / summarize / continue).
   Chat keeps its own per-conversation settings; these don't affect it.
 - **Storage** — every uploaded file, with a download and a delete. A file is **locked** while a chat

@@ -1,5 +1,6 @@
 import { combineReducers } from "@reduxjs/toolkit";
 import modelsReducer from "@/redux/slices/modelsSlice";
+import audioReducer from "@/redux/slices/audioSlice";
 import notesListReducer from "@/redux/slices/notesListSlice";
 import noteFolderListReducer from "@/redux/slices/noteFolderListSlice";
 import notesSidebarReducer from "@/redux/slices/notesSidebarSlice";
@@ -11,6 +12,9 @@ import notesGraphReducer from "@/redux/slices/notesGraphSlice";
 
 const rootReducer = combineReducers({
   models: modelsReducer,
+  // The AI core's voice capabilities plus the app-wide voice defaults, seeded by the same loader
+  // as `models` — the chat screen and the settings panel both read them.
+  audio: audioReducer,
   // The three sidebar lists. Everything else a page needs is route loader data — these live here
   // because mutations patch a single row instead of refetching; see createListSlice.ts.
   notesList: notesListReducer,

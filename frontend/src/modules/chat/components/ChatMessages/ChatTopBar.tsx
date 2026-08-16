@@ -3,7 +3,7 @@ import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import ModelSelector from "@/components/common/ModelSelector";
 import ChatSettings from "@/modules/chat/components/ChatSettings";
 import { cn } from "@/lib/utils";
-import type { InferenceParams, SelectedModel } from "@/modules/chat/types";
+import type { InferenceParams, SelectedModel, VoiceSettings } from "@/modules/chat/types";
 import { formatTokens } from "@/modules/chat/utils";
 
 /** Context-window usage meter: how much of the model's context the conversation currently occupies. */
@@ -47,6 +47,10 @@ interface ChatTopBarProps {
   inputDisabled: boolean;
   params: InferenceParams;
   onParamsChange: (params: InferenceParams) => void;
+  voice: VoiceSettings;
+  onVoiceChange: (voice: VoiceSettings) => void;
+  /** Whether the selected model accepts audio input — decides how a spoken turn is sent. */
+  acceptsAudio: boolean;
   systemPrompt: string;
   onSystemPromptChange: (value: string) => void;
   verbose: boolean;
@@ -68,6 +72,9 @@ const ChatTopBar = memo(function ChatTopBar({
   inputDisabled,
   params,
   onParamsChange,
+  voice,
+  onVoiceChange,
+  acceptsAudio,
   systemPrompt,
   onSystemPromptChange,
   verbose,
@@ -93,6 +100,9 @@ const ChatTopBar = memo(function ChatTopBar({
         <ChatSettings
           params={params}
           onParamsChange={onParamsChange}
+          voice={voice}
+          onVoiceChange={onVoiceChange}
+          acceptsAudio={acceptsAudio}
           systemPrompt={systemPrompt}
           onSystemPromptChange={onSystemPromptChange}
           canEditSystemPrompt={isDraft}

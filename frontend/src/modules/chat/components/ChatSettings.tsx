@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import {
   SettingsIcon,
   Scale as ScaleIcon,
@@ -17,10 +17,11 @@ const PRESET_ICONS: Record<string, ElementType> = {
   Brain: BrainIcon,
   Microscope: MicroscopeIcon,
 };
+import Modal from "@/components/common/Modal";
 import Tooltip from "@/components/common/Tooltip";
 import { SliderInput } from "@/components/inputs/SliderInput";
 import { ToggleInput } from "@/components/inputs/ToggleInput";
-import { useOnClickOutside } from "@/hooks/useOnClickOutside";
+import VoiceSettingsControls from "@/components/common/VoiceSettingsControls";
 import { cn } from "@/lib/utils";
 import {
   MAX_TOKENS_SLIDER,
@@ -29,11 +30,16 @@ import {
   REPETITION_PENALTY_SLIDER,
   INFERENCE_PRESETS,
 } from "@/modules/chat/constants";
-import type { InferenceParams } from "@/modules/chat/types";
+import type { InferenceParams, VoiceSettings } from "@/modules/chat/types";
 
 interface ChatSettingsProps {
   params: InferenceParams;
   onParamsChange: (params: InferenceParams) => void;
+  /** This chat's voice settings — seeded from the Settings defaults, saved with the next turn. */
+  voice: VoiceSettings;
+  onVoiceChange: (voice: VoiceSettings) => void;
+  /** Whether the selected model can take audio input (gates the "listen directly" path). */
+  acceptsAudio: boolean;
   /** Persona/instructions for a new conversation (the system prompt). */
   systemPrompt: string;
   onSystemPromptChange: (value: string) => void;
@@ -52,9 +58,17 @@ interface ChatSettingsProps {
   disabled?: boolean;
 }
 
+/**
+ * The chat's per-conversation settings, opened from the gear in the top bar. A modal rather than a
+ * dropdown: with the voice controls added it carries four groups of settings, which is more than a
+ * popover anchored to a header button can hold without running off the screen.
+ */
 const ChatSettings = memo(function ChatSettings({
   params,
   onParamsChange,
+  voice,
+  onVoiceChange,
+  acceptsAudio,
   systemPrompt,
   onSystemPromptChange,
   canEditSystemPrompt,
@@ -68,13 +82,19 @@ const ChatSettings = memo(function ChatSettings({
   disabled,
 }: ChatSettingsProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  // Close the panel on an outside click.
-  useOnClickOutside(rootRef, () => setOpen(false));
+  const close = useCallback(() => setOpen(false), []);
 
   const maxTokensCeiling = Math.min(maxContextTokens ?? MAX_TOKENS_SLIDER.max, MAX_TOKENS_SLIDER.max);
   const set = (patch: Partial<InferenceParams>) => onParamsChange({ ...params, ...patch });
+
+  // What the next spoken turn will actually do — the STT model only runs when the chat model
+  // isn't hearing the clip itself.
+  const listensDirectly = acceptsAudio && voice.preferModelAudio;
+  const sttNote = !modelSelected
+    ? "Used for dictation. Select a model to see how voice chat will run."
+    : listensDirectly
+      ? "Voice chat sends the recording to the model, which transcribes it itself. This model runs for dictation only."
+      : "Used for dictation and for voice chat.";
 
   const activePresetId = INFERENCE_PRESETS.find(
     (p) =>
@@ -84,7 +104,7 @@ const ChatSettings = memo(function ChatSettings({
   )?.id;
 
   return (
-    <div ref={rootRef} className="relative">
+    <>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -100,8 +120,8 @@ const ChatSettings = memo(function ChatSettings({
         <SettingsIcon className="size-4.5" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-12 z-30 max-h-[calc(100vh-6rem)] w-[1000px] overflow-y-auto rounded-2xl border border-neutral-700 bg-neutral-900 p-6 shadow-xl">
+      <Modal open={open} onClose={close} title="Chat settings" description="Applies to this conversation.">
+        <div className="p-6">
           <div className="grid grid-cols-3 gap-10">
             {/* Column 1: Response Styles */}
             <div className="flex flex-col gap-6">
@@ -286,9 +306,20 @@ const ChatSettings = memo(function ChatSettings({
               </div>
             </div>
           </div>
+
+          {/* Voice — full width under the grid: five controls don't fit a fourth column */}
+          <div className="mt-6 border-t border-neutral-800 pt-6">
+            <div className="mb-4">
+              <span className="block caption-small-regular text-neutral-300">Voice</span>
+              <span className="block caption-small-regular text-neutral-500">
+                This chat only — Settings → Chat sets what a new chat starts with.
+              </span>
+            </div>
+            <VoiceSettingsControls value={voice} onChange={onVoiceChange} sttNote={sttNote} />
+          </div>
         </div>
-      )}
-    </div>
+      </Modal>
+    </>
   );
 });
 

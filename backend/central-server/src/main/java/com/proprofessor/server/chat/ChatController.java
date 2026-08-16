@@ -80,11 +80,14 @@ public class ChatController {
                         request.maxTokens(), request.temperature(), request.topP(),
                         request.repetitionPenalty(), Boolean.TRUE.equals(request.verbose()),
                         Boolean.TRUE.equals(request.thinkingEnabled()));
+                VoiceOptions voice = new VoiceOptions(
+                        request.sttModel(), request.preferModelAudio(), request.ttsVoice(),
+                        request.ttsLangCode(), request.ttsSpeed());
                 ChatSendCommand command = new ChatSendCommand(
                         request.conversationId(), request.provider(), request.model(), request.content(),
                         request.attachmentIds() == null ? List.of() : request.attachmentIds(),
                         request.systemPrompt(), request.noteContext(),
-                        Boolean.TRUE.equals(request.noteChat()), options);
+                        Boolean.TRUE.equals(request.noteChat()), options, voice);
                 log.info("Chat send: conversationId={} provider={} model={} contentLength={} attachments={} "
                                 + "noteContextLength={}",
                         command.conversationId(), command.provider(), command.model(),

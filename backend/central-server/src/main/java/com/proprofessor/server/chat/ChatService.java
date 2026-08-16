@@ -14,6 +14,7 @@ import com.proprofessor.server.common.db.ConversationSettings;
 import com.proprofessor.server.common.db.MediaRow;
 import com.proprofessor.server.common.db.MessageRow;
 import com.proprofessor.server.common.db.ModelRow;
+import com.proprofessor.server.common.db.VoiceSettings;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.common.exception.ClientDisconnectedException;
 import com.proprofessor.server.common.exception.ResourceNotFoundException;
@@ -118,7 +119,9 @@ public class ChatService {
         // Resolved once, here, rather than at conversation creation: generate() also diffs these
         // against the stored settings on every later turn, so filling them later would make each
         // turn of a params-omitting client look like a settings change.
-        ChatSendCommand command = rawCommand.withOptions(withDefaults(rawCommand.options()));
+        ChatSendCommand command = rawCommand
+                .withOptions(withDefaults(rawCommand.options()))
+                .withVoice(withVoiceDefaults(rawCommand.voice()));
         // Resolve the target model up front (read-only) so the global single-model lock can be
         // enforced before anything is persisted: a rejected turn (a different model is mid-generation)
         // throws out of acquireForChat and leaves no conversation/message rows behind.
@@ -155,6 +158,7 @@ public class ChatService {
         // conversation stored its initial settings at creation, so there's nothing to diff.
         if (command.conversationId() != null) {
             applySettingsChange(conversation, command.options(), listener);
+            applyVoiceChange(conversation, command.voice().toSettings());
         }
 
         MessageRow userMessage = messageRepository.insert(conversation.id(), ROLE_USER, command.content());
@@ -219,7 +223,8 @@ public class ChatService {
             if (audioTurn) {
                 reply = transcriptStream.finish(raw);
                 String spoken = persistTranscript(
-                        userMessage.id(), audioClips, transcriptStream.transcript(), listener);
+                        userMessage.id(), audioClips, transcriptStream.transcript(),
+                        command.voice().sttModel(), listener);
                 titleFromSpokenTurn(conversation, spoken, listener);
             }
             MessageRow assistantMessage = messageRepository.insert(conversation.id(), ROLE_ASSISTANT, reply);
@@ -337,6 +342,27 @@ public class ChatService {
                 options.verbose(), options.thinkingEnabled());
     }
 
+    /**
+     * Fills unset voice settings from the stored defaults, so a client may omit them entirely — the
+     * note chat panel does, having no voice controls of its own. Needed either way: the five
+     * columns are NOT NULL.
+     *
+     * <p>The chat screen always sends concrete values, so it returns early and never queries.
+     */
+    private VoiceOptions withVoiceDefaults(VoiceOptions voice) {
+        if (voice.sttModel() != null && voice.preferModelAudio() != null && voice.ttsVoice() != null
+                && voice.ttsLangCode() != null && voice.ttsSpeed() != null) {
+            return voice;
+        }
+        VoiceSettings defaults = settingsService.voiceDefaults();
+        return new VoiceOptions(
+                voice.sttModel() != null ? voice.sttModel() : defaults.sttModel(),
+                voice.preferModelAudio() != null ? voice.preferModelAudio() : defaults.preferModelAudio(),
+                voice.ttsVoice() != null ? voice.ttsVoice() : defaults.ttsVoice(),
+                voice.ttsLangCode() != null ? voice.ttsLangCode() : defaults.ttsLangCode(),
+                voice.ttsSpeed() != null ? voice.ttsSpeed() : defaults.ttsSpeed());
+    }
+
     /** Creates a new conversation (title from the first message) and its optional persona system row. */
     private ConversationRow createConversation(ChatSendCommand command) {
         ModelRow model = modelService.getOrCreateModel(command.provider(), command.model());
@@ -345,7 +371,8 @@ public class ChatService {
         // tagging it 'simple' would leak the thread into the chat history and the ⌘K palette.
         String mode = command.noteChat() ? ConversationRepository.NOTE_MODE : DEFAULT_MODE;
         ConversationRow conversation = conversationRepository.insert(
-                model.id(), deriveTitle(command.content()), mode, settingsFrom(command.options()));
+                model.id(), deriveTitle(command.content()), mode, settingsFrom(command.options()),
+                command.voice().toSettings());
         // A persona is the conversation's first (oldest) system row, so it replays to the model on
         // every later turn via findHistory — no per-request plumbing needed.
         String systemPrompt = command.systemPrompt();
@@ -375,6 +402,17 @@ public class ChatService {
             MessageRow marker =
                     messageRepository.insert(conversation.id(), ROLE_SETTINGS, summary);
             listener.onSettingsChanged(marker.id(), summary);
+        }
+    }
+
+    /**
+     * Persists this turn's voice settings onto an existing conversation when they changed. No
+     * marker row and no {@code chat.settings} frame, unlike {@link #applySettingsChange}: these are
+     * capture/playback preferences, not sampling params, so a change doesn't divide the thread.
+     */
+    private void applyVoiceChange(ConversationRow conversation, VoiceSettings voice) {
+        if (!conversation.voice().equals(voice)) {
+            conversationRepository.updateVoiceSettings(conversation.id(), voice);
         }
     }
 
@@ -543,12 +581,12 @@ public class ChatService {
      * turn is never persisted blank. Returns {@code null} when no words could be recovered.
      */
     private String persistTranscript(long userMessageId, List<MediaRow> audioClips,
-                                     String transcript, ChatStreamListener listener) {
+                                     String transcript, String sttModel, ChatStreamListener listener) {
         if (transcript != null) {
             messageRepository.updateContent(userMessageId, transcript);
             return transcript;
         }
-        String content = transcribeClips(audioClips);
+        String content = transcribeClips(audioClips, sttModel);
         if (content == null || content.isBlank()) {
             return null;
         }
@@ -573,15 +611,20 @@ public class ChatService {
         listener.onTitle(title);
     }
 
-    /** STT fallback: transcribes the first readable clip when the model skipped the delimiter. */
-    private String transcribeClips(List<MediaRow> audioClips) {
+    /**
+     * STT fallback: transcribes the first readable clip when the model skipped the delimiter, using
+     * the conversation's own STT model. A model id the AI core rejects (one dropped from its
+     * allowlist since) fails this pass, not the turn — the catch below logs it and the spoken
+     * message simply stays blank.
+     */
+    private String transcribeClips(List<MediaRow> audioClips, String sttModel) {
         for (MediaRow clip : audioClips) {
             byte[] bytes = mediaService.bytes(clip);
             if (bytes == null || bytes.length == 0) {
                 continue;
             }
             try {
-                String text = audioClient.transcribe(bytes, clip.originalFilename());
+                String text = audioClient.transcribe(bytes, clip.originalFilename(), sttModel);
                 if (text != null && !text.isBlank()) {
                     return text.strip();
                 }

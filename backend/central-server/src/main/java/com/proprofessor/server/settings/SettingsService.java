@@ -3,6 +3,7 @@ package com.proprofessor.server.settings;
 import com.proprofessor.server.chat.InferenceOptions;
 import com.proprofessor.server.common.db.AppSettingsRow;
 import com.proprofessor.server.common.db.InferenceDefaults;
+import com.proprofessor.server.common.db.VoiceSettings;
 import com.proprofessor.server.settings.dto.SettingsResponse;
 import com.proprofessor.server.settings.dto.SettingsUpdateRequest;
 import com.proprofessor.server.settings.repository.SettingsRepository;
@@ -14,6 +15,10 @@ import org.springframework.stereotype.Service;
  * of sliders governs both. The chat screen sends concrete per-conversation params and never reads
  * these. The settings page reads and writes them via
  * {@link com.proprofessor.server.settings.SettingsController}.
+ *
+ * <p>Also holds the voice defaults ({@link VoiceSettings}) a new conversation starts from; unlike
+ * the inference params those are also read by the client, which applies them when calling the
+ * audio endpoints.
  */
 @Service
 public class SettingsService {
@@ -26,17 +31,22 @@ public class SettingsService {
 
     public SettingsResponse get() {
         AppSettingsRow row = settingsRepository.find();
-        return new SettingsResponse(row.notes());
+        return new SettingsResponse(row.notes(), row.chat());
     }
 
     public SettingsResponse update(SettingsUpdateRequest request) {
-        settingsRepository.update(request.notes());
+        settingsRepository.update(request.notes(), request.chat());
         return get();
     }
 
     /** Defaults applied to the AI note update and to note chat turns. */
     public InferenceOptions notesInferenceOptions() {
         return toOptions(settingsRepository.find().notes());
+    }
+
+    /** Voice defaults a conversation starts from when the client sends none of its own. */
+    public VoiceSettings voiceDefaults() {
+        return settingsRepository.find().chat();
     }
 
     private static InferenceOptions toOptions(InferenceDefaults d) {

@@ -50,4 +50,28 @@ export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
 /** Hard ceiling for max_tokens, matching the AI core's request validation. */
 export const MAX_TOKENS_LIMIT = 32768;
 
+/**
+ * How this chat captures speech and speaks its replies. Seeded from the app-wide defaults
+ * (Settings → Chat), overridable per conversation in the chat settings panel, and persisted with
+ * the conversation on the next turn.
+ */
+export interface VoiceSettings {
+  /** STT repo id from `GET /audio/models` — used for dictation and for voice mode. */
+  sttModel: string;
+  /** When true, an audio-capable model hears the clip itself and no STT pass runs. */
+  preferModelAudio: boolean;
+  ttsVoice: string;
+  ttsLangCode: string;
+  ttsSpeed: number;
+}
+
+/** Mirrors the `app_settings` seed, for the moment before the defaults have loaded. */
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  sttModel: "mlx-community/whisper-large-v3-turbo",
+  preferModelAudio: true,
+  ttsVoice: "af_heart",
+  ttsLangCode: "a",
+  ttsSpeed: 1.0,
+};
+
 export type Group = "Today" | "Yesterday" | "Previous 7 Days" | "Previous 30 Days" | "Older";

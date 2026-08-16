@@ -64,6 +64,11 @@ public class ChatMapper {
                 conversation.settings().verbose(),
                 conversation.settings().thinkingEnabled(),
                 conversation.lastContextTokens(),
+                conversation.voice().sttModel(),
+                conversation.voice().preferModelAudio(),
+                conversation.voice().ttsVoice(),
+                conversation.voice().ttsLangCode(),
+                conversation.voice().ttsSpeed(),
                 conversation.createdAt(),
                 conversation.updatedAt()
         );

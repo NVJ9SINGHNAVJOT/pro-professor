@@ -20,6 +20,7 @@ import java.util.List;
  * @param noteChat       whether the turn came from a note's chat panel; decides the new
  *                       conversation's mode, and so whether it appears in the chat history
  * @param options        per-request inference settings (never {@code null}; see {@link InferenceOptions})
+ * @param voice          per-request voice settings (never {@code null}; see {@link VoiceOptions})
  */
 public record ChatSendCommand(
         Long conversationId,
@@ -30,11 +31,18 @@ public record ChatSendCommand(
         String systemPrompt,
         String noteContext,
         boolean noteChat,
-        InferenceOptions options
+        InferenceOptions options,
+        VoiceOptions voice
 ) {
     /** This command with resolved inference settings — see {@code ChatService.withDefaults}. */
     public ChatSendCommand withOptions(InferenceOptions resolved) {
         return new ChatSendCommand(conversationId, provider, model, content, attachmentIds,
-                systemPrompt, noteContext, noteChat, resolved);
+                systemPrompt, noteContext, noteChat, resolved, voice);
+    }
+
+    /** This command with resolved voice settings — see {@code ChatService.withVoiceDefaults}. */
+    public ChatSendCommand withVoice(VoiceOptions resolved) {
+        return new ChatSendCommand(conversationId, provider, model, content, attachmentIds,
+                systemPrompt, noteContext, noteChat, options, resolved);
     }
 }

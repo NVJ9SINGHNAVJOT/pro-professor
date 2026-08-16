@@ -13,8 +13,11 @@ export type DictationState = "idle" | "recording" | "transcribing";
  * the utterance, speaks the reply back, and for an audio-capable model skips transcription entirely.
  * This is the plain speech-to-text half of that pipeline and nothing else: one `POST
  * /audio/transcriptions`, and the text is handed to the caller. Nothing is sent, nothing is spoken.
+ *
+ * `sttModel` is the chat's chosen speech model, so dictation and voice chat hear alike; omitting it
+ * leaves the AI core on its own default.
  */
-export const useDictation = (onTranscript: (text: string) => void) => {
+export const useDictation = (onTranscript: (text: string) => void, sttModel?: string) => {
   const [state, setState] = useState<DictationState>("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -68,7 +71,7 @@ export const useDictation = (onTranscript: (text: string) => void) => {
         }
         setState("transcribing");
         void audioApi
-          .transcribe(blob)
+          .transcribe(blob, { model: sttModel })
           .then((text) => {
             const spoken = text.trim();
             if (spoken) onTranscript(spoken);
@@ -87,7 +90,7 @@ export const useDictation = (onTranscript: (text: string) => void) => {
     } finally {
       startingRef.current = false;
     }
-  }, [onTranscript, releaseMic]);
+  }, [onTranscript, releaseMic, sttModel]);
 
   const stop = useCallback(() => {
     try {

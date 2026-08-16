@@ -41,6 +41,12 @@ export interface ConversationDetail {
   thinkingEnabled: boolean;
   /** Token usage after the most recent turn (context meter); 0 before any turn. */
   lastContextTokens: number;
+  /** This chat's voice settings, seeded from the app defaults on its first turn. */
+  sttModel: string;
+  preferModelAudio: boolean;
+  ttsVoice: string;
+  ttsLangCode: string;
+  ttsSpeed: number;
   createdAt: string;
   updatedAt: string;
 }

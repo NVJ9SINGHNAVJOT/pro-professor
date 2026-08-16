@@ -4,20 +4,22 @@ import Button from "@/components/common/Button";
 import { toast } from "@/components/common/toast";
 import { useApi } from "@/hooks/useApi";
 import { settingsRoute, type AppSettings } from "@/services/operations/settings/settings.route";
-import type { InferenceParams } from "@/modules/chat/types";
+import type { InferenceParams, VoiceSettings } from "@/modules/chat/types";
 import { NOTES_DEFAULT_PARAMS } from "@/modules/settings/constants";
 import InferenceParamsPanel from "@/modules/settings/components/InferenceParamsPanel";
 
 interface NotesSettingsPanelProps {
   /** Current values from the route loader; the fetch and its failure path live there. */
   initial: InferenceParams;
+  /** The voice defaults travel with the save — `PUT /settings` writes both blocks at once. */
+  chat: VoiceSettings;
 }
 
 /**
  * Global default inference params for the Notes AI actions. Saved to the backend
  * `app_settings` singleton; the defaults are applied server-side, so nothing else reads this.
  */
-const NotesSettingsPanel = ({ initial }: NotesSettingsPanelProps) => {
+const NotesSettingsPanel = ({ initial, chat }: NotesSettingsPanelProps) => {
   const { execute: saveSettings } = useApi(settingsRoute.updateSettings);
 
   const [notesParams, setNotesParams] = useState<InferenceParams>(initial);
@@ -25,7 +27,7 @@ const NotesSettingsPanel = ({ initial }: NotesSettingsPanelProps) => {
 
   const handleSave = async () => {
     setSaving(true);
-    const payload: AppSettings = { notes: notesParams };
+    const payload: AppSettings = { notes: notesParams, chat };
     const res = await saveSettings(payload);
     setSaving(false);
     if (res.response) toast.success("Settings saved");

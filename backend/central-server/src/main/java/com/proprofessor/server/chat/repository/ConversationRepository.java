@@ -3,6 +3,7 @@ package com.proprofessor.server.chat.repository;
 import com.proprofessor.server.chat.dto.ChatSearchResult;
 import com.proprofessor.server.common.db.ConversationRow;
 import com.proprofessor.server.common.db.ConversationSettings;
+import com.proprofessor.server.common.db.VoiceSettings;
 import com.proprofessor.server.common.db.ModelRow;
 import org.jooq.DSLContext;
 import org.jooq.Record;
@@ -94,7 +95,8 @@ public class ConversationRepository {
                 .fetchOptional(this::toRow);
     }
 
-    public ConversationRow insert(long modelId, String title, String mode, ConversationSettings settings) {
+    public ConversationRow insert(long modelId, String title, String mode,
+                                  ConversationSettings settings, VoiceSettings voice) {
         Long id = dsl.insertInto(CONVERSATIONS)
                 .set(CONVERSATIONS.MODEL_ID, modelId)
                 .set(CONVERSATIONS.TITLE, title)
@@ -105,6 +107,11 @@ public class ConversationRepository {
                 .set(CONVERSATIONS.REPETITION_PENALTY, settings.repetitionPenalty())
                 .set(CONVERSATIONS.VERBOSE_ENABLED, settings.verbose())
                 .set(CONVERSATIONS.THINKING_ENABLED, settings.thinkingEnabled())
+                .set(CONVERSATIONS.STT_MODEL, voice.sttModel())
+                .set(CONVERSATIONS.PREFER_MODEL_AUDIO, voice.preferModelAudio())
+                .set(CONVERSATIONS.TTS_VOICE, voice.ttsVoice())
+                .set(CONVERSATIONS.TTS_LANG_CODE, voice.ttsLangCode())
+                .set(CONVERSATIONS.TTS_SPEED, voice.ttsSpeed())
                 .returning(CONVERSATIONS.ID)
                 .fetchOne(CONVERSATIONS.ID);
         return findById(id).orElseThrow();
@@ -136,6 +143,18 @@ public class ConversationRepository {
     public void touch(long id) {
         dsl.update(CONVERSATIONS)
                 .set(CONVERSATIONS.UPDATED_AT, DSL.currentOffsetDateTime())
+                .where(CONVERSATIONS.ID.eq(id))
+                .execute();
+    }
+
+    /** Overwrites a conversation's voice settings — used when the user changes them mid-chat. */
+    public void updateVoiceSettings(long id, VoiceSettings voice) {
+        dsl.update(CONVERSATIONS)
+                .set(CONVERSATIONS.STT_MODEL, voice.sttModel())
+                .set(CONVERSATIONS.PREFER_MODEL_AUDIO, voice.preferModelAudio())
+                .set(CONVERSATIONS.TTS_VOICE, voice.ttsVoice())
+                .set(CONVERSATIONS.TTS_LANG_CODE, voice.ttsLangCode())
+                .set(CONVERSATIONS.TTS_SPEED, voice.ttsSpeed())
                 .where(CONVERSATIONS.ID.eq(id))
                 .execute();
     }
@@ -180,12 +199,20 @@ public class ConversationRepository {
                 Boolean.TRUE.equals(r.get(CONVERSATIONS.VERBOSE_ENABLED)),
                 Boolean.TRUE.equals(r.get(CONVERSATIONS.THINKING_ENABLED))
         );
+        VoiceSettings voice = new VoiceSettings(
+                r.get(CONVERSATIONS.STT_MODEL),
+                r.get(CONVERSATIONS.PREFER_MODEL_AUDIO),
+                r.get(CONVERSATIONS.TTS_VOICE),
+                r.get(CONVERSATIONS.TTS_LANG_CODE),
+                r.get(CONVERSATIONS.TTS_SPEED)
+        );
         return new ConversationRow(
                 r.get(CONVERSATIONS.ID),
                 model,
                 r.get(CONVERSATIONS.TITLE),
                 r.get(CONVERSATIONS.MODE),
                 settings,
+                voice,
                 r.get(CONVERSATIONS.LAST_CONTEXT_TOKENS),
                 r.get(CONVERSATIONS.CREATED_AT).toInstant(),
                 r.get(CONVERSATIONS.UPDATED_AT).toInstant()

@@ -1,15 +1,20 @@
 import { createRoute } from "@/services/client/apiRoute";
 import { BASE_URL_SERVER } from "@/services/client/config";
-import type { InferenceParams } from "@/modules/chat/types";
+import type { InferenceParams, VoiceSettings } from "@/modules/chat/types";
 
 const settingsEndPoints = {
   GET: `${BASE_URL_SERVER}/settings`,
   UPDATE: `${BASE_URL_SERVER}/settings`,
 };
 
-/** Global default inference params. Applied server-side to the Notes AI actions. */
+/**
+ * Global defaults: the Notes inference params, applied server-side to the Notes AI actions, and the
+ * voice settings every new conversation starts from (the chat screen reads those and applies them
+ * itself when calling the audio endpoints).
+ */
 export interface AppSettings {
   notes: InferenceParams;
+  chat: VoiceSettings;
 }
 
 export type GetSettingsResponse = { message: string; data: AppSettings };

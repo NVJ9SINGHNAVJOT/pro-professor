@@ -35,6 +35,9 @@ CREATE TRIGGER trg_models_updated_at
 -- reasoning). 'verbose' is a reserved word in Postgres, hence verbose_enabled.
 -- last_context_tokens: running context-window usage after the most recent turn
 -- (prompt + completion), used to show how much of the model's window is consumed.
+-- The voice columns are this chat's speech settings, seeded from app_settings on the
+-- first turn and overridable per chat: which STT model transcribes it, whether an
+-- audio-capable model hears the clip itself instead, and how its replies are spoken.
 CREATE TABLE conversations
 (
     id                  BIGSERIAL PRIMARY KEY,
@@ -48,6 +51,11 @@ CREATE TABLE conversations
     verbose_enabled     BOOLEAN          NOT NULL DEFAULT FALSE,
     thinking_enabled    BOOLEAN          NOT NULL DEFAULT FALSE,
     last_context_tokens INTEGER          NOT NULL DEFAULT 0,
+    stt_model           VARCHAR(200)     NOT NULL,
+    prefer_model_audio  BOOLEAN          NOT NULL,
+    tts_voice           VARCHAR(50)      NOT NULL,
+    tts_lang_code       VARCHAR(8)       NOT NULL,
+    tts_speed           DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -252,6 +260,9 @@ CREATE TRIGGER trg_diagrams_updated_at
 -- Single-row global preferences (single-user app). Holds default inference params
 -- applied server-side to Notes AI actions. Concrete NOT NULL values (seeded below);
 -- the UI always shows/edits real numbers, like chat.
+-- The chat_* columns are the app-wide voice defaults every new conversation starts
+-- from (see conversations): the STT model, whether an audio-capable chat model is
+-- preferred over that STT pass, and the Kokoro voice/language/speed replies use.
 CREATE TABLE app_settings
 (
     id                         BIGINT           PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -259,6 +270,11 @@ CREATE TABLE app_settings
     notes_temperature          DOUBLE PRECISION NOT NULL,
     notes_top_p                DOUBLE PRECISION NOT NULL,
     notes_repetition_penalty   DOUBLE PRECISION NOT NULL,
+    chat_stt_model             VARCHAR(200)     NOT NULL,
+    chat_prefer_model_audio    BOOLEAN          NOT NULL,
+    chat_tts_voice             VARCHAR(50)      NOT NULL,
+    chat_tts_lang_code         VARCHAR(8)       NOT NULL,
+    chat_tts_speed             DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -266,7 +282,10 @@ CREATE TABLE app_settings
 CREATE TRIGGER trg_app_settings_updated_at
     BEFORE UPDATE ON app_settings FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
 
--- Seed the singleton: Notes = Balanced
+-- Seed the singleton: Notes = Balanced, voice = the AI core's own defaults
+-- (whisper-large-v3-turbo, Kokoro 'af_heart' in American English at 1x).
 INSERT INTO app_settings
-    (id, notes_max_tokens, notes_temperature, notes_top_p, notes_repetition_penalty)
-VALUES (1, 20000, 0.7, 0.9, 1.1);
+    (id, notes_max_tokens, notes_temperature, notes_top_p, notes_repetition_penalty,
+     chat_stt_model, chat_prefer_model_audio, chat_tts_voice, chat_tts_lang_code, chat_tts_speed)
+VALUES (1, 20000, 0.7, 0.9, 1.1,
+        'mlx-community/whisper-large-v3-turbo', TRUE, 'af_heart', 'a', 1.0);

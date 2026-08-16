@@ -19,6 +19,11 @@ import java.util.List;
  * @param verbose            persisted "show metrics" UI preference
  * @param thinkingEnabled    persisted "show reasoning" UI preference
  * @param lastContextTokens  token usage after the most recent turn (context meter); 0 before any turn
+ * @param sttModel           persisted STT model this chat transcribes speech with
+ * @param preferModelAudio   persisted "let an audio-capable model hear the clip itself" preference
+ * @param ttsVoice           persisted Kokoro voice replies are spoken in
+ * @param ttsLangCode        persisted Kokoro language code
+ * @param ttsSpeed           persisted playback speed multiplier
  * @param createdAt when the conversation started
  * @param updatedAt last activity
  */
@@ -36,6 +41,11 @@ public record ConversationDetail(
         boolean verbose,
         boolean thinkingEnabled,
         int lastContextTokens,
+        String sttModel,
+        boolean preferModelAudio,
+        String ttsVoice,
+        String ttsLangCode,
+        double ttsSpeed,
         Instant createdAt,
         Instant updatedAt
 ) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { FileTextIcon, MessageSquareIcon, SearchIcon } from "lucide-react";
+import Modal from "@/components/common/Modal";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { chatsRoute } from "@/services/operations/chats/chats.route";
@@ -32,7 +33,9 @@ interface SearchModalProps {
  * (`GET /notes/search`, `GET /chats/search`) and lists the results together, so "where did I write
  * that" has one answer regardless of where it was written.
  *
- * Hand-rolled overlay, matching the notes command palette — this repo has no generic Modal.
+ * Sits in the shared {@link Modal} shell, top-aligned like a command palette; the ✕ and the
+ * backdrop are the ways out it doesn't have to implement, alongside the Escape this handles with
+ * the rest of its keyboard navigation.
  */
 const SearchModal = ({ open, onClose }: SearchModalProps) => {
   const navigate = useNavigate();
@@ -134,10 +137,8 @@ const SearchModal = ({ open, onClose }: SearchModalProps) => {
   const typed = query.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]" onKeyDown={handleKeyDown}>
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      <div className="relative w-[38rem] max-w-[90vw] overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+    <Modal open={open} onClose={onClose} align="top" showClose={false}>
+      <div onKeyDown={handleKeyDown}>
         <div className="flex items-center gap-x-2 border-b border-neutral-800 px-3 py-2.5">
           <SearchIcon className="size-4 shrink-0 text-neutral-500" />
           <input
@@ -192,7 +193,7 @@ const SearchModal = ({ open, onClose }: SearchModalProps) => {
           ))}
         </ul>
       </div>
-    </div>
+    </Modal>
   );
 };
 

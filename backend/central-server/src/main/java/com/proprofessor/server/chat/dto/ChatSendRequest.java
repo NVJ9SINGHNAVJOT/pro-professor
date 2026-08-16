@@ -30,6 +30,13 @@ import java.util.List;
  * @param verbose            when {@code true}, stream token/timing metrics back to the client
  * @param thinkingEnabled    UI preference (show the model's reasoning); persisted on the
  *                           conversation, not forwarded to the provider
+ * @param sttModel           STT repo id this chat transcribes speech with, or {@code null} for the
+ *                           stored voice defaults — as the note chat panel sends
+ * @param preferModelAudio   whether an audio-capable model hears the clip itself instead of the
+ *                           STT pass, or {@code null} for the stored voice defaults
+ * @param ttsVoice           Kokoro voice replies are spoken in, or {@code null} for the defaults
+ * @param ttsLangCode        Kokoro language code, or {@code null} for the defaults
+ * @param ttsSpeed           playback speed multiplier, or {@code null} for the defaults
  */
 public record ChatSendRequest(
         Long conversationId,
@@ -45,6 +52,11 @@ public record ChatSendRequest(
         Double topP,
         Double repetitionPenalty,
         Boolean verbose,
-        Boolean thinkingEnabled
+        Boolean thinkingEnabled,
+        String sttModel,
+        Boolean preferModelAudio,
+        String ttsVoice,
+        String ttsLangCode,
+        Double ttsSpeed
 ) {
 }
