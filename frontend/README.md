@@ -73,9 +73,7 @@ The `@` alias maps to `src/` (configured in `vite.config.ts` and `tsconfig`).
 
 - [docs/folder-structure.md](docs/folder-structure.md) — the module architecture and frontend
   conventions to follow when adding code.
-- System flows live with the monorepo agent docs:
-  [project-flow.md](../docs/project-flow.md),
-  [notes-flow.md](../docs/notes-flow.md),
-  [diagram-flow.md](../docs/diagram-flow.md).
+- There is deliberately no system-flow doc — read the code. Orientation and cross-tier facts:
+  [.claude/CLAUDE.md](../.claude/CLAUDE.md); what each surface does: [usage.md](../docs/usage.md).
 - [../skills/](../skills/README.md) — prompt packs for authoring notes/diagrams with external
   AI models and pasting them into the app.

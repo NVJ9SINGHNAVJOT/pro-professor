@@ -3,7 +3,7 @@
 Architectural patterns for the `backend/central-server/` Spring Boot service. When adding new
 features or modifying existing code, adhere to these conventions to maintain consistency. (The
 frontend's equivalent lives in [frontend/docs/folder-structure.md](../../../frontend/docs/folder-structure.md);
-system-level flows live in [docs/project-flow.md](../../../docs/project-flow.md).)
+orientation and cross-tier facts live in [.claude/CLAUDE.md](../../../.claude/CLAUDE.md).)
 
 The backend uses a **"Package by Feature"** architecture (also known as vertical slicing).
 Instead of grouping classes by technical type (e.g., all controllers together, all services

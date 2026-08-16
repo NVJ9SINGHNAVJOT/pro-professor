@@ -1,4 +1,10 @@
-export type ApiError = { status: number; message: string };
+/**
+ * `aborted` marks a request the client gave up on, not one the server refused — `useApi` cancels
+ * the previous call of the same instance, so two mutations fired in quick succession off one
+ * handler leave the first looking like a failure it isn't. Callers that fire independent
+ * mutations (deletes, mostly) check this before reporting anything.
+ */
+export type ApiError = { status: number; message: string; aborted?: boolean };
 
 export type ApiResponse<T> = { error: null; response: T } | { error: ApiError; response: null };
 
@@ -64,6 +70,13 @@ export async function fetchApi<T>(options: FetchApiOptions): Promise<ApiResponse
     return { error: null, response: responseData as T };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
-    return { error: { status: 0, message: "message" in e ? e.message : "Unknown Api error" }, response: null };
+    return {
+      error: {
+        status: 0,
+        message: "message" in e ? e.message : "Unknown Api error",
+        aborted: e?.name === "AbortError",
+      },
+      response: null,
+    };
   }
 }

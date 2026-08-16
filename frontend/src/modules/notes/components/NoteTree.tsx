@@ -22,7 +22,7 @@ import {
 } from "@/components/common/sidebar";
 import { EMPTY_DRAG_IMAGE } from "@/utils/dragPreview";
 import { ROUTES } from "@/constants/routes";
-import { childFolders, itemsIn, rowKey } from "@/utils/folderTree";
+import { childFolders, itemsIn, rowKey, type PendingRow } from "@/utils/folderTree";
 import type { NoteFolderSummary, NoteSummary } from "@/services/operations/notes/notes.route";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +83,14 @@ interface NoteTreeProps {
   /** Create inside a folder from its own menu — null creates at the root. */
   onNewFolderIn: (parentId: number | null) => void;
   onNewNoteIn: (folderId: number | null) => void;
+  /**
+   * The "New note" field, sitting in the level it will be created in. Owned by `NoteList` rather
+   * than by the row, for the same reason `renaming` is: the explorer grid can be showing one too,
+   * and only one of the two was right-clicked.
+   */
+  pending: PendingRow | null;
+  onCommitPending: (title: string) => void;
+  onCancelPending: () => void;
   dragRef: RefObject<DragItem | null>;
   /** The row being dragged, dimmed while a custom preview follows the cursor. */
   dragging: DragItem | null;
@@ -102,12 +110,13 @@ interface NoteTreeProps {
 }
 
 /**
- * One level of the note explorer's tree, recursing into expanded folders. Folders sort A→Z and
- * notes by last-updated, at every level — the same rule the diagram tree follows.
+ * One level of the note explorer's tree, recursing into expanded folders. Folders sort A→Z, then
+ * notes A→Z, at every level — the same rule the diagram tree follows.
  */
 const NoteTree = (props: NoteTreeProps) => {
   const { folders, notes, parentId, depth, only, openId, onDeleteNote } = props;
   const { renaming, onStartRename, onCancelRename, onRenameNote } = props;
+  const { pending, onCommitPending, onCancelPending } = props;
   const { dragRef, dragging, onDragging, onDragMove } = props;
 
   return (
@@ -189,6 +198,29 @@ const NoteTree = (props: NoteTreeProps) => {
             </SidebarRowMenu>
           );
         })}
+
+      {/* The note that doesn't exist yet, at the end of the level it is being created in. No menu
+          and no link — there is nothing to act on until the name is accepted, and once it has been
+          the row holds its place as a plain label until the real one replaces it. */}
+      {only !== "folders" && pending !== null && pending.parentId === parentId && (
+        <div style={{ marginLeft: indentOf(depth) }} className={SIDEBAR_ROW_WRAPPER}>
+          <div className={sidebarRow(false, ["items-start", pending.busy && "opacity-60"])}>
+            <IconSlot />
+            <FileTextIcon className={cn(SIDEBAR_ICON_SLOT, "text-neutral-500")} />
+            {pending.busy ? (
+              <span className="truncate">{pending.name}</span>
+            ) : (
+              <InlineRename
+                value={pending.name}
+                commitUnchanged
+                ariaLabel="New note title"
+                onCommit={onCommitPending}
+                onCancel={onCancelPending}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -205,7 +237,13 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
   const isRenaming = renaming === key;
   const isExpanded = expanded.has(folder.id);
   const dragOver = dropTarget === folder.id;
-  const isEmpty = childFolders(props.folders, folder.id).length === 0 && itemsIn(props.notes, folder.id).length === 0;
+  // A pending "New note" field counts as content: the short-circuit below renders "Empty" *instead
+  // of* recursing, so without this the field would never appear in an empty folder — the one place
+  // creating a note is most likely.
+  const isEmpty =
+    childFolders(props.folders, folder.id).length === 0 &&
+    itemsIn(props.notes, folder.id).length === 0 &&
+    props.pending?.parentId !== folder.id;
 
   return (
     // The drop target is the folder's whole block — its row *and*, when open, everything nested
@@ -302,13 +340,22 @@ const FolderRow = ({ folder, ...props }: FolderRowProps) => {
           {isEmpty ? (
             // Without this an open empty folder is indistinguishable from a closed one — the
             // chevron turns and nothing else happens.
-            <div
-              style={{ marginLeft: indentOf(depth + 1) }}
-              className="flex items-center gap-x-2 px-2 py-1.5 caption-regular text-neutral-600 italic"
-            >
-              <IconSlot />
-              <IconSlot />
-              Empty
+            //
+            // Built from `sidebarRow` rather than its own box: this row is *replaced* by a real one
+            // the moment anything is created here, and `caption-regular`'s shorter line-height made
+            // the list jump by a few pixels at that swap. Only the paint differs — no hover, since
+            // there is nothing to click.
+            <div style={{ marginLeft: indentOf(depth + 1) }}>
+              <div
+                className={sidebarRow(
+                  false,
+                  "cursor-default text-neutral-600 italic hover:bg-transparent hover:text-neutral-600",
+                )}
+              >
+                <IconSlot />
+                <IconSlot />
+                Empty
+              </div>
             </div>
           ) : (
             <NoteTree {...props} parentId={folder.id} depth={depth + 1} only={undefined} />

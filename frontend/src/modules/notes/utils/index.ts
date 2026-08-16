@@ -1,4 +1,5 @@
 import type { OutlineItem } from "@/modules/notes/types";
+import type { NoteDetail, NoteSummary } from "@/services/operations/notes/notes.route";
 import {
   FENCED_CODE,
   FRONTMATTER_BLOCK,
@@ -7,6 +8,22 @@ import {
   INLINE_CODE,
   WIKI_REF,
 } from "@/modules/notes/constants";
+
+/**
+ * The explorer row hiding inside a full note — a list row is a strict subset of the detail.
+ *
+ * Global to the module rather than private to `NotesScreen`, because `useNoteFolders` also creates
+ * notes now and has to patch the same row.
+ */
+export const summaryOf = (detail: NoteDetail): NoteSummary => ({
+  id: detail.id,
+  title: detail.title,
+  tags: detail.tags,
+  // Must be carried: `upsertItem` merges the payload over the row, so dropping this would move the
+  // note back to the root on every save.
+  folderId: detail.folderId,
+  updatedAt: detail.updatedAt,
+});
 
 /** Removes the leading YAML frontmatter block — the preview renders only the body. */
 export function stripFrontmatter(content: string): string {

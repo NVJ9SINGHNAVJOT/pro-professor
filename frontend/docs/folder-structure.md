@@ -3,7 +3,7 @@
 Architectural patterns for the `frontend/` React app. When adding new features or modifying
 existing code, adhere to these conventions to maintain consistency. (The backend's equivalent
 lives in [backend/central-server/docs/folder-structure.md](../../backend/central-server/docs/folder-structure.md);
-system-level flows live in [docs/project-flow.md](../../docs/project-flow.md).)
+orientation and cross-tier facts live in [.claude/CLAUDE.md](../../.claude/CLAUDE.md).)
 
 The frontend uses a **Feature Module** architecture. While global utilities and UI components
 live at the top level of `src/`, feature-specific code is encapsulated inside its own module
@@ -27,8 +27,7 @@ src/modules/<feature-name>/
 ```
 
 > Some modules add more (e.g. the notes module has `editor/` and `hooks/`; the diagram module has
-> `persistence/` — see [docs/diagram-flow.md](../../docs/diagram-flow.md)). The subfolder names
-> above are the shared baseline.
+> `persistence/` for its scene helpers). The subfolder names above are the shared baseline.
 
 ## Global Structure (`src/`)
 
@@ -103,9 +102,10 @@ import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/M
 ```
 
 Current folder components: `common/Button/`, `common/Markdown/`, `common/toast/`,
-`notes/components/NoteEditor/`, `notes/components/GraphView/`, `diagram/components/DiagramEditor/`.
-`toast/` is the one holdout — it is a subsystem (`Toaster` + a store), not a component with files,
-so its lowercase name and existing barrel stay as they are.
+`common/confirm/`, `notes/components/NoteEditor/`, `notes/components/GraphView/`,
+`diagram/components/DiagramEditor/`. `toast/` and `confirm/` are the holdouts — each is a subsystem
+(a host component + a module-level store driven imperatively from anywhere), not a component with
+files, so their lowercase names and barrels stay as they are.
 
 **A barrel over a `lazy()` boundary exports the orchestrator only.** `GraphView/index.ts` exports
 its default and nothing else on purpose: re-exporting the sibling `ForceGraph` would make
@@ -307,21 +307,40 @@ become a field.
 
 Notes and diagrams share [components/common/ExplorerGrid.tsx](../src/components/common/ExplorerGrid.tsx)
 — the Drive-style card view their center pane shows when nothing is open. It is generic over
-anything shaped like `{id, name, parentId}` and `{id, title, folderId, updatedAt}`, holds no data of
-its own, and reports gestures back to the screen: double-click opens, right-click a card acts on it,
+anything shaped like `{id, name, parentId}` and `{id, title, folderId}`, holds no data of its own,
+and reports gestures back to the screen: double-click opens, right-click a card acts on it,
 right-click the background creates, cards drag onto folder cards to move. The folder being browsed
 is a `?folder=` search param so the view survives a reload and can be linked to.
 
-`onNewFolder` is the one handler that **reports a value back** (the new folder's id, or null on a
-refusal). Every folder is born "New folder", so the new card opens straight into its rename field —
-and rename state belongs to the surface the folder was created from, which the screen doesn't own.
-Creating one from a folder *card* also descends into that folder, since the new folder lands a level
-below what is on screen and its field would otherwise never render.
+**Creating is two different mechanisms, on purpose.** A *folder* is created immediately and named
+afterwards: `onNewFolder` is the one handler that **reports a value back** (the new folder's id, or
+null on a refusal), so the new card can open straight into its rename field — rename state belongs
+to the surface the folder was created from, which the screen doesn't own. An *item* is named first
+and created on Enter: `suggestItemName()` supplies the pre-filled name and `onNewItem(title,
+folderId)` fires only once it is accepted, so Escape sends nothing. Either way, creating from a
+folder *card* first descends into that folder — the new row lands a level below what is on screen,
+and its field would otherwise never render.
+
+The placeholder itself is a `PendingRow` (`{parentId, name}`), held **per surface** next to that
+surface's `renaming` key and for the same reason: the sidebar tree and the grid can each be showing
+one, and only one of them was right-clicked. Both surfaces render it with the same
+[InlineRename](../src/components/common/InlineRename.tsx), passing `commitUnchanged` — a rename to
+the name you already have is a no-op, but accepting a *suggested* name has to create something.
 
 Both sidebars' trees walk the same pure helpers in
-[utils/folderTree.ts](../src/utils/folderTree.ts) (`childFolders`, `itemsIn`, `descendantIds`,
-`ancestorIds`, `isDescendant`) — global rather than module-scoped precisely because modules may not
-import from one another.
+[utils/folderTree.ts](../src/utils/folderTree.ts) (`childFolders`, `itemsIn`, `nextUntitled`,
+`byName`, `descendantIds`, `ancestorIds`, `isDescendant`) — global rather than module-scoped
+precisely because modules may not import from one another. Rows sort **by name at every level**,
+folders before items, with numeric collation so "Untitled 2" precedes "Untitled 10"; `nextUntitled`
+hands out exactly that series, mirroring the server's dedup rule so the name a field opens with is
+the name the row keeps.
+
+Deleting a folder cascades server-side and nothing undoes it, so both explorers ask first through
+the global [confirm()](../src/components/common/confirm/) dialog — the imperative
+`await confirm({...}) → boolean` shape of `toast`, because the callers are async mutation handlers
+rather than components. `utils/cascade.ts` builds the message naming what goes. On success the
+screens also walk `?folder=` up to the nearest surviving ancestor, or the grid would be left
+browsing a folder that no longer exists.
 
 ## Persisted view state
 

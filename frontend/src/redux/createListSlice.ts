@@ -21,9 +21,12 @@ export function createListSlice<T extends { id: number }>(name: string) {
       setItems: (_state, action: PayloadAction<T[]>) => ({ items: action.payload }),
 
       /**
-       * Adds or updates one row and moves it to the front. The server orders all three lists by
-       * `updated_at DESC` and a DB trigger stamps that column on every write, so the row just
-       * touched belongs at the top — this reproduces what a refetch would have returned.
+       * Adds or updates one row and moves it to the front — recency order, which is what the chat
+       * sidebar shows and what the ⌘P palette and graph view rank by.
+       *
+       * The note and diagram explorers no longer read this order: their trees and grids sort by
+       * name through `itemsIn`, so a save leaves the row where it was. This array order is still
+       * the one every list that *doesn't* go through `itemsIn` renders.
        *
        * The payload is merged onto the existing row, so a caller holding only part of one (a chat
        * turn knows the id and title, not the model) can still patch it.

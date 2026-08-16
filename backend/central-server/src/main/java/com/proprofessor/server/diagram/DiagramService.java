@@ -61,7 +61,8 @@ public class DiagramService {
     @Transactional
     public DiagramDetail createDiagram(DiagramCreateRequest request) {
         String title = uniqueTitle(normalizeTitle(request.title()), null);
-        DiagramRow diagram = diagramRepository.insert(title, requireContent(request.content()));
+        requireFolderExists(request.folderId());
+        DiagramRow diagram = diagramRepository.insert(title, requireContent(request.content()), request.folderId());
         return diagramMapper.toDetail(diagram);
     }
 

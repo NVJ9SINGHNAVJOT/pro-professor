@@ -22,4 +22,4 @@ The app's built-in **Update note** action uses its own *editing* contract, wired
 pipeline (`NotesAiService` in `backend/central-server`) — intentionally separate and not meant to be
 copied into a chat. It resembles what's here in that it returns a complete note, but it is given the
 current one plus an instruction, and the result is staged for the user to apply rather than saved.
-See [docs/notes-flow.md](../docs/notes-flow.md) §6 for the pipeline.
+`NotesAiService` is the pipeline — read it there.

@@ -31,10 +31,15 @@ public class DiagramRepository {
         this.dsl = dsl;
     }
 
+    /**
+     * Every diagram, A→Z by title — the explorer's order, so the list arrives already sorted the way
+     * the sidebar and the grid draw it. Ordering by {@code updated_at} instead moved a diagram to
+     * the top of its folder on every autosave, which is every few seconds while drawing.
+     */
     public List<DiagramRow> findAll() {
         return dsl.select()
                 .from(DIAGRAMS)
-                .orderBy(DIAGRAMS.UPDATED_AT.desc())
+                .orderBy(DIAGRAMS.TITLE.asc())
                 .fetch(this::toRow);
     }
 
@@ -53,10 +58,12 @@ public class DiagramRepository {
                 .fetchOptional(this::toRow);
     }
 
-    public DiagramRow insert(String title, String contentJson) {
+    /** {@code folderId} is null at the root level. */
+    public DiagramRow insert(String title, String contentJson, Long folderId) {
         Long id = dsl.insertInto(DIAGRAMS)
                 .set(DIAGRAMS.TITLE, title)
                 .set(DIAGRAMS.CONTENT, JSONB.valueOf(contentJson))
+                .set(DIAGRAMS.FOLDER_ID, folderId)
                 .returning(DIAGRAMS.ID)
                 .fetchOne(DIAGRAMS.ID);
         return findById(id).orElseThrow();

@@ -33,7 +33,7 @@ import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { upsertNote } from "@/redux/slices/notesListSlice";
 import { setGraphRenderer } from "@/redux/slices/notesGraphSlice";
-import { expandFolder, revealFolders } from "@/redux/slices/notesSidebarSlice";
+import { revealFolders } from "@/redux/slices/notesSidebarSlice";
 import {
   notesRoute,
   type NoteDetail,
@@ -73,7 +73,7 @@ import {
 import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { lintMarkdown } from "@/modules/notes/editor/lintMarkdown";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
-import { stripFrontmatter } from "@/modules/notes/utils";
+import { stripFrontmatter, summaryOf } from "@/modules/notes/utils";
 import type { NoteApplyMode, NoteEditTarget, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import {
   HEADING_SCROLL_DELAY_MS,
@@ -81,7 +81,7 @@ import {
   SCROLL_SYNC_RELEASE_MS,
   type SlashCommand,
 } from "@/modules/notes/constants";
-import { DRAFT_FOLDER_PARAM, NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { ancestorIds } from "@/utils/folderTree";
 
 interface NotesScreenProps {
@@ -98,16 +98,11 @@ interface NotesScreenProps {
 /** Stable empty-tags reference so a tagless note doesn't hand ContextPanel a new array every render. */
 const EMPTY_TAGS: string[] = [];
 
-/** The explorer row hiding inside a full note — a list row is a strict subset of the detail. */
-const summaryOf = (detail: NoteDetail): NoteSummary => ({
-  id: detail.id,
-  title: detail.title,
-  tags: detail.tags,
-  // Must be carried: `upsertItem` merges the payload over the row, so dropping this would move the
-  // note back to the root on every save.
-  folderId: detail.folderId,
-  updatedAt: detail.updatedAt,
-});
+/**
+ * Which pane a note opens in. An empty one has nothing to preview — that's every note created from
+ * a folder's "New note", which is born named but blank — so it opens ready to be written in.
+ */
+const modeFor = (content: string | undefined): NoteViewMode => (content?.trim() ? "preview" : "split");
 
 /** Obsidian-like three-pane workspace: explorer | editor⟷preview | outline/tags. */
 const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps) => {
@@ -132,10 +127,11 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   const [savedContent, setSavedContent] = useState(loadedNote?.content ?? "");
   const [title, setTitle] = useState(loadedNote?.title ?? "");
   const [savedTitle, setSavedTitle] = useState(loadedNote?.title ?? "");
-  // An existing note is opened to be read, so it lands in preview; a draft has nothing to read yet,
-  // so it lands in split. The seeding effect below re-applies this whenever the route hands over a
-  // different note — until then a manual toggle stands.
-  const [viewMode, setViewMode] = useState<NoteViewMode>(isDraft ? "split" : "preview");
+  // An existing note is opened to be read, so it lands in preview; anything with nothing to read
+  // yet — a draft, or a note just created from a folder's menu — lands in split. The seeding effect
+  // below re-applies this whenever the route hands over a different note; until then a manual
+  // toggle stands.
+  const [viewMode, setViewMode] = useState<NoteViewMode>(isDraft ? "split" : modeFor(loadedNote?.content));
   const [rightPanel, setRightPanel] = useState<NoteRightPanel>("context");
   // Explorer collapse. Local state, matching the chat screen — `/notes` and `/notes/:noteId` are
   // two route entries, so opening the first note remounts this screen and resets it. That's the
@@ -144,10 +140,6 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   const toggleNoteList = useCallback(() => setNoteListOpen((open) => !open), []);
   // Which folder the center-pane explorer is browsing. In the URL rather than in state so the view
   // survives a reload and can be linked to; absent = the root.
-  // The folder a draft was started in, carried across this screen's remount — see DRAFT_FOLDER_PARAM.
-  const inParam = Number(searchParams.get(DRAFT_FOLDER_PARAM));
-  const draftFolderId = isDraft && Number.isFinite(inParam) && inParam > 0 ? inParam : null;
-
   const browseParam = Number(searchParams.get("folder"));
   const browsingFolderId = Number.isFinite(browseParam) && browseParam > 0 ? browseParam : null;
   /** Leaves the open note for the folder browser — the pane's other mode. */
@@ -164,11 +156,8 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   );
 
   // The same mutations the explorer pane in the sidebar performs — one hook, two surfaces.
-  const { deleteNote, addFolder, renameFolder, deleteFolder, moveRow } = useNoteFolders(
-    notes,
-    folders,
-    note?.id ?? null,
-  );
+  const { suggestedNoteTitle, createNoteNamed, deleteNote, addFolder, renameFolder, deleteFolder, moveRow } =
+    useNoteFolders(notes, folders, note?.id ?? null);
   // The graph view is a mode, so it stays local and resets on the remount — but *which renderer* it
   // shows, and everything that renderer has been arranged into, is persisted. See notesGraphSlice.
   const [graphOpen, setGraphOpen] = useState(false);
@@ -213,8 +202,8 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   const applyDetail = useCallback(
     (detail: NoteDetail) => {
       seedFromDetail(detail);
-      // The explorer row is a subset of what we just got back — patch it (title, tags, and the new
-      // updatedAt, which floats the note to the top) rather than refetching the whole list.
+      // The explorer row is a subset of what we just got back — patch it (title and tags, either of
+      // which a save can change) rather than refetching the whole list.
       dispatch(upsertNote(summaryOf(detail)));
       setRevisionRefresh((key) => key + 1);
     },
@@ -242,7 +231,7 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
     if (!isDraft && !loadedNote) return;
     if (loadedNote) {
       seedFromDetail(loadedNote);
-      setViewMode("preview");
+      setViewMode(modeFor(loadedNote.content));
       return;
     }
     appliedIdRef.current = null;
@@ -260,33 +249,15 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   }, [loadedNote?.id ?? null, draftTitle, noteId]);
 
   /**
-   * New note = an empty draft. Nothing is created until it's saved, so this costs no request —
-   * and it no-ops on a blank draft, since re-navigating to the URL we're on reads as a
-   * revalidation and would refetch the explorer on every click. (A *seeded* draft, opened from an
-   * unresolved `[[link]]`, still clears back to an empty one.)
+   * Opens the blank draft — always at the root. A note wanted *inside* a folder doesn't come
+   * through here: that one is created outright from the folder's own menu, because a draft has no
+   * row to show inside the folder until its first save.
    */
-  /**
-   * Opens the blank draft, remembering which folder it should be filed in once it is saved.
-   *
-   * The folder rides in the URL (`?in=`), not in a ref: this screen **remounts** on the way to
-   * `/notes/new` — `/notes` and `/notes/:noteId` are separate route entries — so anything held in
-   * component state is gone before the first save can read it, and every note created from a
-   * folder's menu was silently filed at the root.
-   */
-  const startDraft = useCallback(
-    (folderId: number | null) => {
-      // Or the note would be created inside a folder that is shut, and appear to go nowhere.
-      if (folderId !== null) dispatch(expandFolder(folderId));
-      const target = ROUTES.NOTES_NEW_IN(folderId);
-      // Re-navigating to the URL we're on reads as a revalidation and refetches the explorer — but
-      // a *different* target folder (or a seeded draft) still has to move.
-      if (`${location.pathname}${location.search}` !== target) navigate(target);
-    },
-    [location.pathname, location.search, navigate, dispatch],
-  );
-
-  const handleCreate = useCallback(() => startDraft(null), [startDraft]);
-  const handleCreateIn = useCallback((folderId: number) => startDraft(folderId), [startDraft]);
+  const handleCreate = useCallback(() => {
+    // Re-navigating to the URL we're on reads as a revalidation and refetches the explorer — but a
+    // *seeded* draft, opened from an unresolved `[[link]]`, still has to clear back to an empty one.
+    if (`${location.pathname}${location.search}` !== ROUTES.NOTES_NEW) navigate(ROUTES.NOTES_NEW);
+  }, [location.pathname, location.search, navigate]);
 
   /**
    * Open the chain of folders leading to the note named in the URL, so arriving by reload or by a
@@ -308,9 +279,9 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
     if (saving || creating) return false;
     if (!note) {
       if (!isDraft) return false;
-      // First save of a draft: the row is born here. A blank title lands as "Untitled"
+      // First save of a draft: the row is born here, at the root. A blank title lands as "Untitled"
       // server-side, and a frontmatter `title:` still wins — same as any other save.
-      const res = await createNote({ title, content, folderId: draftFolderId });
+      const res = await createNote({ title, content, folderId: null });
       if (res.error) {
         toast.error(res.error.message || "Failed to create note");
         return false;
@@ -346,7 +317,6 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
     updateNote,
     seedFromDetail,
     applyDetail,
-    draftFolderId,
   ]);
 
   /**
@@ -1047,7 +1017,8 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
         itemNoun="note"
         rootLabel="Notes"
         onNewFolder={addFolder}
-        onNewItem={(folderId) => (folderId === null ? handleCreate() : handleCreateIn(folderId))}
+        suggestItemName={suggestedNoteTitle}
+        onNewItem={createNoteNamed}
         onRenameFolder={(id, name) => void renameFolder(id, name)}
         onRenameItem={handleRenameRowVoid}
         onDeleteFolder={(id) => void deleteFolder(id)}
@@ -1079,7 +1050,6 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
         notes={notes}
         folders={folders}
         onCreate={handleCreate}
-        onCreateIn={handleCreateIn}
         creating={creating}
         onRename={handleRenameRowVoid}
         isOpen={noteListOpen}

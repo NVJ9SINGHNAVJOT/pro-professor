@@ -8,12 +8,19 @@ interface InlineRenameProps {
   onCommit: (next: string) => void;
   /** Escape, or a blur/Enter that changed nothing. */
   onCancel: () => void;
+  /**
+   * Commit a value equal to `value` instead of cancelling. Renaming a row to the name it already
+   * has is a no-op, but a *create* field opening on a suggested name ("Untitled 2") has to read
+   * Enter as "yes, that one" — otherwise accepting the offered name does nothing at all.
+   */
+  commitUnchanged?: boolean;
   ariaLabel: string;
   className?: string;
 }
 
 /**
- * Renames a row in place — sidebar rows, folder rows, explorer cards.
+ * Edits a row's name in place — sidebar rows, folder rows, explorer cards, and the placeholder row
+ * a right-click "New …" opens (see `commitUnchanged`).
  *
  * Same contract as the editor top bar's `EditableTitle` one row up (Enter commits, Escape reverts),
  * but for a field that only exists while renaming, so it is uncontrolled and self-focusing.
@@ -28,7 +35,7 @@ interface InlineRenameProps {
  *   action, and taking focus from an effect keeps that deterministic — it runs after the row has
  *   swapped its label for this field, whatever else is unmounting in the same commit.
  */
-const InlineRename = ({ value, onCommit, onCancel, ariaLabel, className }: InlineRenameProps) => {
+const InlineRename = ({ value, onCommit, onCancel, commitUnchanged, ariaLabel, className }: InlineRenameProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   // Enter commits and then blurs, and Escape cancels and then blurs — both would run the blur
   // handler a second time on a field that has already reported its outcome.
@@ -47,7 +54,7 @@ const InlineRename = ({ value, onCommit, onCancel, ariaLabel, className }: Inlin
     settled.current = true;
     const trimmed = next.trim();
     // A blank name is a slip, not a rename: leave the row as it was.
-    if (trimmed === "" || trimmed === value) onCancel();
+    if (trimmed === "" || (trimmed === value && !commitUnchanged)) onCancel();
     else onCommit(trimmed);
   };
 

@@ -3,13 +3,21 @@ import { ChevronRightIcon, FolderIcon, FolderPlusIcon, PencilLineIcon, Trash2Ico
 import type { LucideIcon } from "lucide-react";
 import InlineRename from "@/components/common/InlineRename";
 import SidebarRowMenu from "@/components/common/SidebarRowMenu";
-import { ancestorIds, childFolders, itemsIn, rowKey, type TreeFolder, type TreeItem } from "@/utils/folderTree";
+import {
+  ancestorIds,
+  childFolders,
+  itemsIn,
+  rowKey,
+  type PendingRow,
+  type TreeFolder,
+  type TreeItem,
+} from "@/utils/folderTree";
 import { cn } from "@/lib/utils";
 
 /** What a drag is carrying — the same shape both sidebar trees use. */
 type DragItem = { kind: "folder"; id: number } | { kind: "item"; id: number };
 
-interface ExplorerGridProps<F extends TreeFolder, I extends TreeItem & { title: string }> {
+interface ExplorerGridProps<F extends TreeFolder, I extends TreeItem> {
   folders: F[];
   items: I[];
   /** The folder being browsed — null is the root. Owned by the screen, from `?folder=`. */
@@ -24,7 +32,13 @@ interface ExplorerGridProps<F extends TreeFolder, I extends TreeItem & { title: 
   rootLabel: string;
   /** Creates a folder, resolving to its id — null if the server refused. See `createFolder` below. */
   onNewFolder: (parentId: number | null) => Promise<number | null>;
-  onNewItem: (folderId: number | null) => void;
+  /** The name a new item's field opens with — the first free "Untitled". See `createItem` below. */
+  suggestItemName: () => string;
+  /**
+   * Creates the item the placeholder card stood for, once its name is accepted. The card holds its
+   * place until this resolves, so the row never blinks out between the two.
+   */
+  onNewItem: (title: string, folderId: number | null) => Promise<boolean>;
   onRenameFolder: (id: number, name: string) => void;
   onRenameItem: (id: number, title: string) => void;
   onDeleteFolder: (id: number) => void;
@@ -45,11 +59,11 @@ const CARD =
  * is the other half, for browsing: **double-click** opens (a folder descends, an item opens in the
  * editor), **right-click** a card acts on it, **right-click the background** creates, and cards
  * drag onto folder cards to move. Both notes and diagrams render it — hence global, and generic
- * over anything shaped like `{id, name, parentId}` and `{id, title, folderId, updatedAt}`.
+ * over anything shaped like `{id, name, parentId}` and `{id, title, folderId}`.
  *
  * The screens own the data and every mutation; this only decides what a gesture means.
  */
-const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string }>({
+const ExplorerGrid = <F extends TreeFolder, I extends TreeItem>({
   folders,
   items,
   folderId,
@@ -59,6 +73,7 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
   itemNoun,
   rootLabel,
   onNewFolder,
+  suggestItemName,
   onNewItem,
   onRenameFolder,
   onRenameItem,
@@ -68,6 +83,9 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
   header,
 }: ExplorerGridProps<F, I>) => {
   const [renaming, setRenaming] = useState<string | null>(null);
+  // The card standing in for an item that doesn't exist yet. Owned here, like `renaming`, because
+  // the sidebar tree keeps its own and only one of the two surfaces was right-clicked.
+  const [pending, setPending] = useState<PendingRow | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
 
@@ -107,7 +125,7 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
 
   /** The browsing area's own menu — creates inside whatever folder is on screen. */
   const backgroundActions = [
-    { label: `New ${itemNoun}`, icon: ItemIcon, onSelect: () => onNewItem(folderId) },
+    { label: `New ${itemNoun}`, icon: ItemIcon, onSelect: () => createItem(folderId) },
     { label: "New folder", icon: FolderPlusIcon, onSelect: () => void createFolder(folderId) },
   ];
 
@@ -125,6 +143,28 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
     // the rename field would be attached to a card that isn't rendered and never appear.
     if (parentId !== folderId) onOpenFolder(parentId);
     setRenaming(rowKey("folder", id));
+  };
+
+  /**
+   * Opens a placeholder card with the name the item would take, the way VS Code's explorer opens a
+   * field for a new file. Nothing is sent until that name is accepted — Escape leaves no trace.
+   *
+   * Descends for the same reason `createFolder` does: from a folder *card*'s menu the placeholder
+   * belongs a level down, where it isn't currently rendered.
+   */
+  const createItem = (parentId: number | null) => {
+    if (parentId !== folderId) onOpenFolder(parentId);
+    setPending({ parentId, name: suggestItemName() });
+  };
+
+  const commitItem = async (title: string) => {
+    const parentId = pending?.parentId ?? null;
+    // The card stays put and turns into a plain label while the create is in flight — see
+    // `PendingRow.busy`. Cleared either way afterwards: the surface that opens the new item is not
+    // always torn down by that navigation, and a card left behind would double the row.
+    setPending({ parentId, name: title, busy: true });
+    await onNewItem(title, parentId);
+    setPending(null);
   };
 
   return (
@@ -176,7 +216,9 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
           }}
           className="chat-scroll min-h-0 flex-1 overflow-y-auto px-6 pb-6"
         >
-          {visibleFolders.length === 0 && visibleItems.length === 0 ? (
+          {/* The pending card counts as content — otherwise the empty state would replace the very
+              field the right-click just opened. */}
+          {visibleFolders.length === 0 && visibleItems.length === 0 && pending === null ? (
             <div className="flex flex-col items-center justify-center gap-y-3 py-20 text-neutral-500">
               <FolderIcon className="size-10" />
               <p className="para-small-medium">This folder is empty</p>
@@ -195,7 +237,7 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
                     disabled={isRenaming}
                     actions={[
                       { label: "Open", icon: FolderIcon, onSelect: () => onOpenFolder(folder.id) },
-                      { label: `New ${itemNoun}`, icon: ItemIcon, onSelect: () => onNewItem(folder.id) },
+                      { label: `New ${itemNoun}`, icon: ItemIcon, onSelect: () => createItem(folder.id) },
                       { label: "New folder", icon: FolderPlusIcon, onSelect: () => void createFolder(folder.id) },
                       { label: "Rename", icon: PencilLineIcon, onSelect: () => setRenaming(key) },
                       {
@@ -296,6 +338,26 @@ const ExplorerGrid = <F extends TreeFolder, I extends TreeItem & { title: string
                   </SidebarRowMenu>
                 );
               })}
+
+              {/* The item that doesn't exist yet. No menu and no drag — there is nothing to act on
+                  until the name is accepted, and once it has been the card holds its place as a
+                  plain label until the real one replaces it. */}
+              {pending !== null && pending.parentId === folderId && (
+                <div className={cn(CARD, "cursor-default", pending.busy && "opacity-60")}>
+                  <ItemIcon className="size-7 shrink-0 text-neutral-500" />
+                  {pending.busy ? (
+                    <span className="truncate para-small-medium text-white">{pending.name}</span>
+                  ) : (
+                    <InlineRename
+                      value={pending.name}
+                      commitUnchanged
+                      ariaLabel={`New ${itemNoun} title`}
+                      onCommit={(next) => void commitItem(next)}
+                      onCancel={() => setPending(null)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

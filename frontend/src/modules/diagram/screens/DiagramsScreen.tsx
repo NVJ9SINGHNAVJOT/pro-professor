@@ -3,8 +3,9 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { FileText, Folder, FolderOpen, FolderPlus, SquarePenIcon, Workflow } from "lucide-react";
 import MainNavbar from "@/components/common/MainNavbar";
 import { sidebarNavRow, sidebarShell, sidebarShellInner } from "@/components/common/sidebar";
+import { confirm } from "@/components/common/confirm";
 import { toast } from "@/components/common/toast";
-import { DRAFT_FOLDER_PARAM, NEW_ITEM_ID, ROUTES } from "@/constants/routes";
+import { NEW_ITEM_ID, ROUTES } from "@/constants/routes";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { removeDiagram, upsertDiagram } from "@/redux/slices/diagramListSlice";
@@ -21,7 +22,18 @@ import ExplorerGrid from "@/components/common/ExplorerGrid";
 import SidebarSection from "@/components/common/SidebarSection";
 import SidebarToggle from "@/components/common/SidebarToggle";
 import DiagramTree, { type DragItem } from "@/modules/diagram/components/DiagramTree";
-import { ancestorIds, childFolders, descendantIds, isDescendant, itemsIn, rowKey } from "@/utils/folderTree";
+import {
+  ancestorIds,
+  childFolders,
+  descendantIds,
+  isDescendant,
+  itemsIn,
+  nextUntitled,
+  rowKey,
+  type PendingRow,
+} from "@/utils/folderTree";
+import { cascadeMessage } from "@/utils/cascade";
+import { makeEmptyScene } from "@/modules/diagram/persistence/sceneIO";
 import {
   diagramsRoute,
   type DiagramDetail,
@@ -62,6 +74,7 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   const diagramId = useParams().diagramId;
   const isDraft = diagramId === NEW_ITEM_ID;
 
+  const { execute: createDiagram } = useApi(diagramsRoute.createDiagram);
   const { execute: deleteDiagram } = useApi(diagramsRoute.deleteDiagram);
   const { execute: renameDiagramTitle } = useApi(diagramsRoute.renameDiagram);
   const { execute: moveDiagram } = useApi(diagramsRoute.moveDiagram);
@@ -86,10 +99,6 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   // Which folder the center-pane explorer is browsing. In the URL rather than in state so the view
   // survives a reload and can be linked to; absent = the root.
   const [searchParams, setSearchParams] = useSearchParams();
-  // The folder a draft was started in, carried across this screen's remount — see DRAFT_FOLDER_PARAM.
-  const inParam = Number(searchParams.get(DRAFT_FOLDER_PARAM));
-  const draftFolderId = isDraft && Number.isFinite(inParam) && inParam > 0 ? inParam : null;
-
   const browseParam = Number(searchParams.get("folder"));
   const browsingFolderId = Number.isFinite(browseParam) && browseParam > 0 ? browseParam : null;
   const browseFolder = (id: number | null) => {
@@ -101,6 +110,9 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   // The row in rename mode (see `rowKey`). Owned here rather than by the row because renaming is
   // started from outside it too: a folder created from a menu opens straight into rename.
   const [renaming, setRenaming] = useState<string | null>(null);
+  // The sidebar's "New diagram" field, standing in for a diagram that doesn't exist yet. Separate
+  // from `renaming` because there is no row to key it to — see PendingRow.
+  const [pending, setPending] = useState<PendingRow | null>(null);
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const [rootDragOver, setRootDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
@@ -138,44 +150,29 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   const editorKey = diagram === null || showingDraftId ? `new-${draftGen}` : diagram.id;
 
   /**
-   * New diagram = an empty draft canvas. A no-op when one is already open: re-navigating to the
-   * URL we're on reads as a revalidation and would refetch the list on every click.
+   * New diagram = an empty draft canvas, always at the root. A diagram wanted *inside* a folder
+   * doesn't come through here: that one is created outright from the folder's own menu, because a
+   * draft has no row to show inside the folder until its first autosave.
+   *
+   * A no-op when a draft is already open: re-navigating to the URL we're on reads as a revalidation
+   * and would refetch the list on every click.
    */
-  const create = (folderId: number | null = null) => {
-    const target = ROUTES.DIAGRAMS_NEW_IN(folderId);
-    // Re-navigating to the URL we're on reads as a revalidation and would refetch the list on every
-    // click — but a draft aimed at a *different* folder is a different URL, and must still move.
-    if (`${location.pathname}${location.search}` === target) return;
+  const create = () => {
+    if (`${location.pathname}${location.search}` === ROUTES.DIAGRAMS_NEW) return;
     // Forget the diagram the last draft became and bump the key, or the canvas would be reused
     // as-is and the new draft would open on the previous drawing.
     setDraftId(null);
     setDraftGen((n) => n + 1);
-    if (folderId !== null) dispatch(expandFolder(folderId));
-    navigate(target);
+    navigate(ROUTES.DIAGRAMS_NEW);
   };
 
   /** The draft's first autosave created it — give it a real URL (`onSaved` already listed it). */
   const handleCreated = (id: number) => {
     setDraftId(id);
-    // The folder the draft was started in, read off the URL *before* navigating away from it —
-    // see DRAFT_FOLDER_PARAM for why this can't be component state.
-    const folderId = draftFolderId;
     // Same route, so the canvas isn't remounted; the marker also keeps the loader from refetching
     // the scene the autosave just wrote.
     markDraftCreated("diagramId", id);
     navigate(ROUTES.DIAGRAMS_DETAIL(id), { replace: true });
-
-    if (folderId === null) return;
-    // File it where it was asked for. Optimistic like every other move, so the row doesn't jump
-    // from the root into the folder a round-trip later.
-    dispatch(upsertDiagram({ id, folderId }));
-    dispatch(expandFolder(folderId));
-    void moveDiagram(id, folderId).then((res) => {
-      if (res.error) {
-        dispatch(upsertDiagram({ id, folderId: null }));
-        toast.error("Failed to move diagram into the folder");
-      }
-    });
   };
 
   /**
@@ -193,11 +190,50 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     if (chain.length > 0) dispatch(revealFolders(chain));
   }, [diagram, folders, dispatch]);
 
+  /**
+   * The name a "New diagram" field opens with — the first free "Untitled Diagram".
+   *
+   * Checked against every diagram, not just the folder's: titles are globally unique server-side
+   * (`diagrams_title_unique`) because `[[Title.diagram]]` links resolve by title alone.
+   */
+  const suggestedDiagramTitle = () =>
+    nextUntitled(
+      diagrams.map((d) => d.title),
+      "Untitled Diagram",
+    );
+
+  /**
+   * Creates the diagram a placeholder row stood for and opens it.
+   *
+   * The right-click path, as opposed to the toolbar button's draft canvas: the row has to exist the
+   * moment the name is accepted, because the whole point of the placeholder is that you can see
+   * where the diagram is going before it is there. `folderId` rides along on the create, so it is
+   * born in the folder rather than at the root.
+   *
+   * Listing the row and navigating happen in one batch, so the placeholder the caller is still
+   * showing is replaced by the real row in a single frame — never both, never neither.
+   *
+   * @returns whether the diagram was created.
+   */
+  const createDiagramNamed = async (title: string, folderId: number | null): Promise<boolean> => {
+    const res = await createDiagram({ title, content: makeEmptyScene(), folderId });
+    if (res.error) {
+      toast.error(res.error.message || "Failed to create diagram");
+      return false;
+    }
+    const detail = res.response.data;
+    dispatch(upsertDiagram(summaryOf(detail)));
+    navigate(ROUTES.DIAGRAMS_DETAIL(detail.id));
+    return true;
+  };
+
   const remove = async (id: number) => {
     const res = await deleteDiagram(id);
     // The server refuses to delete a diagram a note still links to, and says which note — pass
-    // that through rather than replacing it with a generic failure.
-    if (res.error) {
+    // that through rather than replacing it with a generic failure. An abort is our own doing
+    // (`useApi` cancels the previous call of the same instance, so a second delete supersedes a
+    // first the server has already carried out), so it is not a failure to report.
+    if (res.error && !res.error.aborted) {
       toast.error(res.error.message);
       return;
     }
@@ -216,7 +252,8 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
    * the folder had been created from the explorer, and moved focus there.
    */
   const addFolder = async (parentId: number | null = null): Promise<number | null> => {
-    const res = await createFolder("New folder", parentId);
+    const siblings = folders.filter((folder) => folder.parentId === parentId).map((folder) => folder.name);
+    const res = await createFolder(nextUntitled(siblings, "New folder"), parentId);
     if (res.error) {
       toast.error("Failed to create folder");
       return null;
@@ -232,6 +269,28 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
   const addFolderInTree = async (parentId: number | null = null) => {
     const id = await addFolder(parentId);
     if (id !== null) setRenaming(rowKey("folder", id));
+  };
+
+  /**
+   * Opens the sidebar's "New diagram" field inside a folder, the way VS Code's explorer does — a
+   * row appears where the diagram will be, pre-filled with the name it would take, and Enter
+   * creates it.
+   */
+  const startPending = (parentId: number | null) => {
+    if (parentId !== null) dispatch(expandFolder(parentId));
+    setPending({ parentId, name: suggestedDiagramTitle() });
+  };
+
+  const commitPending = async (title: string) => {
+    const parentId = pending?.parentId ?? null;
+    // The row stays put and turns into a plain label while the create is in flight — see
+    // `PendingRow.busy`.
+    setPending({ parentId, name: title, busy: true });
+    await createDiagramNamed(title, parentId);
+    // Always cleared, whether or not it worked. Creating from the sidebar while a diagram is
+    // already open navigates `/diagrams/:a` → `/diagrams/:b` — the *same* route entry, so this
+    // screen is not remounted and the placeholder would sit there next to the real row for good.
+    setPending(null);
   };
 
   const rename = async (id: number, name: string) => {
@@ -258,21 +317,52 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
 
   /**
    * All-or-nothing on the server: a subtree holding a diagram some note links to is refused whole,
-   * with a message naming the note. On success the cascade already happened server-side, so prune
-   * the same subtree locally instead of refetching.
+   * with a message naming the note. Otherwise it cascades through subfolders and everything in
+   * them with nothing to undo it, so this asks first, naming what goes. On success the cascade
+   * already happened server-side, so prune the same subtree locally instead of refetching.
    */
   const removeFolder = async (id: number) => {
+    const folder = folders.find((f) => f.id === id);
+    if (folder === undefined) return;
+    // Computed before the request so the dialog can say what it costs.
+    const gone = descendantIds(folders, id);
+    const goneDiagramIds = diagrams.filter((d) => d.folderId !== null && gone.has(d.folderId)).map((d) => d.id);
+
+    const confirmed = await confirm({
+      title: `Delete "${folder.name}"?`,
+      message: cascadeMessage(goneDiagramIds.length, "diagram", gone.size - 1),
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
+
     const res = await deleteFolder(id);
-    if (res.error) {
+    if (res.error && !res.error.aborted) {
       toast.error(res.error.message);
       return;
     }
-    const gone = descendantIds(folders, id);
-    const goneDiagramIds = diagrams.filter((d) => d.folderId !== null && gone.has(d.folderId)).map((d) => d.id);
     gone.forEach((folderId) => dispatch(removeDiagramFolder(folderId)));
     goneDiagramIds.forEach((diagramId) => dispatch(removeDiagram(diagramId)));
     dispatch(forgetFolders([...gone]));
-    if (openId !== null && goneDiagramIds.includes(openId)) navigate(ROUTES.DIAGRAMS);
+    // Leaving for the root drops the query string with it, so nothing below has to run.
+    if (openId !== null && goneDiagramIds.includes(openId)) {
+      navigate(ROUTES.DIAGRAMS);
+      return;
+    }
+    leaveDeletedFolders(gone);
+  };
+
+  /**
+   * Walks the grid's `?folder=` out of a subtree that was just deleted, up to the nearest survivor.
+   *
+   * Left pointing at a folder that no longer exists, the grid shows an empty pane under a
+   * breadcrumb that has collapsed to the root, and creating in it would POST a dead `parentId`.
+   * `folders` is still the pre-delete list here, so the chain up from the dead folder is intact.
+   */
+  const leaveDeletedFolders = (gone: Set<number>) => {
+    if (browsingFolderId === null || !gone.has(browsingFolderId)) return;
+    const survivor = ancestorIds(folders, browsingFolderId).find((folderId) => !gone.has(folderId));
+    browseFolder(survivor ?? null);
   };
 
   /** A folder can't be dropped into itself or anything beneath it — that would strand the branch. */
@@ -347,7 +437,10 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
     onRenameFolder: rename,
     onRenameDiagram: renameDiagram,
     onNewFolderIn: (parentId: number | null) => void addFolderInTree(parentId),
-    onNewDiagramIn: create,
+    onNewDiagramIn: startPending,
+    pending,
+    onCommitPending: (title: string) => void commitPending(title),
+    onCancelPending: () => setPending(null),
     dragRef,
     dragging,
     onDragging: (item: DragItem | null) => {
@@ -553,7 +646,8 @@ const DiagramsScreen = ({ diagrams, folders, diagram }: DiagramsScreenProps) => 
             itemNoun="diagram"
             rootLabel="Diagrams"
             onNewFolder={addFolder}
-            onNewItem={create}
+            suggestItemName={suggestedDiagramTitle}
+            onNewItem={createDiagramNamed}
             onRenameFolder={(id, name) => void rename(id, name)}
             onRenameItem={(id, title) => void renameDiagram(id, title)}
             onDeleteFolder={(id) => void removeFolder(id)}

@@ -19,9 +19,9 @@ interface DiagramEditorProps {
   /** Called with the new id once a draft's first autosave has created it. */
   onCreated?: (id: number) => void;
   /**
-   * Called after every successful save with the server's copy of the row. The list shows the title
-   * and orders by `updatedAt`, both of which move on a content save, so this fires per save — it
-   * only patches local state, it doesn't refetch anything.
+   * Called after every successful save with the server's copy of the row. The list shows the title,
+   * which a save can change (the server de-duplicates it), so this fires per save — it only patches
+   * local state, it doesn't refetch anything.
    */
   onSaved?: (diagram: DiagramDetail) => void;
   /**
@@ -139,7 +139,6 @@ const DiagramEditor = ({ diagram, onCreated, onSaved, listTitle, leading }: Diag
         setSavedTitle(saved.title);
         if (titleRef.current === titleToSave) setTitle(saved.title);
       }
-      // Every save moves the row: `updatedAt` changed, so the list re-sorts it to the top.
       onSaved?.(saved);
       if (created) onCreated?.(saved.id);
     },

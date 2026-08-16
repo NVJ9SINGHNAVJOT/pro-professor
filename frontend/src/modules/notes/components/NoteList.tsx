@@ -28,6 +28,7 @@ import {
 } from "@/components/common/sidebar";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import {
+  expandFolder,
   toggleFolderExpanded,
   toggleFoldersSection,
   toggleNotesSection,
@@ -38,7 +39,7 @@ import NoteTree, { type DragItem } from "@/modules/notes/components/NoteTree";
 import { useNoteFolders } from "@/modules/notes/hooks/useNoteFolders";
 import { type NoteFolderSummary, type NoteSummary } from "@/services/operations/notes/notes.route";
 import { ROUTES } from "@/constants/routes";
-import { childFolders, isDescendant, itemsIn, rowKey } from "@/utils/folderTree";
+import { byName, childFolders, isDescendant, itemsIn, rowKey, type PendingRow } from "@/utils/folderTree";
 import { cn } from "@/lib/utils";
 
 interface NoteListProps {
@@ -46,10 +47,12 @@ interface NoteListProps {
   notes: NoteSummary[];
   /** The explorer's folders, from the same response. */
   folders: NoteFolderSummary[];
-  /** New note at the root level. */
+  /**
+   * New note at the root level — the toolbar button's draft, which costs no request until it is
+   * saved. A folder's own "New note" doesn't come through here: that one creates immediately, so
+   * the row shows up inside the folder that was right-clicked (see `pending`).
+   */
   onCreate: () => void;
-  /** New note inside a folder — the screen owns the draft flow, so it carries the target folder. */
-  onCreateIn: (folderId: number) => void;
   creating: boolean;
   /**
    * Renames a note. Lives on the screen, not here: the note may be the one open in the editor,
@@ -76,15 +79,7 @@ interface NoteListProps {
  * Searching is not here — it lives in the global ⌘K modal, which searches notes *and* chats.
  * The whole pane scrolls on its own, independent of the editor and context panel.
  */
-const NoteList = memo(function NoteList({
-  notes,
-  folders,
-  onCreate,
-  onCreateIn,
-  creating,
-  onRename,
-  isOpen,
-}: NoteListProps) {
+const NoteList = memo(function NoteList({ notes, folders, onCreate, creating, onRename, isOpen }: NoteListProps) {
   const dispatch = useAppDispatch();
   const noteId = useParams().noteId;
   const openId = noteId === undefined ? null : Number(noteId);
@@ -100,8 +95,12 @@ const NoteList = memo(function NoteList({
   // The row showing a rename field. A row *key*, not a note id: a note appears once under each of
   // its tags and once in the tree, and only the row that was right-clicked becomes a field.
   const [renaming, setRenaming] = useState<string | null>(null);
+  // The "New note" field standing in for a note that doesn't exist yet. Separate from `renaming`
+  // because there is no row to key it to — see PendingRow.
+  const [pending, setPending] = useState<PendingRow | null>(null);
 
-  const { deleteNote, addFolder, renameFolder, deleteFolder, moveRow } = useNoteFolders(notes, folders, openId);
+  const { suggestedNoteTitle, createNoteNamed, deleteNote, addFolder, renameFolder, deleteFolder, moveRow } =
+    useNoteFolders(notes, folders, openId);
 
   // The dragged row. A ref rather than `dataTransfer`, whose payload is unreadable during
   // `dragover` — and that is exactly when a folder drop has to be judged valid or not.
@@ -114,13 +113,16 @@ const NoteList = memo(function NoteList({
   const previewRef = useRef<HTMLDivElement | null>(null);
   const dragPos = useRef({ x: 0, y: 0 });
 
-  // Tag browser data: tag → its notes, sorted by tag name.
+  // Tag browser data: tag → its notes, both sorted by name — the same order the tree uses, rather
+  // than the raw list order (which `upsertItem` keeps in recency).
   const notesByTag = useMemo(() => {
     const map = new Map<string, NoteSummary[]>();
     notes.forEach((note) => {
       note.tags.forEach((tag) => map.set(tag, [...(map.get(tag) ?? []), note]));
     });
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...map.entries()]
+      .map(([tag, tagNotes]) => [tag, [...tagNotes].sort((a, b) => byName(a.title, b.title))] as const)
+      .sort(([a], [b]) => byName(a, b));
   }, [notes]);
 
   /**
@@ -151,6 +153,27 @@ const NoteList = memo(function NoteList({
     const id = await addFolder(parentId);
     // Every folder is born "New folder", so open it straight into rename the way an explorer does.
     if (id !== null) setRenaming(rowKey("folder", id));
+  };
+
+  /**
+   * Opens the "New note" field inside a folder, the way VS Code's explorer does — a row appears
+   * where the note will be, pre-filled with the name it would take, and Enter creates it.
+   */
+  const startPending = (parentId: number | null) => {
+    if (parentId !== null) dispatch(expandFolder(parentId));
+    setPending({ parentId, name: suggestedNoteTitle() });
+  };
+
+  const commitPending = async (title: string) => {
+    const parentId = pending?.parentId ?? null;
+    // The row stays put and turns into a plain label while the create is in flight — see
+    // `PendingRow.busy`.
+    setPending({ parentId, name: title, busy: true });
+    await createNoteNamed(title, parentId);
+    // Always cleared, whether or not it worked. Creating from the sidebar while a note is already
+    // open navigates `/notes/:a` → `/notes/:b` — the *same* route entry, so this pane is not
+    // remounted and the placeholder would sit there next to the real row for good.
+    setPending(null);
   };
 
   const handleRenameFolder = (id: number, name: string) => {
@@ -195,7 +218,10 @@ const NoteList = memo(function NoteList({
     onRenameFolder: handleRenameFolder,
     onRenameNote: handleRename,
     onNewFolderIn: (parentId: number | null) => void handleAddFolder(parentId),
-    onNewNoteIn: (folderId: number | null) => (folderId === null ? onCreate() : onCreateIn(folderId)),
+    onNewNoteIn: startPending,
+    pending,
+    onCommitPending: (title: string) => void commitPending(title),
+    onCancelPending: () => setPending(null),
     dragRef,
     dragging,
     onDragging: (item: DragItem | null) => {

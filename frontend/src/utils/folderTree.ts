@@ -29,16 +29,65 @@ export interface TreeFolder {
 export interface TreeItem {
   id: number;
   folderId: number | null;
-  updatedAt: string;
+  title: string;
 }
+
+/**
+ * A row that doesn't exist yet — the field a right-click "New …" opens, before Enter creates it.
+ *
+ * Held per surface, next to that surface's `renaming` key and for the same reason: the sidebar tree
+ * and the explorer grid can each be showing one, and neither owns the other's.
+ */
+export interface PendingRow {
+  /** Which level the field sits in — null is the root. */
+  parentId: number | null;
+  /** Pre-filled and pre-deduplicated: "Untitled", "Untitled 2", … */
+  name: string;
+  /**
+   * The name has been accepted and the create is in flight: the row stays exactly where it is,
+   * as a plain label instead of a field.
+   *
+   * Without this the row was taken down on Enter and only came back when the response landed, so
+   * it blinked out and in. It is also what stops a second Enter firing a second create.
+   */
+  busy?: boolean;
+}
+
+/**
+ * A→Z, digits compared as numbers so "Untitled 2" precedes "Untitled 10" — which matters now that
+ * `nextUntitled` hands out exactly that series.
+ */
+export const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * The first free "Base", "Base 2", "Base 3" … — the same rule the server applies on insert, so the
+ * name a create field opens with is the name the row keeps.
+ *
+ * Case-insensitive, matching `NotesService.isTaken`: the DB constraint is case-sensitive but the
+ * app-level rule is stricter, and guessing the looser one would show a name the server then changes.
+ */
+export const nextUntitled = (taken: string[], base: string): string => {
+  const used = new Set(taken.map((name) => name.toLowerCase()));
+  if (!used.has(base.toLowerCase())) return base;
+  for (let suffix = 2; ; suffix++) {
+    const candidate = `${base} ${suffix}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+};
 
 /** Folders directly under `parentId` (null = root level), A→Z. */
 export const childFolders = <F extends TreeFolder>(folders: F[], parentId: number | null): F[] =>
-  folders.filter((folder) => folder.parentId === parentId).sort((a, b) => a.name.localeCompare(b.name));
+  folders.filter((folder) => folder.parentId === parentId).sort((a, b) => byName(a.name, b.name));
 
-/** Items directly inside `folderId` (null = root level), most recently updated first. */
+/**
+ * Items directly inside `folderId` (null = root level), A→Z.
+ *
+ * By title rather than by `updatedAt`: recency meant a row jumped to the top of its folder on every
+ * save, so nothing ever sat where it was left. The API orders by title too — this only has to agree
+ * with it, and adds numeric collation Postgres doesn't do.
+ */
 export const itemsIn = <I extends TreeItem>(items: I[], folderId: number | null): I[] =>
-  items.filter((item) => item.folderId === folderId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  items.filter((item) => item.folderId === folderId).sort((a, b) => byName(a.title, b.title));
 
 /**
  * `rootId` plus every folder beneath it. Used to prune the local list after a delete (the server

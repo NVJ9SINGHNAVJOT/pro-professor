@@ -46,6 +46,11 @@ export interface DiagramSavePayload {
   content: unknown;
 }
 
+export interface DiagramCreatePayload extends DiagramSavePayload {
+  /** Files the diagram as it is created — absent or null is the root level. */
+  folderId?: number | null;
+}
+
 export type GetDiagramsResponse = {
   message: string;
   data: { folders: DiagramFolderSummary[]; diagrams: DiagramSummary[] };
@@ -77,7 +82,7 @@ export const diagramsRoute = {
     url: diagramsEndPoints.GET_BY_TITLE(title),
   })),
 
-  createDiagram: createRoute<[payload: DiagramSavePayload], GetDiagramResponse>((payload) => ({
+  createDiagram: createRoute<[payload: DiagramCreatePayload], GetDiagramResponse>((payload) => ({
     method: "POST",
     url: diagramsEndPoints.CREATE,
     data: payload,

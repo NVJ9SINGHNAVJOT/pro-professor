@@ -263,9 +263,9 @@ const StoragePanel = ({
                     )}
                   >
                     {mediaKind(file.mimeType) === "image" ? (
-                      <img src={file.url} alt={file.originalFilename} className="size-full object-cover" />
+                      <img src={file.url} alt={file.originalFilename} className="size-full object-contain" />
                     ) : mediaKind(file.mimeType) === "video" ? (
-                      <video src={file.url} muted preload="metadata" className="size-full object-cover" />
+                      <video src={file.url} muted preload="metadata" className="size-full object-contain" />
                     ) : (
                       <Icon className={cn(sizing.glyph, "text-neutral-600")} />
                     )}

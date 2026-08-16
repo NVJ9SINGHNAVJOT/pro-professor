@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router";
 import MainNavbar from "@/components/common/MainNavbar";
 import RouteProgress from "@/components/common/RouteProgress";
 import SearchModal from "@/components/common/SearchModal";
+import { ConfirmDialog } from "@/components/common/confirm";
 import { Toaster } from "@/components/common/toast";
 import SocketProvider from "@/context/SocketProvider";
 
@@ -39,6 +40,7 @@ function App() {
         {!hasSidebarNav && <MainNavbar floating />}
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ConfirmDialog />
       <Toaster />
     </SocketProvider>
   );

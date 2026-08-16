@@ -103,8 +103,7 @@ mid-conversation changes are diffed and rendered as inline markers in the transc
 - **Bytes never touch the JVM** — the gateway records a storage reference and hands the browser a
   direct storage-server URL; uploads and downloads stream straight to the Go storage server.
 - **Production-minded gateway** — request-ID correlation across logs (MDC), clean mid-stream
-  abort handling, actuator + Kafka health checks, Flyway migrations, and compile-time-safe SQL
-  via jOOQ.
+  abort handling, actuator health checks, Flyway migrations, and compile-time-safe SQL via jOOQ.
 - **Route-loader data fetching** — every page's on-arrival data is fetched by a React Router
   loader before the screen renders, not by a `useEffect` after mount.
 - **Lean dependency budget** — the storage server is Go stdlib only, zero dependencies; heavy
@@ -147,7 +146,6 @@ flowchart TB
 
     subgraph DataTier["Data"]
         DB[("🐘 PostgreSQL<br/>jOOQ · Flyway")]
-        Kafka["📨 Kafka<br/>health-checked"]
     end
 
     subgraph StorageTier["Storage — storage-server :9000"]
@@ -160,7 +158,6 @@ flowchart TB
     Browser -.->|"GET — bytes stream direct"| StorageSrv
 
     Central -->|"jOOQ"| DB
-    Central -.->|"health check"| Kafka
     Central -->|"OpenAI-compatible API"| AI
     Central -->|"OpenAI-compatible API"| Ollama
     Central -->|"multipart upload"| StorageSrv
@@ -239,17 +236,19 @@ pro-professor/
 ## Documentation Map
 
 Docs live **next to the tier they describe**; only cross-tier material sits in the root `docs/`.
+There is deliberately no system-wide architecture doc — the narrative flow docs that used to sit
+here drifted away from the code and were deleted rather than repaired. Read the code, and the
+conventions below.
 
-| Scope       | Where                                                                           | What's in it                                                                  |
-| ----------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| System-wide | [docs/project-flow.md](docs/project-flow.md)                                    | Architecture, request/stream flows, how the tiers interact — read this first  |
-| System-wide | [docs/project-rules.md](docs/project-rules.md)                                  | Repository boundaries and cross-repo handoff workflow                         |
-| Notes       | [docs/notes-flow.md](docs/notes-flow.md)                                        | Notes schema, link/embed resolution, search, AI action pipeline               |
-| Diagrams    | [docs/diagram-flow.md](docs/diagram-flow.md)                                    | Excalidraw scene format, persistence, folders, note ↔ diagram linking         |
-| Frontend    | [frontend/docs/folder-structure.md](frontend/docs/folder-structure.md)          | Module architecture and conventions                                           |
-| Gateway     | [backend/central-server/docs/](backend/central-server/docs/folder-structure.md) | Package-by-feature layout, plus logging and database/migration rules          |
-| Storage     | [backend/storage-server/docs/](backend/storage-server/docs/architecture.md)     | Architecture and HTTP API                                                     |
-| AI tooling  | [AGENTS.md](AGENTS.md) · [skills/](skills/README.md)                            | Orientation for AI coding tools; prompt packs for authoring paste-ready notes |
+| Scope       | Where                                                                           | What's in it                                                                   |
+| ----------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Using it    | [docs/usage.md](docs/usage.md)                                                  | What the app does, surface by surface — every control and when to reach for it |
+| System-wide | [docs/project-rules.md](docs/project-rules.md)                                  | Repository boundaries and cross-repo handoff workflow                          |
+| Orientation | [.claude/CLAUDE.md](.claude/CLAUDE.md)                                          | Tiers, ports, and the handful of facts that span all four                      |
+| Frontend    | [frontend/docs/folder-structure.md](frontend/docs/folder-structure.md)          | Module architecture and conventions                                            |
+| Gateway     | [backend/central-server/docs/](backend/central-server/docs/folder-structure.md) | Package-by-feature layout, plus logging and database/migration rules           |
+| Storage     | [backend/storage-server/docs/](backend/storage-server/docs/architecture.md)     | Architecture and HTTP API                                                      |
+| AI tooling  | [AGENTS.md](AGENTS.md) · [skills/](skills/README.md)                            | Orientation for AI coding tools; prompt packs for authoring paste-ready notes  |
 
 Per-service READMEs:
 [frontend](frontend/README.md) ·

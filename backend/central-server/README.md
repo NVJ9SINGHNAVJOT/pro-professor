@@ -1,7 +1,7 @@
 # Central Server
 
 The gateway and orchestration layer of **Pro Professor**, built with **Spring Boot 3.5**
-(**Java 25**). The browser talks only to this service; it fans out to PostgreSQL, Kafka,
+(**Java 25**). The browser talks only to this service; it fans out to PostgreSQL,
 **Ollama**, the Python **AI service** (MLX), and the external Go **storage-server**. Chat,
 notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOOQ** over
 **Flyway**-migrated Postgres (no JPA).
@@ -9,7 +9,7 @@ notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOO
 ## Requirements
 
 - **JDK 25** — check with `java -version`.
-- **PostgreSQL** and **Kafka** running locally (the server connects on startup).
+- **PostgreSQL** running locally (the server connects on startup).
 - [Task](https://taskfile.dev) for the dev workflow (`brew install go-task`); Maven is **not**
   required — the bundled wrapper (`./mvnw`) is used underneath.
 - Optional at runtime: Ollama and the AI service (model calls fail gracefully without them).
@@ -42,7 +42,7 @@ After any schema change: drop/clean the DB → `task migrate` → `task codegen`
 
 ```bash
 curl http://localhost:4000/health            # app liveness
-curl http://localhost:4000/actuator/health   # db + kafka should be "UP"
+curl http://localhost:4000/actuator/health   # db should be "UP"
 ```
 
 ## Project structure
@@ -56,8 +56,8 @@ com.proprofessor.server/
 ├── chat/              # conversations, SSE streaming, OpenAI-compatible provider client
 ├── common/            # ApiResponse envelope, exceptions, logging boundary, shared db rows
 ├── config/            # CORS, WebSocket, executors, type-safe properties
-├── diagram/           # diagram CRUD + AI edit route (see docs/diagram-flow.md)
-├── health/            # /health + Kafka health indicator
+├── diagram/           # diagram CRUD + AI edit route
+├── health/            # /health liveness endpoint
 ├── media/             # upload/download proxy to the storage-server
 ├── model/             # model discovery/activation across Ollama + AI service
 ├── notes/             # notes CRUD, links/tags/search + AI note actions
@@ -136,9 +136,9 @@ multiplexes the whole turn without out-of-band coordination:
 
 **Bytes and references are stored separately.** Uploads are proxied to the storage server, which
 returns a UUID; PostgreSQL persists only a `media` reference row plus a `message_attachments` link.
-Downloads are proxied back through `GET /api/v1/media/{id}/file`, so the browser never addresses
-the storage server directly and the blob layer stays swappable (local disk today, object storage
-tomorrow) behind a stable API.
+The upload response carries a **direct** storage-server URL, and the browser fetches previews and
+downloads straight from `:9000` — file bytes never stream back through the JVM. This is the one
+place the browser talks to something other than this gateway.
 
 **Multimodal input without a new wire format.** An audio-capable model receives the spoken clip
 directly rather than a transcript. The clip travels the ordinary media-upload path; at send time
@@ -226,5 +226,5 @@ Schema is versioned with **Flyway** and mirrored into type-safe **jOOQ** sources
 - [docs/logging-rules.md](docs/logging-rules.md) — the request/response logging contract (read
   before adding endpoints; boundary logging is already built).
 - [docs/database-rules.md](docs/database-rules.md) — Flyway/jOOQ workflow on the disposable dev DB.
-- System flows: [project-flow.md](../../docs/project-flow.md),
-  [notes-flow.md](../../docs/notes-flow.md), [diagram-flow.md](../../docs/diagram-flow.md).
+- There is deliberately no system-flow doc — read the code. Orientation and cross-tier facts:
+  [.claude/CLAUDE.md](../../.claude/CLAUDE.md); what the app does: [usage.md](../../docs/usage.md).

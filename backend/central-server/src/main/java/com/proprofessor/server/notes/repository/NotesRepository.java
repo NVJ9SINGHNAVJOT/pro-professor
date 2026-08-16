@@ -32,10 +32,15 @@ public class NotesRepository {
         this.dsl = dsl;
     }
 
+    /**
+     * Every note, A→Z by title — the explorer's order, so the list arrives already sorted the way
+     * the sidebar and the grid draw it. Ordering by {@code updated_at} instead moved a note to the
+     * top of its folder on every save, so nothing stayed where it was left.
+     */
     public List<NoteRow> findAll() {
         return dsl.select()
                 .from(NOTES)
-                .orderBy(NOTES.UPDATED_AT.desc())
+                .orderBy(NOTES.TITLE.asc())
                 .fetch(this::toRow);
     }
 
