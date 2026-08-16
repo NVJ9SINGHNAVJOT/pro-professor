@@ -13,14 +13,14 @@ import java.util.List;
  * instead of reading environment variables directly.
  *
  * @param cors          CORS-related settings (allowed frontend origins)
- * @param aiService     connection details for the Python AI service
+ * @param aiCore        connection details for the Python AI core
  * @param ollama        connection details for the local Ollama service
  * @param storageServer connection details for the Go storage-server
  */
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
         Cors cors,
-        AiService aiService,
+        AiCore aiCore,
         Ollama ollama,
         StorageServer storageServer
 ) {
@@ -34,10 +34,10 @@ public record AppProperties(
     }
 
     /**
-     * @param baseUrl base URL of the OpenAI-compatible AI service
-     * @param apiKey  API key sent to the AI service (placeholder for local use)
+     * @param baseUrl base URL of the OpenAI-compatible AI core
+     * @param apiKey  API key sent to the AI core (placeholder for local use)
      */
-    public record AiService(
+    public record AiCore(
             String baseUrl,
             String apiKey
     ) {

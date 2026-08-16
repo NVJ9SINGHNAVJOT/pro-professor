@@ -140,7 +140,7 @@ flowchart TB
     end
 
     subgraph InferenceTier["Inference"]
-        AI["🤖 ai-service — :8000<br/>FastAPI · MLX-LM / MLX-VLM<br/>Whisper STT · MLX TTS"]
+        AI["🤖 ai-core — :8000<br/>FastAPI · MLX-LM / MLX-VLM<br/>Whisper STT · MLX TTS"]
         Ollama["📦 Ollama — :11434<br/>open-source models"]
     end
 
@@ -171,14 +171,14 @@ a direct storage-server URL and file bytes stream straight to the browser, never
 | ---------------- | -------------------------------------- | ------------------------ | ------------------------------------------------------- |
 | `frontend`       | React 19, Vite, TS, Tailwind 4, Redux  | `http://localhost:5173`  | Web client — chat, notes, diagrams UI                   |
 | `central-server` | Spring Boot 3.5, Java 25, jOOQ, Flyway | `http://localhost:4000`  | API gateway; REST + SSE + WebSocket, PostgreSQL         |
-| `ai-service`     | Python, FastAPI, MLX-LM                | `http://localhost:8000`  | Local LLM inference + STT/TTS (Apple Silicon)           |
+| `ai-core`     | Python, FastAPI, MLX-LM                | `http://localhost:8000`  | Local LLM inference + STT/TTS (Apple Silicon)           |
 | `storage-server` | Go 1.25 (stdlib only)                  | `http://localhost:9000`  | Local file storage — uploads + direct browser downloads |
 | `ollama`         | external inference engine              | `http://localhost:11434` | Open-source model serving                               |
 
 The gateway exposes one versioned REST surface under `/api/v1`: `chats`, `notes`, `diagrams`,
 `diagram-folders`, `media`, `audio`, `models`, `settings`.
 
-**`ai-service`** is a git submodule maintained in its own repository. **`storage-server`** is a
+**`ai-core`** is a git submodule maintained in its own repository. **`storage-server`** is a
 first-class service committed in this repo under `backend/storage-server/`.
 
 ### Request Flow: Streaming Chat (SSE)
@@ -194,7 +194,7 @@ sequenceDiagram
     participant FE as Browser (React)
     participant GW as central-server
     participant DB as PostgreSQL
-    participant M as ai-service / Ollama
+    participant M as ai-core / Ollama
 
     User->>FE: submit prompt
     FE->>GW: POST /api/v1/chats/send
@@ -222,7 +222,7 @@ pro-professor/
 ├── frontend/                 # React 19 + Vite + TypeScript SPA
 ├── backend/
 │   ├── central-server/       # Spring Boot 3.5 (Java 25) — API gateway / orchestrator
-│   ├── ai-service/           # Python + FastAPI — local MLX inference (git submodule)
+│   ├── ai-core/           # Python + FastAPI — local MLX inference (git submodule)
 │   └── storage-server/       # Go 1.25 — local file storage (uploads + direct downloads)
 ├── docs/                     # system architecture + notes/diagram flow docs
 ├── skills/                   # paste-ready authoring packs for external AI models
@@ -253,7 +253,7 @@ conventions below.
 Per-service READMEs:
 [frontend](frontend/README.md) ·
 [central-server](backend/central-server/README.md) ·
-[ai-service](backend/ai-service/README.md) ·
+[ai-core](backend/ai-core/README.md) ·
 [storage-server](backend/storage-server/README.md)
 
 ---
@@ -264,7 +264,7 @@ Per-service READMEs:
 Silicon Mac (for MLX inference).
 
 ```bash
-# 1. Clone with the ai-service submodule
+# 1. Clone with the ai-core submodule
 git clone --recurse-submodules <repo-url>
 cd pro-professor
 
@@ -274,7 +274,7 @@ task init
 # 3. Adjust the generated .env files as needed (ports, DB, model paths, storage dir)
 ```
 
-`task init` sets up the ai-service (submodule venv + dependencies) and installs the frontend and
+`task init` sets up the ai-core (submodule venv + dependencies) and installs the frontend and
 central-server dependencies, creating each service's `.env` from its `.env.example` (existing
 `.env` files are left untouched). The storage-server needs no fetch step — it is a single Go module
 with zero external dependencies, so `task storage:run` builds it straight from source.

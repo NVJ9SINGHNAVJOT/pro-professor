@@ -165,14 +165,14 @@ public class ChatService {
         conversationRepository.touch(conversation.id());
 
         List<ChatMessage> history = messageRepository.findHistory(conversation.id(), MODEL_ROLES);
-        List<MediaRow> audioClips = provider == ModelProvider.AI_SERVICE
+        List<MediaRow> audioClips = provider == ModelProvider.AI_CORE
                 ? audioClips(command.attachmentIds())
                 : List.of();
         boolean audioTurn = !audioClips.isEmpty();
         if (audioTurn) {
             history = withTranscriptInstruction(withCurrentTurnAudio(history, audioClips));
         }
-        // Images apply to both providers (Ollama vision + ai-service mlx-vlm use the same
+        // Images apply to both providers (Ollama vision + ai-core mlx-vlm use the same
         // image_url part) and need none of the audio path's transcript machinery.
         List<MediaRow> images = imageAttachments(command.attachmentIds());
         if (!images.isEmpty()) {
@@ -184,7 +184,7 @@ public class ChatService {
         history = withNoteContext(history, command.noteContext());
 
         try {
-            // The AI service reports its own timing (including load) in x_metrics. Ollama's
+            // The AI core reports its own timing (including load) in x_metrics. Ollama's
             // OpenAI-compatible endpoint omits timing; we synthesize it from wall-clock. The model was
             // already loaded (and the other engine freed) by acquireForChat, so we don't preload here —
             // a native Ollama preload warms its KV cache, which deflates the prompt token count the
@@ -442,7 +442,7 @@ public class ChatService {
     /**
      * Forwards the current turn's spoken input to an audio-capable model: the last (current) user
      * message in {@code history} is rebuilt to carry each clip as an {@code input_audio} part.
-     * Earlier turns stay text-only, matching the AI service's "most recent media only" behavior.
+     * Earlier turns stay text-only, matching the AI core's "most recent media only" behavior.
      * Returns the history unchanged when the clips have no readable bytes.
      */
     private List<ChatMessage> withCurrentTurnAudio(List<ChatMessage> history, List<MediaRow> audioClips) {

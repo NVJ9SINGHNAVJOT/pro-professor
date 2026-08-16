@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NOTE: Full project bootstrap for a fresh clone. Runs the ai-service setup script and installs
+# NOTE: Full project bootstrap for a fresh clone. Runs the ai-core setup script and installs
 # dependencies + .env files for frontend and backend/central-server. The storage-server is
 # committed in-repo, so it needs no fetch step (run it with `task storage`). Fails fast on the
 # first error.
@@ -23,7 +23,7 @@ for cmd in npm java; do
     fi
 done
 
-bash scripts/setup-ai-service.sh || die "ai-service setup failed."
+bash scripts/setup-ai-core.sh || die "ai-core setup failed."
 
 loginf "Installing frontend dependencies..."
 if ! (cd frontend && npm install); then
@@ -57,4 +57,4 @@ else
     loginf "Created 'backend/storage-server/.env' from .env.example."
 fi
 
-logsuccess "Bootstrap complete. Next: 'task frontend:dev' / 'task backend:dev' / 'task storage:run', and 'source backend/ai-service/.venv/bin/activate' for ai-service."
+logsuccess "Bootstrap complete. Next: 'task frontend:dev' / 'task backend:dev' / 'task storage:run', and 'source backend/ai-core/.venv/bin/activate' for ai-core."

@@ -2,7 +2,7 @@ package com.proprofessor.server.model;
 
 import com.proprofessor.server.common.exception.ModelBusyException;
 import com.proprofessor.server.model.dto.ModelProvider;
-import com.proprofessor.server.model.provider.AiServiceClient;
+import com.proprofessor.server.model.provider.AiCoreClient;
 import com.proprofessor.server.model.provider.OllamaClient;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 /**
  * Enforces the global "one model resident at a time" invariant across both inference engines.
  *
- * <p>Ollama and the AI service each hold their own model in memory independently, so without
- * coordination a warm Ollama model and a loaded AI-service model can occupy memory at once. This
+ * <p>Ollama and the AI core each hold their own model in memory independently, so without
+ * coordination a warm Ollama model and a loaded AI-core model can occupy memory at once. This
  * service is the single gatekeeper: before a model is used it unloads whatever else is resident on
  * the other engine (and any different Ollama model), so only the target stays loaded.
  *
@@ -27,7 +27,7 @@ public class ModelActivationService {
     private static final Logger log = LoggerFactory.getLogger(ModelActivationService.class);
 
     private final OllamaClient ollamaClient;
-    private final AiServiceClient aiServiceClient;
+    private final AiCoreClient aiCoreClient;
 
     /** Guards all mutable state below. Held only for the brief activate/counter work, never a stream. */
     private final Object lock = new Object();
@@ -39,9 +39,9 @@ public class ModelActivationService {
     /** Chat turns currently streaming. While {@code > 0} the active model can't be swapped out. */
     private int inFlight;
 
-    public ModelActivationService(OllamaClient ollamaClient, AiServiceClient aiServiceClient) {
+    public ModelActivationService(OllamaClient ollamaClient, AiCoreClient aiCoreClient) {
         this.ollamaClient = ollamaClient;
-        this.aiServiceClient = aiServiceClient;
+        this.aiCoreClient = aiCoreClient;
     }
 
     /**
@@ -95,8 +95,8 @@ public class ModelActivationService {
             }
             log.info("Shutting down — unloading resident model{}",
                     active == null ? "" : " '" + active.name() + "'");
-            if (active != null && active.provider() == ModelProvider.AI_SERVICE) {
-                aiServiceClient.unload();
+            if (active != null && active.provider() == ModelProvider.AI_CORE) {
+                aiCoreClient.unload();
             }
             if (residentOllamaModel != null) {
                 ollamaClient.unload(residentOllamaModel);
@@ -107,25 +107,25 @@ public class ModelActivationService {
     }
 
     /**
-     * Makes {@code (provider, name)} the only resident model: unloads the AI service unless it is the
+     * Makes {@code (provider, name)} the only resident model: unloads the AI core unless it is the
      * target, unloads the previously-resident Ollama model unless it is the target, then loads the
-     * target (the AI service swaps its own models; Ollama loads lazily on the chat request). Must be
+     * target (the AI core swaps its own models; Ollama loads lazily on the chat request). Must be
      * called while holding {@link #lock}. A no-op when the target is already active.
      */
     private void activate(ModelProvider provider, String name) {
         if (isActive(provider, name)) {
             return;
         }
-        if (provider != ModelProvider.AI_SERVICE) {
-            aiServiceClient.unload();
+        if (provider != ModelProvider.AI_CORE) {
+            aiCoreClient.unload();
         }
         if (residentOllamaModel != null
                 && !(provider == ModelProvider.OLLAMA && residentOllamaModel.equals(name))) {
             ollamaClient.unload(residentOllamaModel);
             residentOllamaModel = null;
         }
-        if (provider == ModelProvider.AI_SERVICE) {
-            aiServiceClient.loadModel(name);
+        if (provider == ModelProvider.AI_CORE) {
+            aiCoreClient.loadModel(name);
         } else {
             // Ollama has no preload step here — the chat request loads it — but record it so the next
             // switch knows which Ollama model to evict. (A native preload would warm Ollama's KV cache

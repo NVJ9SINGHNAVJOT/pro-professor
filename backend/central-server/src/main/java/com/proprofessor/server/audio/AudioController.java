@@ -19,8 +19,8 @@ import java.io.IOException;
 
 /**
  * Pass-through REST endpoints for voice: speech-to-text and text-to-speech.
- * Thin — forwards to the AI service via {@link AudioClient} so the frontend
- * never talks to the AI service directly.
+ * Thin — forwards to the AI core via {@link AudioClient} so the frontend
+ * never talks to the AI core directly.
  */
 @RestController
 @RequestMapping("/api/v1/audio")

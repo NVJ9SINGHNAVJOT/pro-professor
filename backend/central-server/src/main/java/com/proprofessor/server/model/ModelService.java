@@ -4,7 +4,7 @@ import com.proprofessor.server.common.db.ModelRow;
 import com.proprofessor.server.common.exception.AppException;
 import com.proprofessor.server.model.dto.ModelProvider;
 import com.proprofessor.server.model.dto.ProviderModel;
-import com.proprofessor.server.model.provider.AiServiceClient;
+import com.proprofessor.server.model.provider.AiCoreClient;
 import com.proprofessor.server.model.provider.OllamaClient;
 import com.proprofessor.server.model.repository.ModelRepository;
 import org.slf4j.Logger;
@@ -28,14 +28,14 @@ public class ModelService {
                     .thenComparing(ProviderModel::name);
 
     private final OllamaClient ollamaClient;
-    private final AiServiceClient aiServiceClient;
+    private final AiCoreClient aiCoreClient;
     private final ModelRepository modelRepository;
     private final ModelActivationService modelActivationService;
 
-    public ModelService(OllamaClient ollamaClient, AiServiceClient aiServiceClient,
+    public ModelService(OllamaClient ollamaClient, AiCoreClient aiCoreClient,
                         ModelRepository modelRepository, ModelActivationService modelActivationService) {
         this.ollamaClient = ollamaClient;
-        this.aiServiceClient = aiServiceClient;
+        this.aiCoreClient = aiCoreClient;
         this.modelRepository = modelRepository;
         this.modelActivationService = modelActivationService;
     }
@@ -43,11 +43,11 @@ public class ModelService {
     public List<ProviderModel> getAllModels() {
         List<ProviderModel> models = new ArrayList<>();
         models.addAll(fetchTolerant(ollamaClient::getModels, ModelProvider.OLLAMA));
-        models.addAll(fetchTolerant(aiServiceClient::getModels, ModelProvider.AI_SERVICE));
+        models.addAll(fetchTolerant(aiCoreClient::getModels, ModelProvider.AI_CORE));
 
         if (models.isEmpty()) {
             throw new AppException(HttpStatus.BAD_GATEWAY,
-                    "Unable to fetch models from Ollama and AI Service.");
+                    "Unable to fetch models from Ollama and AI Core.");
         }
 
         models.sort(BY_PROVIDER_THEN_NAME);
@@ -55,9 +55,9 @@ public class ModelService {
     }
 
     public void loadModel(String name) {
-        // The load endpoint only serves AI-service models; route it through the gatekeeper so it also
+        // The load endpoint only serves AI-core models; route it through the gatekeeper so it also
         // frees the other engine and is rejected while a different model is mid-generation.
-        modelActivationService.load(ModelProvider.AI_SERVICE, name);
+        modelActivationService.load(ModelProvider.AI_CORE, name);
     }
 
     @Transactional

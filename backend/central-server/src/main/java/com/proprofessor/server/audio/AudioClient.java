@@ -11,10 +11,10 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 /**
- * Talks to the Python AI service's OpenAI-compatible audio endpoints so the
- * frontend never calls the AI service directly.
+ * Talks to the Python AI core's OpenAI-compatible audio endpoints so the
+ * frontend never calls the AI core directly.
  *
- * <p>STT and TTS run fully locally on the AI service (Whisper + Kokoro on MLX);
+ * <p>STT and TTS run fully locally on the AI core (Whisper + Kokoro on MLX);
  * this client only forwards bytes through and returns the result.
  */
 @Component
@@ -25,11 +25,11 @@ public class AudioClient {
     private final RestClient restClient;
 
     public AudioClient(AppProperties appProperties) {
-        this.restClient = HttpClientFactory.forBaseUrl(appProperties.aiService().baseUrl());
+        this.restClient = HttpClientFactory.forBaseUrl(appProperties.aiCore().baseUrl());
     }
 
     /**
-     * Forwards an audio clip to the AI service and returns its transcript.
+     * Forwards an audio clip to the AI core and returns its transcript.
      *
      * @param audio    the raw audio bytes
      * @param filename original filename — its extension hints the decoder, so it is preserved
@@ -50,7 +50,7 @@ public class AudioClient {
     }
 
     /**
-     * Forwards text to the AI service and returns synthesized WAV audio bytes.
+     * Forwards text to the AI core and returns synthesized WAV audio bytes.
      */
     public byte[] synthesize(SpeechRequest request) {
         return restClient.post()
@@ -76,7 +76,7 @@ public class AudioClient {
         }
     }
 
-    /** AI service transcription response shape: {@code {"text": ...}}. */
+    /** AI core transcription response shape: {@code {"text": ...}}. */
     private record AiTranscription(String text) {
     }
 }

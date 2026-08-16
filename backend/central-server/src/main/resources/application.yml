@@ -68,9 +68,9 @@ management:
 app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
-  ai-service:
-    base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:8000}
-    api-key: ${AI_SERVICE_API_KEY:test-key}
+  ai-core:
+    base-url: ${AI_CORE_BASE_URL:http://127.0.0.1:8000}
+    api-key: ${AI_CORE_API_KEY:test-key}
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
     api-key: ${OLLAMA_API_KEY:ollama}

@@ -6,7 +6,7 @@ import { rawFetch } from "@/services/client/rawFetch";
 export interface NoteAiPayload {
   /** What the AI should change — required. */
   instruction?: string;
-  /** "ollama" or "ai-service". */
+  /** "ollama" or "ai-core". */
   provider: string;
   /** Provider model id — required. */
   model?: string;

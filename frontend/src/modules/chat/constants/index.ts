@@ -93,9 +93,9 @@ export const MODEL_SEPARATOR = "::";
 
 /** Display metadata per model provider — label and badge color. */
 export const PROVIDER_META: Record<ModelProvider, { label: string; className: string }> = {
-  "ai-service": { label: "AI Service", className: "bg-emerald-900/60 text-emerald-300" },
+  "ai-core": { label: "AI Core", className: "bg-emerald-900/60 text-emerald-300" },
   ollama: { label: "Ollama", className: "bg-sky-900/60 text-sky-300" },
 };
 
 /** Determines the order providers appear in the model dropdown. */
-export const PROVIDER_ORDER: ModelProvider[] = ["ai-service", "ollama"];
+export const PROVIDER_ORDER: ModelProvider[] = ["ai-core", "ollama"];

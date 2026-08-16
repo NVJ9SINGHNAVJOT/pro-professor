@@ -6,7 +6,7 @@ const modelsEndPoints = {
   LOAD_MODEL: `${BASE_URL_SERVER}/models/load`,
 };
 
-export type ModelProvider = "ollama" | "ai-service";
+export type ModelProvider = "ollama" | "ai-core";
 
 export type ProviderModel = {
   name: string;

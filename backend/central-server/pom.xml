@@ -35,7 +35,7 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
-        <!-- ── OpenAI Java SDK (chat completions against Ollama / AI service) ── -->
+        <!-- ── OpenAI Java SDK (chat completions against Ollama / AI core) ── -->
         <dependency>
             <groupId>com.openai</groupId>
             <artifactId>openai-java</artifactId>

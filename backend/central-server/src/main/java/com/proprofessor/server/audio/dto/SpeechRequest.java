@@ -6,13 +6,13 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * Request body for {@code POST /api/v1/audio/speech}.
  *
- * <p>Forwarded as-is to the AI service's OpenAI-compatible {@code /v1/audio/speech}.
- * {@code null} fields are omitted so the AI service applies its own defaults
+ * <p>Forwarded as-is to the AI core's OpenAI-compatible {@code /v1/audio/speech}.
+ * {@code null} fields are omitted so the AI core applies its own defaults
  * (default voice, speed 1.0).
  *
  * @param input the text to synthesize (required)
- * @param voice optional voice id (e.g. {@code af_heart}); AI-service default when null
- * @param speed optional playback speed multiplier; AI-service default when null
+ * @param voice optional voice id (e.g. {@code af_heart}); AI-core default when null
+ * @param speed optional playback speed multiplier; AI-core default when null
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record SpeechRequest(

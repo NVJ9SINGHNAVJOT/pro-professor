@@ -30,9 +30,9 @@ import java.util.UUID;
  * {@code logging.pattern.level}), and echoed back on the response. Everything logged while handling the
  * request therefore carries the same id, and it is forwarded to downstream services as
  * {@code X-Correlation-Id} (see {@code CorrelationIdInterceptor}), so one user action can be traced
- * across the central server and the AI service.
+ * across the central server and the AI core.
  *
- * <p>Mirrors the AI service's {@code LoggingMiddleware}: a {@code Request received} envelope with the
+ * <p>Mirrors the AI core's {@code LoggingMiddleware}: a {@code Request received} envelope with the
  * method, URL, client, whitelisted headers and body, closed by a completion line. Response bodies are
  * logged separately by {@link ResponseLoggingAdvice} — this filter never buffers the response, because
  * doing so would stall the SSE chat stream and pull whole media files into memory.

@@ -40,7 +40,7 @@ public record ChatMessage(
 
     /**
      * One image in OpenAI {@code image_url} shape, carried as a base64 data URL
-     * ({@code data:<mime>;base64,<bytes>}) so it is provider-agnostic (Ollama + ai-service).
+     * ({@code data:<mime>;base64,<bytes>}) so it is provider-agnostic (Ollama + ai-core).
      *
      * @param dataUrl the {@code data:} URL the provider decodes the image from
      */

@@ -8,7 +8,7 @@ import java.net.http.HttpClient;
 /**
  * Central factory for outbound HTTP clients used by provider clients.
  *
- * <p>All external service calls (Ollama, AI service) are local plaintext HTTP.
+ * <p>All external service calls (Ollama, AI core) are local plaintext HTTP.
  * The JDK {@link HttpClient} defaults to HTTP/2, which attempts an h2c upgrade over
  * cleartext — a combo that strict servers like uvicorn/h11 reject. We pin HTTP/1.1
  * globally so every {@link RestClient} produced here sends a plain request with

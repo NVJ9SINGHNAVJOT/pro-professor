@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Shared formatting for the request/response log envelopes.
  *
- * <p>Mirrors the AI service's logging convention (see {@code app/api/middleware.py}) so a single user
+ * <p>Mirrors the AI core's logging convention (see {@code app/api/middleware.py}) so a single user
  * action reads the same way in both services' logs: a message line followed by an indented JSON body.
  *
  * <p>Uses the Spring-managed {@link ObjectMapper} so logged bodies serialize exactly as they do on the
@@ -20,7 +20,7 @@ public class LogFormat {
 
     /**
      * Request headers worth logging. Deliberately a whitelist, not a blocklist — it is what keeps
-     * credentials out of the logs. Same five the AI service logs.
+     * credentials out of the logs. Same five the AI core logs.
      */
     static final List<String> LOGGED_HEADERS = List.of(
             "content-type", "origin", "sec-fetch-site", "sec-fetch-mode", "sec-ch-ua-platform");

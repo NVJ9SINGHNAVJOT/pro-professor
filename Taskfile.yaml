@@ -11,8 +11,8 @@ includes:
     taskfile: backend/storage-server/Taskfile.yaml
     dir: backend/storage-server
   ai:
-    taskfile: backend/ai-service/Taskfile.yaml
-    dir: backend/ai-service
+    taskfile: backend/ai-core/Taskfile.yaml
+    dir: backend/ai-core
   frontend:
     taskfile: frontend/Taskfile.yaml
     dir: frontend
@@ -23,14 +23,14 @@ tasks:
     cmd: task -l
 
   init:
-    desc: Bootstrap a fresh clone (ai-service, frontend, backend — deps + .env files)
+    desc: Bootstrap a fresh clone (ai-core, frontend, backend — deps + .env files)
     cmds:
       - bash scripts/setup.sh
 
   setup:ai:
-    desc: Set up ai-service (submodule, venv, dependencies, .env)
+    desc: Set up ai-core (submodule, venv, dependencies, .env)
     cmds:
-      - bash scripts/setup-ai-service.sh
+      - bash scripts/setup-ai-core.sh
 
   db:backup:
     desc: Dump the central-server Postgres DB to a timestamped file in tmp/ (checks Postgres is running)

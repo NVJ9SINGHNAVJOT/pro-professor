@@ -1,7 +1,7 @@
 # Logging Rules (central-server)
 
 Logs are the primary debugging tool here (there is no `src/test`). The convention **mirrors the
-ai-service** so one user action reads the same way in both services' logs and can be traced across
+ai-core** so one user action reads the same way in both services' logs and can be traced across
 them. Format is plain text, not JSON — keep it that way so the two are diffable side by side.
 
 **The shape of a request.** Every request produces these lines, all carrying the same id:
@@ -22,7 +22,7 @@ automatically. A new controller needs **no** logging code to get all of the abov
   `logging.pattern.level` in `application.yml`. Any `log.info(...)` anywhere in the request is
   correlated for free — never thread a request id through method parameters.
 - It is echoed to the client as `X-Request-Id` and forwarded to downstream services as
-  `X-Correlation-Id` (`common/http/CorrelationIdInterceptor`), which is the header the ai-service
+  `X-Correlation-Id` (`common/http/CorrelationIdInterceptor`), which is the header the ai-core
   reads. `HttpClientFactory` wires this into every `RestClient` — build outbound clients through it.
 - Async work must carry the MDC across threads (`ChatExecutorConfig`'s `TaskDecorator` does this for
   the chat stream). A new executor needs the same decorator or its logs lose the id.
@@ -55,7 +55,7 @@ The one exception: when the operation knows something the boundary cannot (*whic
 file), log a contextual `WARN` at the site and rethrow, leaving the stack trace to the boundary:
 
 ```java
-log.warn("Failed to load AI-service model '{}' after {}ms: {}", name, elapsed, ex.getMessage());
+log.warn("Failed to load AI-core model '{}' after {}ms: {}", name, elapsed, ex.getMessage());
 throw ex;   // GlobalExceptionHandler logs the stack trace, once
 ```
 
@@ -66,10 +66,10 @@ themselves — nothing propagates to the boundary.
 while it is still hanging rather than only in hindsight:
 
 ```text
-Loading AI-service model 'whisper-large-v3'...
-Loaded AI-service model 'whisper-large-v3' (1290ms)
+Loading AI-core model 'whisper-large-v3'...
+Loaded AI-core model 'whisper-large-v3' (1290ms)
 ```
 
-Applies to model load/unload (`AiServiceClient`, `OllamaClient`) and media upload (`MediaService`).
+Applies to model load/unload (`AiCoreClient`, `OllamaClient`) and media upload (`MediaService`).
 Use `private static final Logger log = LoggerFactory.getLogger(X.class)` — there is **no Lombok** in
 this project, so no `@Slf4j`.

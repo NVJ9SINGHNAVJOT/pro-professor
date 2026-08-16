@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * Request body for {@code POST /api/v1/models/load}.
  *
- * @param name the AI-service model name to load into memory
+ * @param name the AI-core model name to load into memory
  */
 public record LoadModelRequest(
         @NotBlank String name

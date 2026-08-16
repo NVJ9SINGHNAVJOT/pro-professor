@@ -2,7 +2,7 @@
 
 The gateway and orchestration layer of **Pro Professor**, built with **Spring Boot 3.5**
 (**Java 25**). The browser talks only to this service; it fans out to PostgreSQL,
-**Ollama**, the Python **AI service** (MLX), and the external Go **storage-server**. Chat,
+**Ollama**, the Python **AI core** (MLX), and the external Go **storage-server**. Chat,
 notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOOQ** over
 **Flyway**-migrated Postgres (no JPA).
 
@@ -12,7 +12,7 @@ notes-AI and diagram-AI responses stream back over **SSE**; persistence is **jOO
 - **PostgreSQL** running locally (the server connects on startup).
 - [Task](https://taskfile.dev) for the dev workflow (`brew install go-task`); Maven is **not**
   required — the bundled wrapper (`./mvnw`) is used underneath.
-- Optional at runtime: Ollama and the AI service (model calls fail gracefully without them).
+- Optional at runtime: Ollama and the AI core (model calls fail gracefully without them).
 
 ## Configuration
 
@@ -52,14 +52,14 @@ Package-by-feature (vertical slices) — see [docs/folder-structure.md](docs/fol
 ```text
 com.proprofessor.server/
 ├── Application.java   # entry point
-├── audio/             # STT/TTS pass-through to the AI service
+├── audio/             # STT/TTS pass-through to the AI core
 ├── chat/              # conversations, SSE streaming, OpenAI-compatible provider client
 ├── common/            # ApiResponse envelope, exceptions, logging boundary, shared db rows
 ├── config/            # CORS, WebSocket, executors, type-safe properties
 ├── diagram/           # diagram CRUD + AI edit route
 ├── health/            # /health liveness endpoint
 ├── media/             # upload/download proxy to the storage-server
-├── model/             # model discovery/activation across Ollama + AI service
+├── model/             # model discovery/activation across Ollama + AI core
 ├── notes/             # notes CRUD, links/tags/search + AI note actions
 └── websocket/         # /ws notification channel
 ```
@@ -85,14 +85,14 @@ lets inference or storage be swapped without touching the client.
 │   ChatService   ModelService   MediaService   AudioService                   │
 │   • conversation lifecycle & title derivation                                │
 │   • history assembly + multimodal message construction                       │
-│   • provider routing (Ollama ⇄ AI Service)                                   │
+│   • provider routing (Ollama ⇄ AI Core)                                   │
 │   • SSE fan-out on a dedicated executor pool                                 │
 │   • request-ID correlation (MDC), error persistence, abort handling          │
 └───────┬──────────────────────┬──────────────────────┬────────────────────────┘
         │ jOOQ / JDBC          │ OpenAI-compatible    │ HTTP
         ▼                      ▼ /v1/chat/completions ▼
 ┌───────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
-│ PostgreSQL    │   │ AI Service (:8000)   │   │ Storage Server       │
+│ PostgreSQL    │   │ AI Core (:8000)   │   │ Storage Server       │
 │               │   │ FastAPI · MLX-LM     │   │ (:9000) Go, stdlib   │
 │ conversations │   │ MLX-VLM · Whisper    │   │                      │
 │ messages      │   │ STT/TTS · model mgmt │   │ file bytes on disk   │
@@ -169,10 +169,10 @@ User submits prompt
   │     3. diff sampling params vs. stored → on change: update row,
   │        insert `settings` marker, emit chat.settings
   │     4. load history (model-visible roles only)
-  │     5. AI Service model? → ensure it's loaded into VRAM (lazy, just-in-time)
-  │     6. attach current-turn audio as input_audio parts (AI Service only)
+  │     5. AI Core model? → ensure it's loaded into VRAM (lazy, just-in-time)
+  │     6. attach current-turn audio as input_audio parts (AI Core only)
   │
-  ├─▶ ChatCompletionClient ──▶ Ollama | AI Service  (OpenAI-compatible, streaming)
+  ├─▶ ChatCompletionClient ──▶ Ollama | AI Core  (OpenAI-compatible, streaming)
   │         │
   │         └─▶ deltas ──▶ chat.chunk / chat.thinking frames ──▶ browser renders live
   │
@@ -210,7 +210,7 @@ Schema is versioned with **Flyway** and mirrored into type-safe **jOOQ** sources
 | `GET`    | `/api/v1/chats`                 | List conversations                       |
 | `GET`    | `/api/v1/chats/{id}`            | Open a conversation with full transcript |
 | `DELETE` | `/api/v1/chats/{id}`            | Delete a conversation                    |
-| `GET`    | `/api/v1/models/all`            | Aggregated models (Ollama + AI Service)  |
+| `GET`    | `/api/v1/models/all`            | Aggregated models (Ollama + AI Core)  |
 | `POST`   | `/api/v1/models/load`           | Load an MLX model into memory            |
 | `POST`   | `/api/v1/media/upload`          | Upload an attachment                     |
 | `GET`    | `/api/v1/media/{id}/file`       | Download an attachment (proxied)         |

@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 /**
  * Streams a chat completion from whichever provider owns the model.
  *
- * <p>Both Ollama and the AI service expose the OpenAI-compatible
+ * <p>Both Ollama and the AI core expose the OpenAI-compatible
  * {@code POST /v1/chat/completions} with SSE streaming, so we drive both through the
  * official OpenAI Java SDK and only switch the base URL by {@link ModelProvider}. The
  * SDK owns the request/response content types and SSE parsing, which avoids the
@@ -48,8 +48,8 @@ public class ChatCompletionClient {
         this.clients = Map.of(
                 ModelProvider.OLLAMA,
                 buildClient(appProperties.ollama().baseUrl(), appProperties.ollama().apiKey()),
-                ModelProvider.AI_SERVICE,
-                buildClient(appProperties.aiService().baseUrl(), appProperties.aiService().apiKey())
+                ModelProvider.AI_CORE,
+                buildClient(appProperties.aiCore().baseUrl(), appProperties.aiCore().apiKey())
         );
     }
 
@@ -235,7 +235,7 @@ public class ChatCompletionClient {
     }
 
     /**
-     * Combines standard {@code usage} (token counts) with the AI service's non-standard
+     * Combines standard {@code usage} (token counts) with the AI core's non-standard
      * {@code x_metrics} (counts + timing) from a chunk. Returns {@code null} when neither is present.
      */
     private static StreamMetrics extractMetrics(ChatCompletionChunk chunk) {

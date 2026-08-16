@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
  */
 public enum ModelProvider {
     OLLAMA("ollama"),
-    AI_SERVICE("ai-service");
+    AI_CORE("ai-core");
 
     private final String value;
 
@@ -22,7 +22,7 @@ public enum ModelProvider {
         return value;
     }
 
-    /** Resolves a wire/DB value (e.g. {@code "ai-service"}) back to the enum. */
+    /** Resolves a wire/DB value (e.g. {@code "ai-core"}) back to the enum. */
     @JsonCreator
     public static ModelProvider fromValue(String value) {
         for (ModelProvider provider : values()) {

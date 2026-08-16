@@ -20,7 +20,7 @@ import java.util.Map;
 
 /**
  * Logs the body of every JSON response, closing the loop opened by {@link RequestIdFilter}'s
- * {@code Request received} line. Mirrors the AI service's {@code send_response} helper.
+ * {@code Request received} line. Mirrors the AI core's {@code send_response} helper.
  *
  * <p>This hooks the response <em>object</em> just before serialization rather than buffering the
  * serialized bytes in a servlet filter. That is deliberate: buffering would stall the SSE chat stream and

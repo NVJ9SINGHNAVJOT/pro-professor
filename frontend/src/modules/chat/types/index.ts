@@ -39,7 +39,7 @@ export interface InferenceParams {
   repetitionPenalty: number;
 }
 
-/** Defaults mirror the AI service's built-in fallbacks. */
+/** Defaults mirror the AI core's built-in fallbacks. */
 export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
   maxTokens: 20000,
   temperature: 0.7,
@@ -47,7 +47,7 @@ export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
   repetitionPenalty: 1.1,
 };
 
-/** Hard ceiling for max_tokens, matching the AI service's request validation. */
+/** Hard ceiling for max_tokens, matching the AI core's request validation. */
 export const MAX_TOKENS_LIMIT = 32768;
 
 export type Group = "Today" | "Yesterday" | "Previous 7 Days" | "Previous 30 Days" | "Older";

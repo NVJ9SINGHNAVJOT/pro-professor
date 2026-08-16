@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 
 /**
  * The AI note update: rewrite a note against an instruction via a local model
- * (Ollama / AI service through the OpenAI-compatible chat path).
+ * (Ollama / AI core through the OpenAI-compatible chat path).
  *
  * <p><strong>This service never writes to the note.</strong> It streams the proposed new note back
  * and stops there; the frontend stages it for review and the user applies it into the editor, which
@@ -195,11 +195,11 @@ public class NotesAiService {
 
     private static ModelProvider resolveLocalProvider(String provider) {
         if (provider == null) {
-            throw new AppException(HttpStatus.BAD_REQUEST, "A provider is required (ollama or ai-service).");
+            throw new AppException(HttpStatus.BAD_REQUEST, "A provider is required (ollama or ai-core).");
         }
         return switch (provider.toLowerCase().replace('_', '-')) {
             case "ollama" -> ModelProvider.OLLAMA;
-            case "ai-service" -> ModelProvider.AI_SERVICE;
+            case "ai-core" -> ModelProvider.AI_CORE;
             default -> throw new AppException(HttpStatus.BAD_REQUEST, "Unknown provider: " + provider);
         };
     }

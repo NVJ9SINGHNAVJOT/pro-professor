@@ -13,7 +13,7 @@ Orientation for AI coding tools working in this monorepo.
 
 **Hard boundaries** (see [docs/project-rules.md](docs/project-rules.md)): edit `frontend/`,
 `backend/central-server/`, and `backend/storage-server/` directly. **Never** edit
-`backend/ai-service/` (a git submodule with its own repo) — write a plan into `plans/` instead.
+`backend/ai-core/` (a git submodule with its own repo) — write a plan into `plans/` instead.
 
 **There is no system-wide architecture doc, deliberately.** The former `project-flow.md`,
 `notes-flow.md` and `diagram-flow.md` drifted into asserting things that were never true and were
