@@ -80,13 +80,15 @@ The **amber dot** left of the buttons means the body has unsaved changes.
 ### Command palette (`⌘P` / `⌘K`)
 
 Everything above, searchable: new note, view modes, panels, history, every formatting action, the
-three AI actions, and **every note by title** (to jump to it). Reach for it when you don't want to
-hunt for a button.
+AI tab, and **every note by title** (to jump to it). Reach for it when you don't want to hunt for a
+button.
 
 ### Revision history
 
-Snapshots are written **before an AI action overwrites the note** (and before a restore). They
-capture *content only* — a rename never creates one. Use it to undo an AI edit you don't like.
+Snapshots are written **before a restore** — which is the only thing that overwrites a note behind
+your back, and it is itself undoable because of this. AI edits don't snapshot: they land in the
+editor for you to review, so ⌘Z and "don't save" are the undo. Content only — a rename never creates
+one.
 
 ### Graph view
 
@@ -105,63 +107,70 @@ Drag the rail's left edge to resize it.
 
 ## The AI tab (the one that needs explaining)
 
-Four controls, in the order they appear.
+**One conversation, one box.** You type; the model either answers or proposes changes. There is no
+mode to pick beforehand, and nothing it proposes touches the note until you accept it.
 
-### 1. Model picker (top row)
+### Chat context — Auto · Whole note · None
 
-The model both the chat *and* the note actions run on. Names are clipped to fit — hover for the
-full name. Locked while the model is generating.
-
-### 2. Chat context — Auto · Whole note · None
-
-Governs **only what the chat turn sees**:
+What each turn sends, and therefore the most the model can change:
 
 | Mode | Sends |
 | --- | --- |
 | **Auto** | Your editor selection if you have one, otherwise the whole note. The default. |
 | **Whole note** | Always the full note, selection or not. |
-| **None** | Nothing — a plain chat that happens to live in this pane. |
+| **None** | Nothing — a plain chat that happens to live in this pane. It can't propose edits. |
 
-The line underneath tells you exactly what will be sent and how large it is. **The note actions
-ignore this setting entirely** — they always run server-side over the whole *saved* note.
+The line underneath tells you exactly what will be sent and how large it is. Long notes are trimmed,
+and it says so.
 
-### 3. The composer — one box, two jobs
+### Proposed edits
 
-- **Enter** → asks the chat. Nothing in your note changes.
-- **Rewrite** → the same text becomes an *instruction*, applied to the note.
+When a change is warranted the reply carries **edit cards**, sitting inline where the model explained
+them. A card is a diff: red lines go, green lines replace them.
 
-That's the whole trick: type "make this shorter and add a summary", press Enter to *discuss* it,
-press Rewrite to *do* it.
+**Anatomy of a card, top to bottom:**
 
-### 4. Chat vs the three actions
-
-| You want to… | Use |
+| Part | What it is |
 | --- | --- |
-| Ask a question, brainstorm, check something — without touching the note | **Chat** (Enter) |
-| Change the note per an instruction you type | **Rewrite** |
-| Add or refresh a summary section | **Summarize** |
-| Keep writing from where the note ends | **Continue** |
+| **Header, left** | What the edit does and where — *Replace · line 12*, *Add to the end*, *Rewrite the whole note*. |
+| **Header, right — the ⊕ circle** | A **crosshair**. The whole header is the button: clicking it selects that exact span in the editor and scrolls to it, so you can look at the target before deciding. On an *Add to the end* card it takes you to the end of the note. It only shows you — it changes nothing. |
+| **The diff** | Long lines wrap rather than scroll sideways; a run of more than a few unchanged lines collapses to `⋯ N unchanged lines`. |
+| **Accept** | Applies just that hunk to the editor. |
+| **Reject** | Drops it; the note is untouched. |
 
-Things worth knowing about the three actions:
+**Accept all (n)** appears under a reply that still has more than one edit pending. An amber ⚠ on a
+card means the model quoted text that wasn't in the note it was shown — Accept will look again, and
+refuse if it still isn't there.
 
-- They **need a saved note**, and they save first if the buffer is dirty — otherwise the model would
-  work from the stale saved copy and then overwrite what you'd typed.
-- They rewrite the note **in place** and take a revision snapshot first, so History is your undo.
-- Summarize and Continue ignore the composer text. Only Rewrite reads it.
-- **Rewrite is the whole-note one.** To change one paragraph, select it, ask in chat, then apply the
-  reply with the `⋯` menu (next item) — that's the surgical path.
+Accepting makes the note dirty like any hand edit — **⌘Z takes each accepted edit back one at a
+time, and nothing is persisted until you save.** The server never writes a note from a model reply.
 
-### Applying a chat reply
+If you've edited the note since the model read it and the text an edit quoted is gone, Accept refuses
+and the card says so rather than writing to the wrong place. Trailing-whitespace differences are
+tolerated; anything more is a refusal.
 
-Hover any reply → `⋯` → **Insert at cursor** · **Replace selection** · **Append to note** · **Copy**.
-Applying makes the note dirty like any other edit, so it's undoable in the editor and nothing is
-persisted until you save. This is the deliberate difference from the actions above: **chat never
-touches your note unless you say so; the actions always do.**
+### The `⋯` on a reply — applying prose
+
+Hidden until you hover a reply, then it appears on its own row at the **bottom-right** of it. It
+applies what the model *wrote*, as opposed to what it *proposed*:
+
+`⋯` → **Insert at cursor** · **Replace selection** · **Append to note** · **Copy**
+
+The edit blocks are deliberately left out of what this inserts — they have their own Accept buttons,
+and pasting a reply wholesale would drop the raw block markup into your note. Reach for `⋯` when the
+model answered in prose you want to keep; reach for **Accept** when it proposed an actual change.
+
+### Model picker
+
+The chip beside the send button. Names are clipped to fit — hover for the full name. Locked while
+the model is generating, and deliberately not pre-filled: which model rewrites your note is worth
+picking on purpose.
 
 ### Stop
 
 Both the ✨ button in the toolbar and the composer's button become Stop while the model runs — so
-you can still abort with the rail closed.
+you can still abort with the rail closed. A half-written edit stays a placeholder and never becomes
+acceptable.
 
 ---
 
@@ -206,7 +215,7 @@ you can still abort with the rail closed.
   voice, language and speed replies are spoken in, and whether an audio-capable model listens to the
   recording directly. The lists come from the AI core, so they are empty while it is down. A
   conversation can override any of them from its own settings dialog.
-- **Notes** — default inference parameters for the notes AI actions (rewrite / summarize / continue).
+- **Notes** — default inference parameters for the notes AI panel.
   Chat keeps its own per-conversation settings; these don't affect it.
 - **Storage** — every uploaded file, with a download and a delete. A file is **locked** while a chat
   message or a note embed still references it ("In use" badge, delete disabled), so nothing can turn
@@ -219,8 +228,8 @@ you can still abort with the rail closed.
 | "How do I…" | |
 | --- | --- |
 | rename a note or diagram without saving my edits | Type in the title, press **Enter**. That's all it writes. |
-| undo what the AI did to my note | History icon → pick the revision before it → restore. |
-| get AI output into my note *without* rewriting the whole thing | Ask in chat, then `⋯` → Insert / Replace selection. |
+| undo an AI edit I accepted | ⌘Z in the editor — each accepted edit is its own undo step. If you already saved, History → restore. |
+| change one paragraph and nothing else | Just ask. The model proposes a targeted edit; accept only that card. |
 | ask about only one paragraph | Select it — Chat context "Auto" sends the selection. |
 | find a note when I only remember a phrase inside it | Explorer search; content matches arrive a beat after title matches. |
 | see what links to this note | Right rail → Context → Backlinks. |

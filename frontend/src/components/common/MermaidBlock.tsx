@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import DiagramViewport from "@/components/common/DiagramViewport";
 import { MERMAID_RERENDER_DEBOUNCE_MS } from "@/constants/ui";
+import { quoteMermaidLabels } from "@/components/common/mermaidLabels";
 import { cn } from "@/lib/utils";
 
 /* Mermaid is the one heavy diagram dependency — loaded lazily on first use so it
@@ -77,6 +78,8 @@ const MermaidBlock = ({
 }) => {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** True when what's on screen came from the repaired source rather than the source as written. */
+  const [repaired, setRepaired] = useState(false);
   const idRef = useRef(`mermaid-${++renderSeq}`);
 
   useEffect(() => {
@@ -91,16 +94,44 @@ const MermaidBlock = ({
           if (!cancelled) {
             setSvg(rendered);
             setError(null);
+            setRepaired(false);
           }
         } catch (failure) {
-          if (!cancelled) setError(parseErrorOf(failure));
+          /* One unquoted bracket in a label fails the whole diagram, and models produce them
+           * constantly — so before giving up, try again with labels quoted. Reached ONLY after a
+           * real failure and the result is re-rendered before it is shown, which is what makes a
+           * regex over mermaid's own delimiters safe: a repair that doesn't parse changes nothing,
+           * and a diagram that already renders never gets here at all. */
+          const fixed = quoteMermaidLabels(code);
+          if (fixed !== code) {
+            try {
+              const mermaid = await loadMermaid();
+              const { svg: rendered } = await mermaid.render(`${renderId}-fixed`, fixed, getScratchBox());
+              if (!cancelled) {
+                setSvg(rendered);
+                setError(null);
+                setRepaired(true);
+              }
+              return;
+            } catch {
+              // The repair didn't parse either — fall through and report the original failure.
+            }
+          }
+          if (!cancelled) {
+            setError(parseErrorOf(failure));
+            setRepaired(false);
+          }
         } finally {
           // drop measuring leftovers (incl. mermaid's orphaned error element on parse failure)
           scratchBox?.replaceChildren();
         }
       });
-    // first render immediately (no blank flash); re-renders wait for typing to settle
-    const timer = setTimeout(render, svg === null ? 0 : MERMAID_RERENDER_DEBOUNCE_MS);
+    // First render immediately (no blank flash); re-renders wait for typing to settle. `error` is
+    // in the condition because a source that has never parsed still counts as settled work: keyed
+    // on `svg` alone, every keystroke into a not-yet-valid diagram re-parsed at 0ms, and each
+    // attempt queues behind the others through the module-level chain above.
+    const timer =
+      svg === null && error === null ? setTimeout(render, 0) : setTimeout(render, MERMAID_RERENDER_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -129,6 +160,16 @@ const MermaidBlock = ({
         </span>
       )}
       {svg && <DiagramViewport svg={svg} fill={fill} maxScale={maxScale} />}
+      {/* Said out loud rather than silently: what's rendered isn't byte-for-byte what the source
+          says, and the note still holds the version that doesn't parse on its own. */}
+      {repaired && (
+        <span
+          title="A label contained an unquoted bracket, which mermaid can't parse. It was quoted to render this — the note itself is unchanged."
+          className="block pt-1 caption-small-regular text-neutral-600"
+        >
+          Diagram syntax auto-corrected to render
+        </span>
+      )}
       {error && (
         <span className="block rounded-xl border border-dashed border-neutral-700 p-3">
           <span className="block whitespace-pre-wrap pb-2 caption-small-regular text-amber-400">{error}</span>

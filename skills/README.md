@@ -18,8 +18,8 @@ to produce files you can paste straight into Pro Professor:
 
 These skills are **authoring** contracts for external models: produce a whole note, paste it in.
 
-The app's built-in **Update note** action uses its own *editing* contract, wired into the backend
-pipeline (`NotesAiService` in `backend/central-server`) — intentionally separate and not meant to be
-copied into a chat. It resembles what's here in that it returns a complete note, but it is given the
-current one plus an instruction, and the result is staged for the user to apply rather than saved.
-`NotesAiService` is the pipeline — read it there.
+The app's built-in **notes AI panel** uses its own *editing* contract — intentionally separate and
+not meant to be copied into a chat. Rather than a whole note, it asks for delimited `<edit>` /
+`<append>` / `<rewrite>` blocks over the note it is given, which the frontend renders as diffs for
+the user to accept one at a time. The prompt is `ChatService.NOTE_EDIT_PROTOCOL` in
+`backend/central-server` — read it there.

@@ -68,22 +68,14 @@ export const CARET_GAP = 4;
 /** Keeps the slash menu off the pane's edges when the caret sits near them (px). */
 export const EDGE_MARGIN = 8;
 
-/** Right rail width: where it opens, and the bounds the drag handle clamps to (px). */
-export const RAIL_DEFAULT_WIDTH = 320;
+/**
+ * Right rail width: where it opens, and the bounds the drag handle clamps to (px). The default is
+ * wide enough for a diff card — an edit's `+`/`-` lines don't wrap, so a narrower rail hides them
+ * behind a horizontal scroll on arrival.
+ */
+export const RAIL_DEFAULT_WIDTH = 420;
 export const RAIL_MIN_WIDTH = 260;
 export const RAIL_MAX_WIDTH = 720;
-
-/** Proposal review block height: where it opens and how far its drag handle may shrink it (px). */
-export const PROPOSAL_DEFAULT_HEIGHT = 256;
-export const PROPOSAL_MIN_HEIGHT = 96;
-/**
- * Thread left visible when the proposal block is dragged to its tallest (px). Everything *else* the
- * tab needs — the context block, the proposal's own chrome, the composer, the mode tabs — is
- * measured at drag time rather than budgeted here: a constant covering all of it silently went
- * stale every time one of those grew, and the drag then pushed the composer off the bottom of the
- * rail, where `RightRail`'s `overflow-hidden` clipped it.
- */
-export const MIN_THREAD_HEIGHT = 48;
 
 /** Delay before scrolling the preview to a heading, so it re-renders first (ms). */
 export const HEADING_SCROLL_DELAY_MS = 150;

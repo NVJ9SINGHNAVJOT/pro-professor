@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 import type { NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 
 interface NotesBarProps {
-  /** Whether an AI action is currently generating for this note. */
+  /** Whether the note's AI panel is currently generating. */
   aiBusy: boolean;
-  /** Stops the in-flight AI action but keeps whatever it produced so far. */
+  /** Stops the in-flight reply but keeps whatever it produced so far. */
   onStopAi: () => void;
   /** False on an unsaved draft: everything needing a note id is disabled until the first save. */
   hasNote: boolean;
@@ -38,6 +38,8 @@ interface NotesBarProps {
   /** Which right-rail tab is showing, or null when the rail is closed. */
   rightPanel: NoteRightPanel;
   setRightPanel: (panel: NoteRightPanel) => void;
+  /** Collapses the rail, or reopens it on the tab it was last showing. */
+  onToggleRightPanel: () => void;
   noteListOpen: boolean;
   onToggleNoteList: () => void;
   /** Back to the folder browser in this pane — it is only shown while a note is open. */
@@ -63,6 +65,7 @@ const NotesBar = memo(function NotesBar({
   historyBtnRef,
   rightPanel,
   setRightPanel,
+  onToggleRightPanel,
   noteListOpen,
   onToggleNoteList,
   onBrowse,
@@ -145,7 +148,7 @@ const NotesBar = memo(function NotesBar({
         </button>
         {/* Opens the rail's AI tab — and doubles as Stop, because the rail can be closed while
               the model runs and this is then the only control left on screen. Not gated on
-              hasNote: the chat half works on an unsaved draft, only the note actions inside don't. */}
+              hasNote: the panel works on an unsaved draft, straight from the buffer. */}
         {aiBusy ? (
           <button
             type="button"
@@ -171,10 +174,11 @@ const NotesBar = memo(function NotesBar({
             <SparklesIcon className="size-4.5" />
           </button>
         )}
+        {/* Collapses the rail, and reopens it on whichever tab was last shown — not always Context. */}
         <button
           type="button"
-          onClick={() => setRightPanel(rightPanel === null ? "context" : null)}
-          aria-label="Toggle context panel"
+          onClick={onToggleRightPanel}
+          aria-label="Toggle side panel"
           className="cursor-pointer rounded-lg p-2 text-neutral-300 hover:bg-neutral-800"
         >
           {rightPanel !== null ? (

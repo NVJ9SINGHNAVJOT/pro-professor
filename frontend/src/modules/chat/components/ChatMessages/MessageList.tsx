@@ -30,7 +30,7 @@ const ThinkingPanel = ({ thinking, isStreaming }: { thinking: string; isStreamin
       </button>
       {open && (
         <MarkdownBody className="px-3 pb-2.5 para-small-regular text-neutral-400">
-          <Markdown>{isStreaming ? hideUnclosedMath(thinking) : thinking}</Markdown>
+          <Markdown streaming={isStreaming}>{isStreaming ? hideUnclosedMath(thinking) : thinking}</Markdown>
         </MarkdownBody>
       )}
     </div>
@@ -121,7 +121,7 @@ const AssistantMessage = memo(function AssistantMessage({
       <div className="flex-1 min-w-0">
         {thinking && <ThinkingPanel thinking={thinking} isStreaming={isStreaming && !content} />}
         <MarkdownBody className="para-regular text-neutral-100">
-          <Markdown>{isStreaming ? hideUnclosedMath(content) : content}</Markdown>
+          <Markdown streaming={isStreaming}>{isStreaming ? hideUnclosedMath(content) : content}</Markdown>
           {isStreaming && (
             <span aria-hidden className="ct-wave ml-1 text-neutral-400">
               <span />

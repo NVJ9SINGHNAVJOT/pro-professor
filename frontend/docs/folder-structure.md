@@ -26,8 +26,10 @@ src/modules/<feature-name>/
 └── constants/           # Feature-specific constants (e.g., dropdown options, specific UI strings).
 ```
 
-> Some modules add more (e.g. the notes module has `editor/` and `hooks/`; the diagram module has
-> `persistence/` for its scene helpers). The subfolder names above are the shared baseline.
+> Some modules add more (e.g. the notes module has `editor/` for its pure text transforms and `ai/`
+> for the note-edit protocol — parsing edit blocks out of a model reply, diffing them, and locating
+> their target in the buffer; the diagram module has `persistence/` for its scene helpers). The
+> subfolder names above are the shared baseline.
 
 ## Global Structure (`src/`)
 

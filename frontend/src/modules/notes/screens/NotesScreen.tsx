@@ -26,7 +26,8 @@ import {
 import { toast } from "@/components/common/toast";
 import Markdown, { MarkdownBody } from "@/components/common/Markdown";
 import NotesBar from "@/modules/notes/components/NotesBar";
-import { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
+import { locateEdit } from "@/modules/notes/ai/locateEdit";
+import type { NoteEdit } from "@/modules/notes/ai/noteEdits";
 
 import NoteEditor from "@/modules/notes/components/NoteEditor";
 import { useApi } from "@/hooks/useApi";
@@ -74,7 +75,7 @@ import { measureCaret } from "@/modules/notes/editor/caretPosition";
 import { lintMarkdown } from "@/modules/notes/editor/lintMarkdown";
 import { useWikiHandlers } from "@/modules/notes/hooks/useWikiHandlers";
 import { stripFrontmatter, summaryOf } from "@/modules/notes/utils";
-import type { NoteApplyMode, NoteEditTarget, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
+import type { NoteApplyMode, NoteRightPanel, NoteViewMode } from "@/modules/notes/types";
 import {
   HEADING_SCROLL_DELAY_MS,
   MERMAID_TEMPLATE,
@@ -132,7 +133,21 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   // below re-applies this whenever the route hands over a different note; until then a manual
   // toggle stands.
   const [viewMode, setViewMode] = useState<NoteViewMode>(isDraft ? "split" : modeFor(loadedNote?.content));
-  const [rightPanel, setRightPanel] = useState<NoteRightPanel>("context");
+  const [rightPanel, setRightPanelState] = useState<NoteRightPanel>("context");
+  /**
+   * The tab the rail reopens on — whichever was last actually shown, Context until one has been.
+   * Closing the rail from the AI tab and reopening it used to land back on Context, which threw
+   * away the thread you were looking at.
+   */
+  const [lastRightPanel, setLastRightPanel] = useState<Exclude<NoteRightPanel, null>>("context");
+  const setRightPanel = useCallback((panel: NoteRightPanel) => {
+    if (panel !== null) setLastRightPanel(panel);
+    setRightPanelState(panel);
+  }, []);
+  const toggleRightPanel = useCallback(
+    () => setRightPanel(rightPanel === null ? lastRightPanel : null),
+    [rightPanel, lastRightPanel, setRightPanel],
+  );
   // Explorer collapse. Local state, matching the chat screen — `/notes` and `/notes/:noteId` are
   // two route entries, so opening the first note remounts this screen and resets it. That's the
   // wanted default there (nothing to preserve when no note is open yet) and it's what chat does.
@@ -210,8 +225,10 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
     [seedFromDetail, dispatch],
   );
 
-  const ai = useNoteAi(note?.id);
-  const chat = useNoteChat({ noteId: note?.id, content, selection: ai.activeSelection, selectedText });
+  const chat = useNoteChat({ noteId: note?.id, content, selectedText });
+  // Pulled out because the thread is memoized: `chat` is a fresh object every render, so depending
+  // on it in the accept callbacks would repaint every reply on every keystroke.
+  const { setEditStatus } = chat;
 
   const dirty = (note !== null || isDraft) && (content !== savedContent || title !== savedTitle);
 
@@ -373,31 +390,6 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
     (id: number, next: string) => void handleRenameRow(id, next),
     [handleRenameRow],
   );
-
-  /**
-   * Runs an AI action against the note — saving it first when the buffer is dirty.
-   *
-   * The server builds its prompt from the note in the database, not from this buffer, so running
-   * one over unsaved edits would rewrite a version of the note the user isn't looking at.
-   *
-   * The edit target is read **before** the save: saving re-renders the editor, and the range the
-   * user selected is what the update is about.
-   */
-  const runAiAction = async () => {
-    const textarea = textareaRef.current;
-    const target: NoteEditTarget | null =
-      chat.updateUsesSelection && textarea && textarea.selectionStart !== textarea.selectionEnd
-        ? {
-            start: textarea.selectionStart,
-            end: textarea.selectionEnd,
-            text: textarea.value.slice(textarea.selectionStart, textarea.selectionEnd),
-          }
-        : null;
-    if (dirty && !(await handleSave())) return;
-    // The AI tab's composer is the single input: what's typed there is the update instruction,
-    // and it's cleared only once generation has actually started.
-    if (ai.runAction(chat.input, target)) chat.setInput("");
-  };
 
   // Cmd/Ctrl+S saves the active note. The ref always points at the latest save
   // closure so the window listener is attached once.
@@ -604,63 +596,91 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
   );
 
   /**
-   * Accepts the AI's staged proposal — the whole note when the run was note-scoped, otherwise just
-   * the span it targeted. Either way the buffer goes dirty like any hand edit, so saving stays the
-   * user's call and ⌘Z still walks it back. This is the only path by which an AI update reaches the
-   * note; the server never writes one.
+   * The span a proposed edit rewrites, resolved against the buffer **as it stands now** rather than
+   * against the copy the model was shown. That is what lets an edit still land after you have typed
+   * above it, and what makes a genuinely changed span refuse instead of overwriting the wrong text.
+   *
+   * Returns null when the quoted text is gone — the caller marks the card stale and writes nothing.
    */
-  const applyProposal = () => {
-    if (ai.proposal === null) return;
-    const proposal = ai.proposal;
-    const target = ai.target;
-    const textarea = textareaRef.current;
-    // Preview-only renders no editor, so there is no textarea to write through — same fallback as
-    // applyChatReply, and switching to split makes the result visible either way. A targeted edit
-    // has no caret to land on here, so it splices by text.
-    if (!textarea) {
-      if (viewMode === "preview") setViewMode("split");
-      if (target) {
-        const at = content.indexOf(target.text);
-        if (at === -1) {
-          toast.error("The text this edit targeted has changed — discard it and run the update again");
+  const resolveEdit = useCallback((value: string, edit: NoteEdit): { from: number; to: number; text: string } | null => {
+    if (edit.op === "append") return { from: value.trimEnd().length, to: value.length, text: `\n\n${edit.text}\n` };
+    if (edit.op === "rewrite") return { from: 0, to: value.length, text: edit.text };
+    const at = locateEdit(value, edit.find);
+    return at === null ? null : { from: at.start, to: at.end, text: edit.replace };
+  }, []);
+
+  /**
+   * Accepts one proposed edit. The buffer goes dirty like any hand edit, so saving stays the user's
+   * call and ⌘Z walks each accepted edit back on its own. This is the only path by which an AI edit
+   * reaches the note; the server never writes one.
+   */
+  const acceptEdit = useCallback(
+    (messageIndex: number, editIndex: number, edit: NoteEdit) => {
+      const write = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        // Read off the textarea, not React state: "Accept all" applies its edits in one pass, and
+        // each has to see what the one before it wrote.
+        const resolved = resolveEdit(textarea.value, edit);
+        if (resolved === null) {
+          setEditStatus(messageIndex, editIndex, "stale");
           return;
         }
-        setContent(content.slice(0, at) + proposal + content.slice(at + target.text.length));
-      } else {
-        setContent(proposal);
-      }
-      ai.clearProposal();
-      return;
-    }
-    // The buffer stays editable while the model streams, so the frozen offsets are only a first
-    // guess — fall back to finding the target text, and refuse rather than overwrite the wrong span.
-    let from = 0;
-    let to = textarea.value.length;
-    if (target) {
-      const at =
-        textarea.value.slice(target.start, target.end) === target.text
-          ? target.start
-          : textarea.value.indexOf(target.text);
-      if (at === -1) {
-        toast.error("The text this edit targeted has changed — discard it and run the update again");
+        // Routed through applyTextState (execCommand) rather than setContent: assigning .value on a
+        // controlled textarea wipes the browser's native undo stack, which would make Accept the one
+        // edit in this editor that ⌘Z can't take back.
+        applyTextState(
+          replaceRange(
+            { value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
+            resolved.from,
+            resolved.to,
+            resolved.text,
+          ),
+        );
+        setEditStatus(messageIndex, editIndex, "accepted");
+      };
+      if (viewMode !== "preview") {
+        write();
         return;
       }
-      from = at;
-      to = at + target.text.length;
-    }
-    ai.clearProposal();
-    // Routed through applyTextState (execCommand) rather than setContent: assigning .value on a
-    // controlled textarea wipes the browser's native undo stack, which would make Apply the one
-    // edit in this editor that ⌘Z can't take back.
-    applyTextState(
-      replaceRange(
-        { value: textarea.value, selectionStart: textarea.selectionStart, selectionEnd: textarea.selectionEnd },
-        from,
-        to,
-        proposal,
-      ),
-    );
-  };
+      // Preview-only renders no editor at all — switch first, then wait for the paint, so the edit
+      // still goes in through the textarea and stays undoable. Same shape as jumpToLine.
+      setViewMode("split");
+      setTimeout(write, HEADING_SCROLL_DELAY_MS);
+    },
+    [viewMode, resolveEdit, applyTextState, setEditStatus],
+  );
+
+  /**
+   * Shows where a proposed edit lands: selects its target in the editor and centers it. The
+   * counterpart to `jumpToLine`, addressed by the text the edit quotes rather than by a line
+   * number — which is the only anchor an edit has.
+   */
+  const locateEditInEditor = useCallback(
+    (edit: NoteEdit) => {
+      const focusTarget = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const resolved = resolveEdit(textarea.value, edit);
+        if (resolved === null) {
+          toast.error("The text this edit targeted is no longer in the note");
+          return;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(resolved.from, resolved.to);
+        const caret = measureCaret(textarea, resolved.from);
+        textarea.scrollTop = Math.max(0, textarea.scrollTop + caret.top - textarea.clientHeight / 2);
+      };
+      if (viewMode !== "preview") {
+        focusTarget();
+        return;
+      }
+      // Preview-only doesn't render the editor at all — switch first, then wait for the paint.
+      setViewMode("split");
+      setTimeout(focusTarget, HEADING_SCROLL_DELAY_MS);
+    },
+    [viewMode, resolveEdit],
+  );
 
   /**
    * The slash menu is placed in the pane's coordinate space, but the caret it points at moves when
@@ -912,8 +932,8 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
           run: () => applyTextAction(outdent),
         },
         {
-          id: "ai-update",
-          label: "AI: update note with an instruction…",
+          id: "ai-chat",
+          label: "AI: ask about this note or describe a change…",
           hint: "Opens the AI tab",
           icon: WandSparklesIcon,
           run: () => setRightPanel("ai"),
@@ -954,8 +974,8 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
       return (
         <>
           <NotesBar
-            aiBusy={ai.busy}
-            onStopAi={ai.stop}
+            aiBusy={chat.busy}
+            onStopAi={chat.stop}
             hasNote={note !== null}
             title={title}
             setTitle={setTitle}
@@ -970,6 +990,7 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
             historyBtnRef={historyBtnRef}
             rightPanel={rightPanel}
             setRightPanel={setRightPanel}
+            onToggleRightPanel={toggleRightPanel}
             noteListOpen={noteListOpen}
             onToggleNoteList={toggleNoteList}
             onBrowse={handleBrowse}
@@ -1076,22 +1097,12 @@ const NotesScreen = ({ notes, folders, loadedNote, backlinks }: NotesScreenProps
             />
           }
           ai={
-            // No apply target while an AI action owns the buffer: it's read-only and a refetch
-            // is on its way that would discard whatever was inserted.
             <NoteChatPanel
               chat={chat}
-              ai={ai}
               wiki={wiki}
               onApply={applyChatReply}
-              onRunAction={() => void runAiAction()}
-              onApplyProposal={applyProposal}
-              // The note actions edit the saved row, so they need one — unlike the chat half,
-              // which works on a draft straight from the buffer. Deliberately *not* also gated on
-              // `ai.busy`: "an update can be started" and "an update is running" are different
-              // facts, and folding them together made the panel forget it was in Update mode for
-              // the whole run — the Stop button, the mode highlight and Enter all followed the
-              // chat half instead. The panel reads `ai.busy` itself for the running state.
-              noteActionsEnabled={note !== null}
+              onAcceptEdit={acceptEdit}
+              onLocateEdit={locateEditInEditor}
             />
           }
         />

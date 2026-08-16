@@ -13,25 +13,31 @@ export type NoteRightPanel = "context" | "ai" | null;
 /** How much of the note each chat turn carries. `auto` = the selection if there is one, else all of it. */
 export type NoteChatContextMode = "auto" | "whole-note" | "none";
 
+/**
+ * Where a proposed edit stands. `stale` is set at accept time, when the text the edit quoted is no
+ * longer in the buffer — the one outcome that writes nothing.
+ */
+export type NoteEditStatus = "pending" | "accepted" | "rejected" | "stale";
+
 /** One turn in the note chat panel. Lives in component state — nothing is reloaded from the server. */
 export interface NoteChatMessage {
   role: "user" | "assistant";
   content: string;
+  /**
+   * Assistant only. Per-edit state, indexed by the edit's ordinal in the reply; indices the reply
+   * hasn't streamed yet are absent and read as `pending`.
+   */
+  editStatus?: NoteEditStatus[];
+  /**
+   * Assistant only. The whole editor buffer as it stood when the turn was sent — what a `rewrite`
+   * card diffs against, and where a `replace` card reads its line number. Snapshotted rather than
+   * read live so the thread doesn't re-render on every keystroke in the editor.
+   */
+  baseContent?: string;
 }
 
 /** Where a chat reply goes when applied to the note. */
 export type NoteApplyMode = "cursor" | "selection" | "append";
-
-/**
- * The span an AI update rewrites, frozen when the run is dispatched. `text` is what makes it
- * survivable: the buffer can be edited while the model streams, so the offsets are a starting guess
- * and the text is how the range is re-found before the proposal is spliced in.
- */
-export interface NoteEditTarget {
-  start: number;
-  end: number;
-  text: string;
-}
 
 /* ── Graph view ─────────────────────────────────────────────────────────────────────────────── */
 

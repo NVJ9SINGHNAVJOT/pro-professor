@@ -63,10 +63,118 @@ public class ChatService {
      */
     private static final int TITLE_COLUMN_LENGTH = 255;
 
+    /**
+     * Stands in for the note body on a brand-new note. Said out loud rather than sent as emptiness,
+     * so the model reaches for {@code <append>} or {@code <rewrite>} instead of trying to quote text
+     * that isn't there yet.
+     */
+    private static final String EMPTY_NOTE_BODY = "(The note is currently empty — there is nothing to quote yet.)";
+
     /** Frames the note for the model, so it doesn't read as part of the user's question. */
     private static final String NOTE_CONTEXT_PREAMBLE =
             "The user is asking about the Markdown note below. Answer from it. Do not rewrite or "
                     + "restate the whole note unless asked.\n\n";
+
+    /** What the model is allowed to assume about the note app's Markdown dialect. */
+    private static final String MARKDOWN_DIALECT = """
+            The app renders GitHub-flavored Markdown, KaTeX math ($...$), Obsidian-style [[wiki-links]] and \
+            ![[embeds]], > [!note] callouts, #tags, and ```mermaid diagram fences — use them where helpful. \
+            Images come in two forms: ![[file.png]] embeds a file already uploaded to the app, and \
+            ![alt](https://...) embeds one by URL. Only reference images that already appear in the note or \
+            that the task gives you — never invent a filename or a URL.""";
+
+    /**
+     * Mermaid's own syntax, not house style — kept apart from {@link #MERMAID_NUMBERING} because
+     * that constant is the numbering convention, which {@code skills/pro-professor-notes/SKILL.md}
+     * owns and must be kept in step with. A bare bracket in a label is a hard parse error (the
+     * lexer reads "(" as the start of a round node even inside an edge label), so the diagram
+     * renders as an error box rather than looking merely off-style.
+     */
+    private static final String MERMAID_SYNTAX = """
+            In a mermaid diagram, wrap label text in double quotes whenever it contains a bracket, \
+            brace, parenthesis, # or quote. This applies to NODE labels and EDGE labels alike:
+
+            B["Validate input (required fields)"]   correct
+            B[Validate input (required fields)]     BREAKS THE DIAGRAM
+            A -->|"retry (up to 3 times)"| C        correct
+            A -->|retry (up to 3 times)| C          BREAKS THE DIAGRAM
+
+            Mermaid reads a bare ( as the start of a round node even in the middle of a label, so one \
+            unquoted bracket anywhere fails the whole diagram — not just that line. When in doubt, quote \
+            the label.""";
+
+    /** House style for flow diagrams; the full table lives in {@code skills/pro-professor-notes/SKILL.md}. */
+    private static final String MERMAID_NUMBERING = """
+            When a mermaid diagram shows a flow, label its edges with step numbers: 1, 2, 3 in order; \
+            2a/2b for branches where only one is taken; 4.1/4.2 where every branch is taken; the same \
+            number repeated on both edges where branches rejoin. Leave structural edges (an import, \
+            "depends on") unlabelled, and leave sequence and state diagrams unnumbered.""";
+
+    /**
+     * The note-editing contract, for a turn from the notes panel.
+     *
+     * <p>Delimited blocks rather than JSON or tool calls: the AI core rejects {@code tools} and any
+     * {@code response_format} other than text, and multi-line Markdown inside JSON string escapes is
+     * where small local models come apart. Tags rather than Aider's {@code <<<<<<< SEARCH} markers
+     * because {@code =======} and {@code -------} are setext heading underlines in Markdown. The
+     * frontend parses the blocks out of the reply and shows each as a diff the user accepts or
+     * rejects — nothing here reaches the note on its own.
+     */
+    private static final String NOTE_EDIT_PROTOCOL =
+            """
+            You are helping the user with one Markdown note, given at the end of this message.
+
+            Answer their question directly, in prose. When what they want is a change to the note, \
+            propose it as edit blocks instead, and keep the prose to a sentence saying what you changed.
+
+            To change part of the note, quote the text you are replacing and give its replacement. \
+            Suppose the note contained this line:
+
+            The cat sat on the mat, waiting.
+
+            To fix the word "mat" you would write exactly this, and nothing else:
+
+            <edit>
+            <find>
+            The cat sat on the mat, waiting.
+            </find>
+            <replace>
+            The cat sat on the rug, waiting.
+            </replace>
+            </edit>
+
+            That example is only to show the shape of a block. Never copy its words — what goes inside \
+            <find> is always text taken from the real note below.
+
+            To add to the end of the note:
+
+            <append>
+            ## Sources
+
+            Written up from the team meeting.
+            </append>
+
+            To replace the entire note, only when that is what was asked:
+
+            <rewrite>
+            # The complete new note
+
+            ...every line of it...
+            </rewrite>
+
+            Rules. Copy <find> from the note character for character, including indentation, and quote \
+            enough lines around it that it appears exactly once — never shorten it with "...". Use one \
+            block per change; several small edits beat one big one. Put nothing inside the tags but the \
+            text itself. Do not restate the note outside a block, and do not wrap a block in a code fence. \
+            If nothing needs to change, just answer.
+
+            """
+                    + MARKDOWN_DIALECT
+                    + "\n\n"
+                    + MERMAID_SYNTAX
+                    + "\n\n"
+                    + MERMAID_NUMBERING
+                    + "\n\nEverything after the NOTE: line is the note's current content.\n\nNOTE:\n";
 
     /**
      * Sent as a system message on audio turns so the audio-capable model transcribes its own input
@@ -185,7 +293,15 @@ public class ChatService {
         // The note the turn is about, refreshed by the client on every send. Injected here rather
         // than persisted as the conversation's persona: a persona is written once on the first turn
         // (see createConversation), so it would answer about the note as it was then, silently.
-        history = withNoteContext(history, command.noteContext());
+        history = withNoteContext(history, command.noteContext(), command.noteChat());
+        // The app renders ```mermaid fences everywhere, so the syntax rule has to reach everywhere a
+        // model might write one. The note-edit protocol already carries it; every other turn — the
+        // main chat, and a notes turn sent with context "None" — got nothing at all until now, which
+        // is why diagrams asked for in plain chat came back with unquoted brackets and failed to
+        // render. Numbering stays note-only: that is house style, this is correctness.
+        if (!carriesNoteProtocol(command.noteContext(), command.noteChat())) {
+            history = insertSystemBeforeTurn(history, MERMAID_SYNTAX);
+        }
 
         try {
             // The AI core reports its own timing (including load) in x_metrics. Ollama's
@@ -544,12 +660,46 @@ public class ChatService {
      * <p>Deliberately <em>not</em> persisted: it never lands in {@code messages}, so it cannot go
      * stale and cannot pile up a copy per turn in a conversation's replayed history.
      */
-    private static List<ChatMessage> withNoteContext(List<ChatMessage> history, String noteContext) {
-        if (noteContext == null || noteContext.isBlank() || history.isEmpty()) {
+    private static List<ChatMessage> withNoteContext(List<ChatMessage> history, String noteContext, boolean noteChat) {
+        if (noteContext == null || history.isEmpty()) {
+            return history;
+        }
+        // Only a turn from the notes panel gets the edit protocol: it is the one surface with an
+        // editor to apply a proposed block in. A note attached to an ordinary chat stays read-only.
+        //
+        // Blank but present means the note exists and is empty — a fresh draft. It still gets the
+        // protocol, and is told so explicitly, because "write me a note about X" is exactly the
+        // turn that needs to come back as an appliable block rather than as prose. Context "None"
+        // is the other case, and it omits the field entirely rather than sending "".
+        if (noteChat) {
+            String body = noteContext.isBlank() ? EMPTY_NOTE_BODY : noteContext.strip();
+            return insertSystemBeforeTurn(history, NOTE_EDIT_PROTOCOL + body);
+        }
+        if (noteContext.isBlank()) {
+            return history;
+        }
+        return insertSystemBeforeTurn(history, NOTE_CONTEXT_PREAMBLE + noteContext.strip());
+    }
+
+    /**
+     * Whether this turn already carries {@link #NOTE_EDIT_PROTOCOL}, and with it the mermaid rules.
+     * Mirrors {@link #withNoteContext}'s own guard: a notes turn sent with context "None" omits
+     * {@code noteContext} altogether and so gets no protocol, despite {@code noteChat} being true.
+     */
+    private static boolean carriesNoteProtocol(String noteContext, boolean noteChat) {
+        return noteChat && noteContext != null;
+    }
+
+    /**
+     * Inserts an ephemeral system message immediately before the current user turn — adjacent to
+     * the question, and never persisted, so it can neither go stale nor accumulate across turns.
+     */
+    private static List<ChatMessage> insertSystemBeforeTurn(List<ChatMessage> history, String text) {
+        if (history.isEmpty()) {
             return history;
         }
         List<ChatMessage> updated = new ArrayList<>(history);
-        updated.add(updated.size() - 1, new ChatMessage(ROLE_SYSTEM, NOTE_CONTEXT_PREAMBLE + noteContext.strip()));
+        updated.add(updated.size() - 1, new ChatMessage(ROLE_SYSTEM, text));
         return updated;
     }
 

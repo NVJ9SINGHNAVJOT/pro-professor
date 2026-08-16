@@ -1,7 +1,7 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ArrowDownToLineIcon,
-  CheckIcon,
+  CheckCheckIcon,
   ClipboardIcon,
   CornerDownLeftIcon,
   MessageSquareIcon,
@@ -10,7 +10,6 @@ import {
   SquareIcon,
   TextCursorInputIcon,
   WandSparklesIcon,
-  XIcon,
 } from "lucide-react";
 import Markdown, { MarkdownBody, type WikiHandlers } from "@/components/common/Markdown";
 import ModelSelector from "@/components/common/ModelSelector";
@@ -20,10 +19,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { useNoteAi } from "@/modules/notes/hooks/useNoteAi";
+import NoteEditCard from "@/modules/notes/components/NoteEditCard";
+import { editsOf, parseNoteEdits, proseOf } from "@/modules/notes/ai/noteEdits";
+import type { NoteEdit } from "@/modules/notes/ai/noteEdits";
 import type { useNoteChat } from "@/modules/notes/hooks/useNoteChat";
-import type { NoteApplyMode, NoteChatContextMode, NoteChatMessage } from "@/modules/notes/types";
-import { MIN_THREAD_HEIGHT, PROPOSAL_DEFAULT_HEIGHT, PROPOSAL_MIN_HEIGHT } from "@/modules/notes/constants";
+import type { NoteApplyMode, NoteChatContextMode, NoteChatMessage, NoteEditStatus } from "@/modules/notes/types";
 import type { ProviderModel } from "@/services/operations/models/models.route";
 import { cn } from "@/lib/utils";
 
@@ -37,223 +37,70 @@ const CONTEXT_MODES: { mode: NoteChatContextMode; label: string }[] = [
   { mode: "none", label: "None" },
 ];
 
-/** What the composer does on Enter. One box, one send key, this picks the destination. */
-type ComposerMode = "ask" | "update";
-
-const COMPOSER_MODES: { mode: ComposerMode; label: string; hint: string }[] = [
-  { mode: "ask", label: "Ask", hint: "Answer from the note — nothing changes" },
-  { mode: "update", label: "Update", hint: "Rewrite the note — you review it before it lands" },
-];
+/** Applies one edit of one reply; the screen owns the buffer and reports back what happened. */
+export type AcceptEdit = (messageIndex: number, editIndex: number, edit: NoteEdit) => void;
 
 interface NoteChatPanelProps {
   chat: ReturnType<typeof useNoteChat>;
-  /** Owns the model picked for this tab — both the chat and the note actions run on it. */
-  ai: ReturnType<typeof useNoteAi>;
   /** Makes `[[links]]` in replies clickable, same as the preview pane. */
   wiki: WikiHandlers;
-  /** Writes a reply into the editor. */
+  /** Writes a reply's prose into the editor. Null while there is no editor to write through. */
   onApply: ((mode: NoteApplyMode, text: string) => void) | null;
-  /** Runs the note update with whatever is in the composer. */
-  onRunAction: () => void;
-  /** Replaces the whole note with the staged proposal. */
-  onApplyProposal: () => void;
-  /** False on an unsaved draft or mid-generation: the update needs a saved note and a free model. */
-  noteActionsEnabled: boolean;
+  onAcceptEdit: AcceptEdit;
+  /** Selects an edit's target in the editor so it can be seen before it is accepted. */
+  onLocateEdit: (edit: NoteEdit) => void;
 }
 
 /**
- * Chat about the open note, and propose edits to it. Neither half writes to the editor on its own:
- * a chat reply lands only through the per-message apply menu, and an update lands only when its
- * staged proposal is applied.
+ * Chat about the open note, and propose edits to it.
+ *
+ * One composer: you type, and the model either answers or proposes changes. A proposed change
+ * arrives as a diff card in the thread, and applying it is a click on that card — there is no
+ * staging pane and nothing reaches the note on its own.
  */
-const NoteChatPanel = ({
-  chat,
-  ai,
-  wiki,
-  onApply,
-  onRunAction,
-  onApplyProposal,
-  noteActionsEnabled,
-}: NoteChatPanelProps) => {
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  /** The proposal + composer + mode tabs block — its height is what the drag ceiling is measured from. */
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const [proposalHeight, setProposalHeight] = useState(PROPOSAL_DEFAULT_HEIGHT);
-  const [mode, setMode] = useState<ComposerMode>("ask");
-
-  /**
-   * Which half the composer drives. `update` is gated on the same condition as the action itself,
-   * so a draft can't be left in a mode whose send button is permanently dead.
-   */
-  const updating = mode === "update" && noteActionsEnabled;
-  const busy = updating ? ai.busy : chat.busy;
+const NoteChatPanel = ({ chat, wiki, onApply, onAcceptEdit, onLocateEdit }: NoteChatPanelProps) => {
   const submit = () => {
-    // Enter is inert while this half is generating — the send button is a Stop button by then, and
-    // without the guard the key still fired a fresh turn behind it.
-    if (busy) return;
-    if (updating) onRunAction();
-    else chat.send();
+    // Enter is inert while generating — the send button is a Stop button by then, and without the
+    // guard the key still fired a fresh turn behind it.
+    if (chat.busy) return;
+    chat.send();
   };
-
-  /**
-   * Drags the proposal block's top edge, so the block grows upward under the cursor.
-   *
-   * Tracked as a **delta** from where the grab started. The obvious form — height = (block bottom −
-   * cursor) — is off by the block's own chrome (handle, header, Apply/Discard footer), because the
-   * height being set is the scroll body's alone: the first mousemove jumped the top edge ~70px
-   * before it started following the cursor.
-   *
-   * The ceiling is **measured**, not budgeted: the bottom container minus the body is exactly what
-   * the composer and mode tabs occupy, whatever they currently are, so growing either of them can't
-   * put them back under the rail's clip.
-   */
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const panel = panelRef.current?.getBoundingClientRect().height;
-    const bottomBlock = bottomRef.current?.getBoundingClientRect().height;
-    if (panel === undefined || bottomBlock === undefined) return;
-    const startY = e.clientY;
-    const startHeight = proposalHeight;
-    const max = Math.max(PROPOSAL_MIN_HEIGHT, panel - (bottomBlock - startHeight) - MIN_THREAD_HEIGHT);
-    // Without this the gesture selects the text it drags over, which flickers the whole thread.
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    const onMouseMove = (event: MouseEvent) => {
-      setProposalHeight(Math.min(max, Math.max(PROPOSAL_MIN_HEIGHT, startHeight + (startY - event.clientY))));
-    };
-    const onMouseUp = () => {
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  };
-
-  // The same ceiling, re-applied when the panel shrinks under a proposal that was already tall —
-  // dragging the rail narrower or resizing the window re-creates the clipping with no drag at all.
-  useEffect(() => {
-    const panel = panelRef.current;
-    const bottom = bottomRef.current;
-    if (!panel || !bottom) return;
-    const observer = new ResizeObserver(() => {
-      setProposalHeight((current) => {
-        const max = Math.max(
-          PROPOSAL_MIN_HEIGHT,
-          panel.getBoundingClientRect().height - (bottom.getBoundingClientRect().height - current) - MIN_THREAD_HEIGHT,
-        );
-        return Math.min(current, max);
-      });
-    });
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, []);
 
   return (
-    <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
-      {/* How much of the note the next Enter works on — for *both* halves of the tab. Ask carries
-          it as context; Update rewrites exactly that much of the note and leaves the rest alone.
-          "None" is the one asymmetry: an edit with no note to edit is meaningless, so Update reads
-          it as "Auto" and the button says so instead of pretending otherwise. */}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* How much of the note each turn carries. The model can only propose edits to text it was
+          shown, so this is also the scope of what it can change. */}
       <div className="flex shrink-0 flex-col gap-y-1.5 border-b border-neutral-800 px-3 py-2">
         <span className="caption-small-medium text-neutral-500">Context</span>
         <div className="flex items-center rounded-lg bg-neutral-900 p-0.5">
-          {CONTEXT_MODES.map(({ mode, label }) => {
-            const inert = mode === "none" && updating;
-            return (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => chat.setContextMode(mode)}
-                disabled={inert}
-                title={inert ? "Update needs the note — pick Auto or Whole note" : undefined}
-                className={cn(
-                  "flex-1 cursor-pointer rounded-md px-2 py-1 caption-small-medium text-neutral-400 transition-colors hover:text-white",
-                  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
-                  chat.contextMode === mode && !inert && "bg-neutral-700 text-white",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {/* Keyed on the active mode, so this is always what Enter will really do — the old panel
-            showed a selection count next to an Update that then rewrote the whole note anyway. */}
-        <span className="truncate caption-small-regular text-neutral-500">
-          {updating ? `Update will rewrite: ${chat.updateScopeLabel}` : chat.contextLabel}
-        </span>
-      </div>
-
-      <div className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto p-3">
-        <ChatThread messages={chat.messages} wiki={wiki} onApply={onApply} />
-      </div>
-
-      <div ref={bottomRef} className="shrink-0 border-t border-neutral-800 p-2">
-        {/* The staged update. It sits above the composer, between the thread and the button that
-            produced it, so the review step is unmissable — the note itself is untouched until
-            Apply. Capped and scrollable: a proposal is a whole note and would otherwise eat the
-            rail. */}
-        {ai.proposal !== null && (
-          <div className="mb-2 flex flex-col overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900">
-            {/* Drag the top edge to grow the review area — a whole note rarely fits in the default
-                height, and the thread above it is the cheapest space to borrow. */}
-            <div
-              onMouseDown={handleResizeMouseDown}
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Resize the proposed note"
-              className="group flex h-2 shrink-0 cursor-row-resize items-center justify-center"
-            >
-              <span className="h-0.5 w-8 rounded-full bg-neutral-700 transition-colors group-hover:bg-neutral-500" />
-            </div>
-            <div className="flex shrink-0 items-center gap-x-2 border-b border-neutral-800 px-2.5 pb-1.5">
-              <WandSparklesIcon className={cn("size-3.5 shrink-0 text-neutral-400", ai.busy && "animate-pulse")} />
-              <span className="caption-small-medium text-neutral-300">
-                {ai.target
-                  ? ai.busy
-                    ? "Writing proposed replacement…"
-                    : "Proposed replacement"
-                  : ai.busy
-                    ? "Writing proposed note…"
-                    : "Proposed note"}
-              </span>
-            </div>
-            <div style={{ height: proposalHeight }} className="chat-scroll overflow-y-auto px-2.5 py-2">
-              {ai.proposal === "" ? (
-                <span className="caption-small-regular text-neutral-500">Generating…</span>
-              ) : (
-                <MarkdownBody className="para-small-regular text-neutral-200">
-                  <Markdown wiki={wiki}>{ai.proposal}</Markdown>
-                </MarkdownBody>
+          {CONTEXT_MODES.map(({ mode, label }) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => chat.setContextMode(mode)}
+              className={cn(
+                "flex-1 cursor-pointer rounded-md px-2 py-1 caption-small-medium text-neutral-400 transition-colors hover:text-white",
+                chat.contextMode === mode && "bg-neutral-700 text-white",
               )}
-            </div>
-            {/* Apply replaces the note in the editor and leaves it unsaved, so it is still one ⌘Z
-                (and one un-saved close) away from being undone. */}
-            <div className="flex shrink-0 items-center gap-x-1 border-t border-neutral-800 p-1.5">
-              <ProposalAction
-                label="Apply to note"
-                hint={
-                  ai.target
-                    ? "Replace the selected text with this — you still have to save"
-                    : "Replace the note with this — you still have to save"
-                }
-                icon={CheckIcon}
-                onClick={onApplyProposal}
-                disabled={ai.busy || ai.proposal === ""}
-                primary
-              />
-              <ProposalAction
-                label="Discard"
-                hint="Throw this away; the note is unchanged"
-                icon={XIcon}
-                onClick={ai.clearProposal}
-                disabled={ai.busy}
-              />
-            </div>
-          </div>
-        )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="truncate caption-small-regular text-neutral-500">{chat.contextLabel}</span>
+      </div>
 
+      <ChatThread
+        messages={chat.messages}
+        busy={chat.busy}
+        wiki={wiki}
+        onApply={onApply}
+        onAcceptEdit={onAcceptEdit}
+        onLocateEdit={onLocateEdit}
+        onSetEditStatus={chat.setEditStatus}
+      />
+
+      <div className="shrink-0 border-t border-neutral-800 p-2">
         <div className="flex items-end gap-x-1.5 rounded-lg bg-neutral-900 px-2 py-1.5">
           <textarea
             value={chat.input}
@@ -265,15 +112,15 @@ const NoteChatPanel = ({
               }
             }}
             rows={4}
-            placeholder={updating ? "Describe the edit to make…" : "Ask about this note…"}
+            placeholder="Ask about this note, or describe a change…"
             // Capped so a long instruction scrolls inside the box rather than growing it into the
-            // thread; the drag ceiling measures this row, so the cap is what keeps that honest too.
+            // thread.
             className="chat-scroll max-h-40 min-w-0 flex-1 resize-none bg-transparent para-small-medium outline-none placeholder:text-neutral-500"
           />
-          {busy ? (
+          {chat.busy ? (
             <button
               type="button"
-              onClick={updating ? ai.stop : chat.stop}
+              onClick={chat.stop}
               aria-label="Stop generating"
               title="Stop"
               className="shrink-0 cursor-pointer rounded-lg bg-white p-1.5 text-black hover:bg-neutral-200"
@@ -285,63 +132,19 @@ const NoteChatPanel = ({
               type="button"
               onClick={submit}
               disabled={!chat.input.trim()}
-              aria-label={updating ? "Update the note" : "Send"}
-              title={updating ? "Update the note (Enter)" : "Send (Enter)"}
+              aria-label="Send"
+              title="Send (Enter)"
               className="shrink-0 cursor-pointer rounded-lg bg-white p-1.5 text-black hover:bg-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
             >
               <CornerDownLeftIcon className="size-3.5" />
             </button>
           )}
-        </div>
-
-        {/* One box, one send key — this picks where Enter sends it. A mode switch rather than a
-            second button: the two are mutually exclusive, and the old pair let you press the wrong
-            one without noticing which of them had consumed your text. The model this tab runs on
-            rides along at the right: it governs both halves, and as a chip it costs the rail a
-            corner instead of the full row a name needs. */}
-        <div className="mt-1.5 flex items-center gap-x-1.5">
-          <div
-            role="radiogroup"
-            aria-label="What Enter does"
-            className="flex min-w-0 flex-1 items-center rounded-lg bg-neutral-900 p-0.5"
-          >
-            {COMPOSER_MODES.map(({ mode: value, label, hint }) => {
-              // Update needs a saved note; offering it on a draft would arm a dead send button.
-              const locked = value === "update" && !noteActionsEnabled;
-              // Keyed on `updating`, not `mode`, so the highlight always shows what Enter will
-              // really do — opening a draft while "Update" is picked falls back to Ask, and this
-              // says so.
-              const active = (value === "update") === updating;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setMode(value)}
-                  disabled={busy || locked}
-                  title={locked ? "Save the note first — AI edits run on the saved copy" : hint}
-                  className={cn(
-                    "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1 caption-small-medium",
-                    "text-neutral-400 transition-colors hover:text-white",
-                    "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-neutral-400",
-                    active && "bg-neutral-700 text-white",
-                  )}
-                >
-                  {value === "update" ? (
-                    <WandSparklesIcon className="size-3.5 shrink-0" />
-                  ) : (
-                    <MessageSquareIcon className="size-3.5 shrink-0" />
-                  )}
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          {/* The model this tab runs on, as a chip beside the send key — it costs the composer a
+              corner instead of the whole row a model name needs. */}
           <ModelSelector
-            value={ai.activeSelection}
-            onChange={ai.setSelected}
-            disabled={ai.busy}
+            value={chat.selected}
+            onChange={chat.setSelected}
+            disabled={chat.busy}
             align="end"
             iconOnly
             filter={isNotEmbeddingModel}
@@ -354,31 +157,50 @@ const NoteChatPanel = ({
 
 interface ChatThreadProps {
   messages: NoteChatMessage[];
-  /** Makes `[[links]]` in replies clickable, same as the preview pane. */
+  /** True while a reply is arriving — only the last message is the one being written. */
+  busy: boolean;
   wiki: WikiHandlers;
-  /** Writes a reply into the editor; null while an AI action owns the buffer. */
   onApply: ((mode: NoteApplyMode, text: string) => void) | null;
+  onAcceptEdit: AcceptEdit;
+  onLocateEdit: (edit: NoteEdit) => void;
+  onSetEditStatus: (messageIndex: number, editIndex: number, status: NoteEditStatus) => void;
 }
 
 /**
  * The message thread — split out so a turn (which only changes `chat.messages`) doesn't repaint
- * markdown for replies nobody touched, and so composer/proposal-panel-local state changes in the
- * parent (mode switches, resizing the proposal) don't re-render the thread at all.
+ * markdown for replies nobody touched, and so composer-local state changes in the parent don't
+ * re-render the thread at all.
  */
-const ChatThread = memo(function ChatThread({ messages, wiki, onApply }: ChatThreadProps) {
-  const endRef = useRef<HTMLDivElement | null>(null);
+const ChatThread = memo(function ChatThread({
+  messages,
+  busy,
+  wiki,
+  onApply,
+  onAcceptEdit,
+  onLocateEdit,
+  onSetEditStatus,
+}: ChatThreadProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Follow the stream, the way the main chat does.
+  /**
+   * Follow the stream by scrolling **this container**, never `scrollIntoView` — the latter walks
+   * every scrollable ancestor, and App's `<main>` is one, so it dragged the whole notes UI down the
+   * page by whatever vertical slack the horizontal scrollbar left it. Same rule as the preview
+   * pane's heading scroll in NotesScreen.
+   */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    const container = scrollRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
   }, [messages]);
 
   return (
-    <>
+    <div ref={scrollRef} className="chat-scroll flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto p-3">
       {messages.length === 0 && (
         <div className="flex flex-1 flex-col items-center justify-center gap-y-2 px-4 text-center text-neutral-600">
           <MessageSquareIcon className="size-7" />
-          <p className="caption-regular">Ask about this note. Nothing changes unless you apply it.</p>
+          <p className="caption-regular">
+            Ask about this note, or describe a change. Edits arrive as diffs you accept.
+          </p>
         </div>
       )}
 
@@ -388,52 +210,135 @@ const ChatThread = memo(function ChatThread({ messages, wiki, onApply }: ChatThr
             {message.content}
           </div>
         ) : (
-          <div key={index} className="group relative">
-            <MarkdownBody className="para-small-regular text-neutral-200">
-              <Markdown wiki={wiki}>{message.content}</Markdown>
-            </MarkdownBody>
-            {message.content !== "" && onApply && <ApplyMenu text={message.content} onApply={onApply} />}
-          </div>
+          <AssistantMessage
+            key={index}
+            message={message}
+            messageIndex={index}
+            streaming={busy && index === messages.length - 1}
+            wiki={wiki}
+            onApply={onApply}
+            onAcceptEdit={onAcceptEdit}
+            onLocateEdit={onLocateEdit}
+            onSetEditStatus={onSetEditStatus}
+          />
         ),
       )}
-      <div ref={endRef} />
-    </>
+    </div>
   );
 });
 
-/** Accept or reject the staged proposal. Apply is the primary of the pair; Discard reads as an out. */
-const ProposalAction = ({
-  label,
-  hint,
-  icon: Icon,
-  onClick,
-  disabled,
-  primary,
-}: {
-  label: string;
-  hint: string;
-  icon: typeof CheckIcon;
-  onClick: () => void;
-  disabled?: boolean;
-  primary?: boolean;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title={hint}
-    disabled={disabled}
-    className={cn(
-      "flex flex-1 cursor-pointer items-center justify-center gap-x-1.5 rounded-md px-2 py-1.5 caption-small-medium",
-      "transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-      primary
-        ? "bg-white text-black hover:bg-neutral-200 disabled:hover:bg-white"
-        : "text-neutral-400 hover:bg-neutral-800 hover:text-white disabled:hover:bg-transparent",
-    )}
-  >
-    <Icon className="size-3.5 shrink-0" />
-    {label}
-  </button>
-);
+interface AssistantMessageProps {
+  message: NoteChatMessage;
+  messageIndex: number;
+  /** True while this reply is still arriving, so an unfinished diagram reads as being written. */
+  streaming: boolean;
+  wiki: WikiHandlers;
+  onApply: ((mode: NoteApplyMode, text: string) => void) | null;
+  onAcceptEdit: AcceptEdit;
+  onLocateEdit: (edit: NoteEdit) => void;
+  onSetEditStatus: (messageIndex: number, editIndex: number, status: NoteEditStatus) => void;
+}
+
+/**
+ * One reply: prose and edit cards, in the order the model wrote them, so a card sits under the
+ * sentence explaining it.
+ *
+ * Memoized on the message, because the reply is re-parsed on every streamed token and only the last
+ * message is changing.
+ */
+const AssistantMessage = memo(function AssistantMessage({
+  message,
+  messageIndex,
+  streaming,
+  wiki,
+  onApply,
+  onAcceptEdit,
+  onLocateEdit,
+  onSetEditStatus,
+}: AssistantMessageProps) {
+  // Each segment carries the ordinal it has *among the edits*, which is what a status index
+  // addresses. Numbered here rather than by a counter in the render loop, which the React Compiler
+  // rejects as a reassignment that outlives the render.
+  const { segments, prose, edits } = useMemo(() => {
+    const parsed = parseNoteEdits(message.content);
+    let ordinal = -1;
+    return {
+      segments: parsed.map((segment) => ({ segment, ordinal: segment.kind === "edit" ? ++ordinal : -1 })),
+      prose: proseOf(parsed),
+      edits: editsOf(parsed),
+    };
+  }, [message.content]);
+
+  const statusOf = (editIndex: number) => message.editStatus?.[editIndex] ?? "pending";
+  const pendingCount = edits.filter((_, editIndex) => statusOf(editIndex) === "pending").length;
+
+  const acceptAll = useCallback(() => {
+    edits.forEach((edit, editIndex) => {
+      if ((message.editStatus?.[editIndex] ?? "pending") === "pending") onAcceptEdit(messageIndex, editIndex, edit);
+    });
+  }, [edits, message.editStatus, messageIndex, onAcceptEdit]);
+
+  return (
+    <div className="group flex flex-col gap-y-2">
+      {segments.map(({ segment, ordinal }, index) => {
+        if (segment.kind === "prose") {
+          return (
+            <MarkdownBody key={index} className="para-small-regular text-neutral-200">
+              <Markdown wiki={wiki} streaming={streaming}>
+                {segment.text}
+              </Markdown>
+            </MarkdownBody>
+          );
+        }
+        if (segment.kind === "pending") {
+          return (
+            <div
+              key={index}
+              className="flex items-center gap-x-2 rounded-lg border border-neutral-800 px-2.5 py-2 caption-small-regular text-neutral-500"
+            >
+              <WandSparklesIcon className="size-3.5 shrink-0 animate-pulse" />
+              Writing an edit…
+            </div>
+          );
+        }
+        return (
+          <NoteEditCard
+            key={index}
+            edit={segment.edit}
+            status={statusOf(ordinal)}
+            baseContent={message.baseContent ?? ""}
+            onAccept={() => onAcceptEdit(messageIndex, ordinal, segment.edit)}
+            onReject={() => onSetEditStatus(messageIndex, ordinal, "rejected")}
+            onLocate={() => onLocateEdit(segment.edit)}
+          />
+        );
+      })}
+
+      {/* Applied top to bottom, each re-found against the buffer as it stands by then, so an edit
+          that a previous one displaced still lands. */}
+      {pendingCount > 1 && (
+        <button
+          type="button"
+          onClick={acceptAll}
+          className="flex cursor-pointer items-center justify-center gap-x-1.5 rounded-lg bg-neutral-800 px-2 py-1.5 caption-small-medium text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-white"
+        >
+          <CheckCheckIcon className="size-3.5 shrink-0" />
+          Accept all ({pendingCount})
+        </button>
+      )}
+
+      {/* Its own row, rather than floating over the message's top-right corner: absolutely
+          positioned it landed on top of the reply's first line, which in a rail this narrow is
+          almost always full-width text. A reserved strip costs 20px and collides with nothing —
+          and it can't jump the layout on hover, which appearing only on hover would. */}
+      {prose !== "" && onApply && (
+        <div className="flex h-5 shrink-0 items-center justify-end">
+          <ApplyMenu text={prose} onApply={onApply} />
+        </div>
+      )}
+    </div>
+  );
+});
 
 /**
  * The reply's actions, in one `⋯` menu rather than a row of inline buttons — the convention the
@@ -443,9 +348,10 @@ const ProposalAction = ({
 const ApplyMenu = ({ text, onApply }: { text: string; onApply: (mode: NoteApplyMode, text: string) => void }) => (
   <DropdownMenu>
     <DropdownMenuTrigger
-      aria-label="Apply this reply to the note"
+      aria-label="Apply this reply's text to the note"
+      title="Apply this reply's text to the note"
       className={cn(
-        "absolute -top-1 right-0 cursor-pointer rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white",
+        "cursor-pointer rounded p-0.5 text-neutral-500 hover:bg-neutral-700 hover:text-white",
         // Snapped, not faded: transitioning opacity puts the icon on its own layer and renders it blurry.
         "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
       )}

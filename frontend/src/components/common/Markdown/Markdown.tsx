@@ -4,6 +4,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import MermaidBlock from "@/components/common/MermaidBlock";
+import PendingDiagram from "@/components/common/Markdown/PendingDiagram";
+import { openFence } from "@/components/common/Markdown/openFence";
 import {
   CALLOUT_MARKER,
   WIKI_EMBED_PREFIX,
@@ -192,6 +194,11 @@ interface MarkdownProps {
   children: string;
   /** Enables Obsidian wiki-link/embed handling — supplied by the notes module. */
   wiki?: WikiHandlers;
+  /**
+   * True while `children` is still being written to — a model reply mid-stream. Only changes the
+   * wording on an unfinished diagram: a fence that will never close shouldn't claim to be busy.
+   */
+  streaming?: boolean;
 }
 
 /**
@@ -200,21 +207,40 @@ interface MarkdownProps {
  * doesn't change the string (e.g. while an unclosed math token is being withheld
  * during streaming) skips re-parsing.
  */
-const Markdown = memo(({ children, wiki }: MarkdownProps) => {
+const Markdown = memo(({ children, wiki, streaming }: MarkdownProps) => {
   // Tied to the handlers' identity, not built per render: a fresh components object is a fresh
   // component *type*, so React remounts every node it owns — including the <NoteEmbed> behind a
   // `![[…]]` transclusion, which would refetch its note on every keystroke.
   const components = useMemo(() => (wiki ? wikiComponents(wiki) : baseComponents), [wiki]);
+
+  /**
+   * A ```mermaid fence that hasn't closed is withheld from the parser entirely and drawn as a
+   * placeholder instead. CommonMark runs an unclosed fence to the end of the input, so otherwise
+   * MermaidBlock is handed a half-written diagram on every token and shows a parse error for as
+   * long as one is being written. Same idea as `hideUnclosedMath` on the chat side, one layer down
+   * so every caller gets it.
+   *
+   * Only mermaid: a partial ```python block renders as a code block that grows as it arrives, which
+   * is what you want to see.
+   */
+  const pending = useMemo(() => {
+    const open = openFence(children);
+    return open?.lang === "mermaid" ? open : null;
+  }, [children]);
+
   return (
-    <ReactMarkdown
-      remarkPlugins={
-        wiki ? [remarkGfm, remarkMath, remarkCallouts, remarkWikiLinks] : [remarkGfm, remarkMath, remarkCallouts]
-      }
-      rehypePlugins={[rehypeKatex]}
-      components={components}
-    >
-      {children}
-    </ReactMarkdown>
+    <>
+      <ReactMarkdown
+        remarkPlugins={
+          wiki ? [remarkGfm, remarkMath, remarkCallouts, remarkWikiLinks] : [remarkGfm, remarkMath, remarkCallouts]
+        }
+        rehypePlugins={[rehypeKatex]}
+        components={components}
+      >
+        {pending ? children.slice(0, pending.start) : children}
+      </ReactMarkdown>
+      {pending && <PendingDiagram source={children.slice(pending.contentStart)} streaming={streaming} />}
+    </>
   );
 });
 Markdown.displayName = "Markdown";
