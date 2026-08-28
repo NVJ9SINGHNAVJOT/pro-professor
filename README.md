@@ -224,11 +224,11 @@ pro-professor/
 │   ├── central-server/       # Spring Boot 3.5 (Java 25) — API gateway / orchestrator
 │   ├── ai-core/           # Python + FastAPI — local MLX inference (git submodule)
 │   └── storage-server/       # Go 1.25 — local file storage (uploads + direct downloads)
-├── docs/                     # system architecture + notes/diagram flow docs
+├── docs/                     # project-rules.md (repo boundaries) + usage.md
 ├── skills/                   # paste-ready authoring packs for external AI models
 ├── scripts/                  # per-service setup scripts
-├── Taskfile.yaml             # every dev command lives here
-└── AGENTS.md                 # orientation pointer table for AI coding tools
+├── .claude/                  # rules for AI coding tools (single source of truth)
+└── Taskfile.yaml             # every dev command lives here
 ```
 
 ---
@@ -236,9 +236,9 @@ pro-professor/
 ## Documentation Map
 
 Docs live **next to the tier they describe**; only cross-tier material sits in the root `docs/`.
-There is deliberately no system-wide architecture doc — the narrative flow docs that used to sit
-here drifted away from the code and were deleted rather than repaired. Read the code, and the
-conventions below.
+There is deliberately no system-wide architecture doc — a long narrative over code that changes
+weekly cannot be kept honest. Read the code for how something works, and the conventions below for
+how it is meant to be written.
 
 | Scope       | Where                                                                           | What's in it                                                                   |
 | ----------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -248,7 +248,7 @@ conventions below.
 | Frontend    | [frontend/docs/folder-structure.md](frontend/docs/folder-structure.md)          | Module architecture and conventions                                            |
 | Gateway     | [backend/central-server/docs/](backend/central-server/docs/folder-structure.md) | Package-by-feature layout, plus logging and database/migration rules           |
 | Storage     | [backend/storage-server/docs/](backend/storage-server/docs/architecture.md)     | Architecture and HTTP API                                                      |
-| AI tooling  | [AGENTS.md](AGENTS.md) · [skills/](skills/README.md)                            | Orientation for AI coding tools; prompt packs for authoring paste-ready notes  |
+| AI tooling  | [.claude/rules/](.claude/rules/) · [skills/](skills/README.md)                   | Per-tier rules for AI coding tools; prompt packs for authoring paste-ready notes |
 
 Per-service READMEs:
 [frontend](frontend/README.md) ·

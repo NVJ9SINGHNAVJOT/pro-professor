@@ -38,9 +38,9 @@ object *before* serialization. The non-JSON endpoints are handled deliberately:
 | `POST /audio/speech` (`byte[]` WAV) | a **byte count**, never the bytes |
 | everything else (JSON) | the body as a JSON **object** |
 
-Media **downloads** are not in this table: central-server no longer streams file bytes. Uploads
-still flow through it (logged by `MediaService`, bytes never logged), but the browser downloads
-files **directly from the storage-server** using the URL central-server returns.
+Media **downloads** are not in this table: central-server never streams file bytes. Uploads do
+flow through it (logged by `MediaService`, bytes never logged), but the browser downloads files
+**directly from the storage-server** using the URL central-server returns.
 
 **Never log raw bytes or secrets.** Multipart bodies are logged as a summary
 (`<multipart/form-data, content-length=N>`) and the stream is left unread — reading it would break
