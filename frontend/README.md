@@ -44,7 +44,12 @@ npm run preview    # preview the production build locally
 npm test           # run the vitest suite
 npm run lint       # run ESLint
 npm run format     # prettier --write
+npm run audit      # dependency security audit (scripts/audit.mjs)
 ```
+
+`.npmrc` sets `ignore-scripts=true`, so dependencies cannot run code at install
+time. If a package ever genuinely needs to build from source, install it once with
+`npm install --foreground-scripts` after reading what its script does.
 
 ## Project structure
 

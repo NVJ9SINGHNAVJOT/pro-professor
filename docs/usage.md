@@ -204,8 +204,10 @@ acceptable.
   that accepts audio should hear the recording itself instead of being handed a transcript. A chat
   starts from the defaults in Settings → Chat; changing them here applies to that chat only, and
   sticks with it when you reopen it.
-- Only **one model is resident at a time** across the local backends. If something else is
-  generating, you'll see a "busy" toast rather than a queued request — wait for it to finish.
+- Only **one model is resident at a time** across the local backends. Asking a *different* model
+  for something while one is generating gives you a "busy" toast rather than a queued request —
+  wait for it to finish. A second turn on the *same* AI-core model waits its turn instead, and
+  toasts only if the one ahead of it runs long enough to time the wait out.
 
 ---
 

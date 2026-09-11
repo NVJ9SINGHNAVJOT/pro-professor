@@ -10,7 +10,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

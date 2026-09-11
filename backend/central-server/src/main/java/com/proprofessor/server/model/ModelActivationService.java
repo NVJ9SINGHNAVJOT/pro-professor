@@ -20,6 +20,11 @@ import org.springframework.stereotype.Service;
  * <p>While a chat turn is generating, a request for a <em>different</em> model is rejected with a
  * {@link ModelBusyException} rather than evicting the in-flight model. Requests for the same model
  * are allowed (still one model in memory). State is in-memory — this is a single-user local app.
+ *
+ * <p>The AI core enforces the same rule on its own side and answers 409 to a load or unload issued
+ * while it is generating, which {@link AiCoreClient} raises as a {@link ModelBusyException} too. It
+ * is reachable from here despite the counter above: a turn the user aborts releases {@code inFlight}
+ * as soon as the stream unwinds, while the AI core frees its gate a token later.
  */
 @Service
 public class ModelActivationService {
@@ -52,7 +57,7 @@ public class ModelActivationService {
     public void acquireForChat(ModelProvider provider, String name) {
         synchronized (lock) {
             if (inFlight > 0 && !isActive(provider, name)) {
-                throw new ModelBusyException(active.name());
+                throw ModelBusyException.generating(active.name());
             }
             activate(provider, name);
             inFlight++;
@@ -75,7 +80,7 @@ public class ModelActivationService {
     public void load(ModelProvider provider, String name) {
         synchronized (lock) {
             if (inFlight > 0 && !isActive(provider, name)) {
-                throw new ModelBusyException(active.name());
+                throw ModelBusyException.generating(active.name());
             }
             activate(provider, name);
         }
@@ -84,8 +89,8 @@ public class ModelActivationService {
     /**
      * Frees VRAM on shutdown by unloading whatever model is resident. Runs during bean destruction,
      * which happens after the web server's graceful shutdown has drained in-flight streams, so it
-     * never evicts a model mid-generation. Best-effort: the unload calls log-and-swallow, so a downed
-     * engine can't hang shutdown.
+     * never evicts a model mid-generation — and never meets the 409 that would mean it had. A downed
+     * engine can't hang shutdown either: those unload failures are logged and swallowed.
      */
     @PreDestroy
     public void unloadResident() {

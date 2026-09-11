@@ -1,5 +1,6 @@
 package com.proprofessor.server.model.provider;
 
+import com.proprofessor.server.common.exception.ModelBusyException;
 import com.proprofessor.server.common.http.HttpClientFactory;
 import com.proprofessor.server.config.properties.AppProperties;
 import com.proprofessor.server.model.dto.ModelProvider;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -47,7 +49,13 @@ public class AiCoreClient {
                 .toList();
     }
 
-    /** Asks the AI core to load a model into memory (it swaps out any other loaded model). */
+    /**
+     * Asks the AI core to load a model into memory (it swaps out any other loaded model).
+     *
+     * <p>The AI core answers 409 while it is generating — it will not swap the resident model out
+     * from under a running turn — which becomes a {@link ModelBusyException} so the caller reports
+     * a busy engine rather than a failed load.
+     */
     public void loadModel(String name) {
         // Loading weights takes seconds — log the intent so a slow or hung load is visible while it is
         // still happening, not only once it finishes.
@@ -60,6 +68,9 @@ public class AiCoreClient {
                     .body(new LoadModelBody(name))
                     .retrieve()
                     .toBodilessEntity();
+        } catch (HttpClientErrorException.Conflict ex) {
+            log.warn("AI core refused to load '{}': a generation is in flight", name);
+            throw ModelBusyException.aiCoreBusy();
         } catch (Exception ex) {
             // Names the model the boundary handler can't know about; the stack trace is logged once,
             // there, when this propagates.
@@ -72,8 +83,13 @@ public class AiCoreClient {
 
     /**
      * Asks the AI core to unload whatever model it currently holds, freeing memory. Sent with an
-     * empty body so it unloads the resident model regardless of name. Best-effort: a failure is logged
-     * and swallowed so it never blocks the model switch that requested it.
+     * empty body so it unloads the resident model regardless of name.
+     *
+     * <p>A 409 means the AI core is mid-generation and kept the model: it throws
+     * {@link ModelBusyException}, because a switch that proceeds on a failed unload leaves two
+     * models resident — exactly the invariant the caller is enforcing. Every other failure (a
+     * downed AI core, most of all) is logged and swallowed, so an engine that holds nothing can't
+     * block the switch.
      */
     public void unload() {
         log.info("Unloading AI-core model...");
@@ -86,6 +102,9 @@ public class AiCoreClient {
                     .retrieve()
                     .toBodilessEntity();
             log.info("Unloaded AI-core model ({}ms)", System.currentTimeMillis() - start);
+        } catch (HttpClientErrorException.Conflict ex) {
+            log.warn("AI core refused to unload: a generation is in flight");
+            throw ModelBusyException.aiCoreBusy();
         } catch (Exception ex) {
             log.warn("Failed to unload AI-core model: {}", ex.getMessage());
         }

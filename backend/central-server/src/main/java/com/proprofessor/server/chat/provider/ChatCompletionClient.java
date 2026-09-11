@@ -4,6 +4,7 @@ import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.core.JsonValue;
 import com.openai.core.http.StreamResponse;
+import com.openai.errors.OpenAIServiceException;
 import com.openai.models.chat.completions.ChatCompletionChunk;
 import com.openai.models.chat.completions.ChatCompletionContentPart;
 import com.openai.models.chat.completions.ChatCompletionContentPartImage;
@@ -14,6 +15,7 @@ import com.openai.models.chat.completions.ChatCompletionStreamOptions;
 import com.openai.models.completions.CompletionUsage;
 import com.proprofessor.server.chat.InferenceOptions;
 import com.proprofessor.server.chat.provider.dto.ChatMessage;
+import com.proprofessor.server.common.exception.ModelBusyException;
 import com.proprofessor.server.common.http.CorrelationIdInterceptor;
 import com.proprofessor.server.common.web.RequestIdFilter;
 import com.proprofessor.server.config.properties.AppProperties;
@@ -130,6 +132,14 @@ public class ChatCompletionClient {
                     lastMetrics.updateAndGet(prev -> mergeMetrics(prev, partial));
                 }
             });
+        } catch (OpenAIServiceException ex) {
+            // The AI core serializes chat: a request that waited out its queue timeout behind another
+            // generation comes back 503. That's a busy engine, not a failed turn — surface it as the
+            // same rejection this server raises when it refuses a swap itself.
+            if (provider == ModelProvider.AI_CORE && ex.statusCode() == 503) {
+                throw ModelBusyException.aiCoreBusy();
+            }
+            throw ex;
         }
         StreamMetrics metrics = lastMetrics.get();
         if (metrics != null) {
@@ -367,10 +377,17 @@ public class ChatCompletionClient {
         params.addUserMessageOfArrayOfContentParts(parts);
     }
 
+    /**
+     * Builds a client for one provider. Retries are off: the SDK retries 408/409/429/5xx twice by
+     * default, and every one of those is wrong here. Both providers are local processes holding one
+     * model, so a 503 means "busy generating" — re-sending it just queues a second turn behind the
+     * first, and three queue timeouts in a row outlast the SSE emitter the browser is waiting on.
+     */
     private static OpenAIClient buildClient(String baseUrl, String apiKey) {
         return OpenAIOkHttpClient.builder()
                 .baseUrl(stripTrailingSlash(baseUrl) + "/v1")
                 .apiKey(apiKey)
+                .maxRetries(0)
                 .build();
     }
 
